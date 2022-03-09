@@ -1,0 +1,67 @@
+{
+    "Mars": {
+        "Start Date": "03-07-2022",
+        "Last Updated": "03-07-2022",
+        "Total Time": 24.37,
+        "Sub Projects": {
+            "Dragon": 19.27,
+            "Falcon": 19.27,
+            "Falcon-Heavy": 24.37,
+            "Propulsion": 24.37
+        },
+        "Session History": [
+            {
+                "Date": "03-07-2022",
+                "Start Time": "21:32:00",
+                "End Time": "21:51:27",
+                "Sub-Projects": [
+                    "Dragon",
+                    "Falcon",
+                    "Falcon-Heavy",
+                    "Propulsion"
+                ],
+                "Duration": 19.27,
+                "Note": "testing the falcon heavy thrusters"
+            },
+            {
+                "Date": "03-07-2022",
+                "Start Time": "22:01:33",
+                "End Time": "22:06:40",
+                "Sub-Projects": [
+                    "Falcon-Heavy",
+                    "Propulsion"
+                ],
+                "Duration": 5.1,
+                "Note": "it seems that liquid fuel is indeed better."
+            }
+        ]
+    },
+    "moon": {
+        "Start Date": "03-07-2022",
+        "Last Updated": "03-08-2022",
+        "Total Time": 12.02,
+        "Sub Projects": {
+            "lander": 10.6
+        },
+        "Session History": [
+            {
+                "Date": "03-07-2022",
+                "Start Time": "22:23:44",
+                "End Time": "22:25:09",
+                "Sub-Projects": [],
+                "Duration": 1.42,
+                "Note": "hey i got nuthin"
+            },
+            {
+                "Date": "03-08-2022",
+                "Start Time": "17:35:39",
+                "End Time": "17:46:16",
+                "Sub-Projects": [
+                    "lander"
+                ],
+                "Duration": 10.6,
+                "Note": "everything seems a-ok from my end!"
+            }
+        ]
+    }
+}
