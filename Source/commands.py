@@ -8,9 +8,9 @@ from ColourText import format_text
 project_dict = Projects()
 
 
-def list_cmds(list_args):
+def list_cmds():
     from Autumn import commands
-    keys = list(commands.keys())
+    keys = sorted(commands.keys(), key=lambda x: x.lower())
     length = len(keys)
 
     print("Here are all the available commands:\n")
@@ -25,7 +25,8 @@ def list_cmds(list_args):
             print()
 
 
-def quit_autumn(list_args):
+def quit_autumn():
+    project_dict.save_to_json()
     exit(0)
 
 
@@ -49,15 +50,22 @@ def start_command(list_args):
 
 def list_projects(list_args):
     global project_dict
-    projects = project_dict.get_keys()
+    key_word = list_args[0]
+
+    if key_word.lower() == 'complete' or key_word.lower() == 'completed':
+        projects = sorted(Projects.load_completed(), key=lambda x: x.lower())
+        print("Completed Projects: ")
+    else:
+        projects = project_dict.get_keys()
+        print("Active Projects: ")
+
     length = len(projects)
-    print("Active Projects: ")
 
     for i in range(length):
-        colour = random.choice(['green', 'cyan', 'blue'])
-        output = format_text(f"[bright {colour}]{projects[i]}[reset], ")
+        colour = random.choice(['bright green', 'cyan', '_text256_26_'])
+        output = format_text(f"[{colour}]{projects[i]}[reset], ")
         if i == length - 1:
-            output = format_text(f"[bright {colour}]{projects[i]}[reset]")
+            output = format_text(f"[{colour}]{projects[i]}[reset]")
 
         print("", end=output)
 
@@ -79,10 +87,10 @@ def list_subs(list_args):
     print(f"{project} sub-projects: ")
 
     for i in range(length):
-        colour = random.choice(['green', 'cyan', 'blue'])
-        output = format_text(f"[bright {colour}]{sub_projects[i]}[reset], ")
+        colour = random.choice(['bright green', 'cyan', '_text256_26_'])
+        output = format_text(f"[{colour}]{sub_projects[i]}[reset], ")
         if i == length - 1:
-            output = format_text(f"[bright {colour}]{sub_projects[i]}[reset]")
+            output = format_text(f"[{colour}]{sub_projects[i]}[reset]")
 
         print("", end=output)
 
@@ -90,6 +98,35 @@ def list_subs(list_args):
             print()
 
     print()
+
+
+def delete_project(list_args):
+    global project_dict
+    project = list_args[0]
+
+    x = input(format_text(f"Are you sure you want to delete [yellow]{project}[reset]? \n[Y/N]: "))
+    if x == "Y" or x == "y":
+        project_dict.delete_project(project)
+        print(format_text(f"Deleted project [yellow]{project}[reset]"))
+        project_dict.save_to_json()
+
+
+def complete_project(list_args):
+    global project_dict
+    project = list_args[0]
+
+    x = input(format_text(f"Are you sure you want to mark [yellow]{project}[reset] as complete?\n[Y/N]: "))
+    if x == "Y" or x == "y":
+        project_dict.complete_project(project)
+        print(format_text(f"Project [yellow]{project}[reset] marked as completed"))
+        project_dict.save_to_json()
+
+
+def print_project(list_args):
+    global project_dict
+    project = list_args[0]
+
+    project_dict.print_json_project(project)
 
 
 def get_logs(list_args):
@@ -111,12 +148,12 @@ def get_logs(list_args):
             project_dict.log(list_args)
 
 
-def get_aggregate(list_args):
+def get_aggregate():
     global project_dict
     project_dict.aggregate()
 
 
-def clr(list_args):
+def clr():
     os.system("cls")
 
 

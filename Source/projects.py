@@ -9,6 +9,7 @@ class Projects:
     def __init__(self):
         self.__dict = {}
         self.__load_json()
+        self.__sort_dict()
 
     def __str__(self):
         return str(self.__dict)
@@ -20,7 +21,33 @@ class Projects:
         return list(self.__dict.keys())
 
     def get_project(self, name: str):
-        return dict(self.__dict[name])
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        return self.__dict[name]
+
+    def delete_project(self, name: str):
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        self.__dict.pop(name)
+
+    def complete_project(self, name: str, path="completed_projects.json"):
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        prjct_json = json.dumps({name: self.__dict[name]}, indent=4)
+        with open(path, "w") as json_writer:
+            json_writer.write(prjct_json)
+
+        self.delete_project(name)
+
+    def print_json_project(self, name: str):
+        project = self.get_project(name)
+        print(json.dumps(project, indent=4))
 
     def __create_project(self, name: str, sub_names=None):
         if name not in self.__dict:
@@ -105,7 +132,10 @@ class Projects:
                         time_spent = str(timedelta(minutes=session['Duration'])).split(".")[0]
                         time_spent = datetime.strptime(time_spent, "%H:%M:%S")
                         day_total += session['Duration']
-                        time_spent = time_spent.strftime("%Mm %Ss")
+                        if time_spent.hour > 0:
+                            time_spent = time_spent.strftime("%Hhrs %Mm")
+                        else:
+                            time_spent = time_spent.strftime("%Mm  %Ss")
 
                         sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
 
@@ -121,41 +151,69 @@ class Projects:
                 day_total = str(timedelta(minutes=day_total)).split(".")[0]
                 day_total = datetime.strptime(day_total, "%H:%M:%S")
 
+                if day_total.hour > 0:
+                    day_total = day_total.strftime('%Hhrs %Mm')
+                else:
+                    day_total = day_total.strftime('%Mm %Ss')
+
                 print(format_text(f"[underline]{print_date}[reset]"
-                                  f" [_text256_77_]({day_total.strftime('%Mm %Ss')})[reset]"))
+                                  f" [_text256_77_]({day_total})[reset]"))
                 print(print_output)
 
     def aggregate(self):
         self.log('all', 1)
 
-    def __save_to_dict(self, prjct_dict: dict):
-        name = list(prjct_dict.keys())[0]
-        self.__dict[name] = prjct_dict[name]
+    def __sort_dict(self):
+        sorted_keys = sorted(self.get_keys(), key=lambda x: x.lower())
+        sorted_dict = {}
 
-    def save_to_json(self):
+        for key in sorted_keys:
+            sorted_dict[key] = self.__dict[key]
+
+        self.__dict = sorted_dict
+
+    def __save_to_dict(self, project: dict):
+        name = list(project.keys())[0]
+        self.__dict[name] = project[name]
+
+    def save_to_json(self, path="projects.json"):
         prjct_json = json.dumps(self.__dict, indent=4)
-        with open("projects.json", "w") as json_writer:
+        with open(path, "w") as json_writer:
             json_writer.write(prjct_json)
 
-    def __load_json(self):
+    @staticmethod
+    def load_completed(path="completed_projects.json"):
         try:
-            projects = open("projects.json", "r").read()
+            projects = open(path, "r").read()
+            return json.loads(projects)
+        except FileNotFoundError:
+            return
+        except json.decoder.JSONDecodeError:
+            return
+
+    def __load_json(self, path="projects.json"):
+        try:
+            projects = open(path, "r").read()
             self.__dict = json.loads(projects)
         except FileNotFoundError:
-            open("projects.json", "w")
+            open(path, "w")
         except json.decoder.JSONDecodeError:
             pass
 
 
 def main():
-    os.system("cls")
+    os.system("")
     project_dict = Projects()
     """timer = Timer('Test', [])
     project_dict.update_project(timer.run_timer(), 'Test')
     project_dict.save_to_json()
     print(project_dict)"""
 
-    project_dict.log()
+    project_dict.delete_project("AAtest")
+    if project_dict.get_project("AAtest"):
+        print("failed")
+    else:
+        print("success")
 
 
 if __name__ == "__main__":

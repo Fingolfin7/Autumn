@@ -19,7 +19,7 @@ class Timer:
         self.cntnue = True
         self.block_time = 300
 
-        self.sub_projs = "[bright blue]" + "[reset], [bright blue]".join(self.sub_projs) + "[reset]"
+        self.sub_projs = "[_text256_26_]" + "[reset], [bright blue]".join(self.sub_projs) + "[reset]"
         self.sub_projs = format(self.sub_projs.replace("\"", ""))
 
     def print_thread(self):
