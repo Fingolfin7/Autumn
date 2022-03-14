@@ -7,7 +7,3 @@ def args(*args):
 
 args(1, 2, 3, ['hi', 5])
 
-try:
-    period = int("6 hello_world")
-except ValueError:
-    print("not an int")

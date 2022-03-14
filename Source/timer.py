@@ -19,7 +19,7 @@ class Timer:
         self.cntnue = True
         self.block_time = 300
 
-        self.sub_projs = "[_text256_26_]" + "[reset], [bright blue]".join(self.sub_projs) + "[reset]"
+        self.sub_projs = "[_text256_26_]" + "[reset], [_text256_26_]".join(self.sub_projs) + "[reset]"
         self.sub_projs = format(self.sub_projs.replace("\"", ""))
 
     def print_thread(self):
@@ -52,6 +52,7 @@ class Timer:
     # noinspection PyUnusedLocal
     def run_timer(self):
         self.start()
+        print("")
         print_thread = threading.Thread(target=self.print_thread)
         print_thread.daemon = True  # a daemon thread is supposed to die when the main func exits
         print_thread.start()
@@ -63,6 +64,8 @@ class Timer:
         """
 
         stop = input("")
+
+        print("")
 
         self.cntnue = False
         duration = self.stop()

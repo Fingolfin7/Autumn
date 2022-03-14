@@ -6,10 +6,10 @@ import os
 
 
 class Projects:
-    def __init__(self):
+    def __init__(self, path="projects.json"):
         self.__dict = {}
-        self.__load_json()
-        self.__sort_dict()
+        self.path = path
+        self.__load()
 
     def __str__(self):
         return str(self.__dict)
@@ -33,17 +33,7 @@ class Projects:
             return
 
         self.__dict.pop(name)
-
-    def complete_project(self, name: str, path="completed_projects.json"):
-        if name not in self.__dict:
-            print(f"Invalid project name! '{name}' does not exist!")
-            return
-
-        prjct_json = json.dumps({name: self.__dict[name]}, indent=4)
-        with open(path, "w") as json_writer:
-            json_writer.write(prjct_json)
-
-        self.delete_project(name)
+        self.__save()
 
     def print_json_project(self, name: str):
         project = self.get_project(name)
@@ -106,6 +96,8 @@ class Projects:
             self.__dict[name]['Session History'].append(history_log)
         except KeyError:
             self.__dict[name]['Session History'] = [history_log]
+
+        self.__save()
 
     def log(self, projects="all", days=7):
         valid_projects = []
@@ -176,29 +168,59 @@ class Projects:
         name = list(project.keys())[0]
         self.__dict[name] = project[name]
 
-    def save_to_json(self, path="projects.json"):
+    def __save(self):
+        self.__sort_dict()
         prjct_json = json.dumps(self.__dict, indent=4)
+        with open(self.path, "w") as json_writer:
+            json_writer.write(prjct_json)
+
+    def __load(self):
+        if not os.path.exists(self.path):
+            print(f"Cannot find file '{self.path}'! Quitting.")
+            exit(0)
+            return
+        projects = open(self.path, "r").read()
+        self.__dict = json.loads(projects)
+        self.__sort_dict()
+
+    def export_project(self, name: str, filename: str):
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        if not os.path.isdir("Exported"):
+            os.mkdir("Exported")
+
+        path = os.path.join("Exported", filename)
+
+        if os.path.exists(path):
+            file_contents = open(path, "r").read()
+            file_dict = json.loads(file_contents)
+        else:
+            file_dict = {}
+
+        file_dict[name] = self.__dict[name]
+
+        prjct_json = json.dumps(file_dict, indent=4)
+
         with open(path, "w") as json_writer:
             json_writer.write(prjct_json)
 
-    @staticmethod
-    def load_completed(path="completed_projects.json"):
-        try:
-            projects = open(path, "r").read()
-            return json.loads(projects)
-        except FileNotFoundError:
-            return
-        except json.decoder.JSONDecodeError:
-            return
+        self.delete_project(name)
 
-    def __load_json(self, path="projects.json"):
-        try:
+    def load_exported(self, filename: str, project_name=""):
+        path = os.path.join("Exported", filename)
+
+        if os.path.exists(path):
             projects = open(path, "r").read()
-            self.__dict = json.loads(projects)
-        except FileNotFoundError:
-            open(path, "w")
-        except json.decoder.JSONDecodeError:
-            pass
+            if project_name != "":
+                self.__dict[project_name] = json.loads(projects)[project_name]
+            else:
+                self.__dict += json.loads(projects)
+            self.__save()
+
+        else:
+            print(f"'{path}' does not exist!")
 
 
 def main():
@@ -206,14 +228,11 @@ def main():
     project_dict = Projects()
     """timer = Timer('Test', [])
     project_dict.update_project(timer.run_timer(), 'Test')
-    project_dict.save_to_json()
     print(project_dict)"""
 
-    project_dict.delete_project("AAtest")
-    if project_dict.get_project("AAtest"):
-        print("failed")
-    else:
-        print("success")
+    project_dict.export_project("AAtest", "March-2022.json")
+    project_dict.load_exported("March-2022.json", "AAtest")
+    project_dict.print_json_project("AAtest")
 
 
 if __name__ == "__main__":

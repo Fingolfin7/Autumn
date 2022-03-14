@@ -8,28 +8,6 @@ from ColourText import format_text
 project_dict = Projects()
 
 
-def list_cmds():
-    from Autumn import commands
-    keys = sorted(commands.keys(), key=lambda x: x.lower())
-    length = len(keys)
-
-    print("Here are all the available commands:\n")
-
-    for i in range(length):
-        output = f"{keys[i]}, "
-        if i == length - 1:
-            output = f"{keys[i]}"
-
-        print("", end=output)
-        if (i + 1) % 3 == 0:
-            print()
-
-
-def quit_autumn():
-    project_dict.save_to_json()
-    exit(0)
-
-
 def parse_command(in_str: str):
     in_str = in_str.strip()
     str_parts = in_str.split(' ')
@@ -45,19 +23,12 @@ def start_command(list_args):
 
     timer = Timer(proj_name, sub_projs)
     project_dict.update_project(timer.run_timer(), proj_name, sub_projs)
-    project_dict.save_to_json()
 
 
-def list_projects(list_args):
+def list_projects():
     global project_dict
-    key_word = list_args[0]
-
-    if key_word.lower() == 'complete' or key_word.lower() == 'completed':
-        projects = sorted(Projects.load_completed(), key=lambda x: x.lower())
-        print("Completed Projects: ")
-    else:
-        projects = project_dict.get_keys()
-        print("Active Projects: ")
+    projects = project_dict.get_keys()
+    print("Active Projects: ")
 
     length = len(projects)
 
@@ -100,6 +71,30 @@ def list_subs(list_args):
     print()
 
 
+def list_cmds():
+    from Autumn import commands
+    keys = sorted(commands.keys(), key=lambda x: x.lower())
+    length = len(keys)
+
+    print("Here are all the available commands:\n")
+
+    for i in range(length):
+        output = f"{keys[i]}, "
+        if i == length - 1:
+            output = f"{keys[i]}"
+
+        print("", end=output)
+
+        if (i + 1) % 3 == 0 and i != length - 1:
+            print()
+
+    print()
+
+
+def quit_autumn():
+    exit(0)
+
+
 def delete_project(list_args):
     global project_dict
     project = list_args[0]
@@ -108,18 +103,51 @@ def delete_project(list_args):
     if x == "Y" or x == "y":
         project_dict.delete_project(project)
         print(format_text(f"Deleted project [yellow]{project}[reset]"))
-        project_dict.save_to_json()
 
 
-def complete_project(list_args):
+def export(list_args):
     global project_dict
-    project = list_args[0]
 
-    x = input(format_text(f"Are you sure you want to mark [yellow]{project}[reset] as complete?\n[Y/N]: "))
+    if list_args[0].lower() == 'all':
+        projects = project_dict.get_keys()
+    else:
+        projects = list_args[: -1]
+
+    filename = list_args[-1]
+
+    if not filename.endswith(".json"):
+        filename += ".json"
+
+    x = input(format_text(f"Are you sure you want to export [yellow]{projects}[reset] to file '{filename}'?\n[Y/N]: "))
+
     if x == "Y" or x == "y":
-        project_dict.complete_project(project)
-        print(format_text(f"Project [yellow]{project}[reset] marked as completed"))
-        project_dict.save_to_json()
+        for project in projects:
+            project_dict.export_project(project, filename)
+
+        print(format_text(f"Exported [yellow]{projects}[reset] to '{filename}'"))
+
+
+def import_exported(list_args):
+    global project_dict
+
+    if list_args[0].lower() == 'all':
+        projects = []
+    else:
+        projects = list_args[: -1]
+
+    filename = list_args[-1]
+
+    if not filename.endswith(".json"):
+        filename += ".json"
+
+    x = input(format_text(f"Are you sure you want to import [yellow]{projects}[reset]"
+                          f" from file '{filename}'?\n[Y/N]: "))
+
+    if x == "Y" or x == "y":
+        for project in projects:
+            project_dict.load_exported(filename, project)
+
+        print(format_text(f"Imported [yellow]{projects}[reset] from '{filename}'"))
 
 
 def print_project(list_args):
@@ -138,7 +166,7 @@ def get_logs(list_args):
         else:
             projects = list_args[: -1]
 
-        period = int(list_args[-1:][0])
+        period = int(list_args[-1])
         project_dict.log(projects, period)
     except ValueError:
         if list_args[0].lower() == 'all':
