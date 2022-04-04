@@ -2,6 +2,7 @@ from datetime import datetime
 from datetime import timedelta
 from ColourText import format_text
 from timer import td_str
+from compress_json import json_unzip, json_zip
 import json
 import os
 
@@ -203,7 +204,9 @@ class Projects:
 
     def __save(self):
         self.__sort_dict()
-        prjct_json = json.dumps(self.__dict, indent=4)
+        # prjct_json = json.dumps(self.__dict, indent=4)
+        # compress and dump json data
+        prjct_json = json.dumps(json_zip(self.__dict))
         with open(self.path, "w") as json_writer:
             json_writer.write(prjct_json)
 
@@ -213,7 +216,9 @@ class Projects:
             exit(0)
             return
         projects = open(self.path, "r").read()
-        self.__dict = json.loads(projects)
+        # self.__dict = json.loads(projects)
+        # load and decompress json data
+        self.__dict = json_unzip(json.loads(projects))
         self.__sort_dict()
 
     def export_project(self, name: str, filename: str):

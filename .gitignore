@@ -140,5 +140,5 @@ cython_debug/
 # General
 *.xml
 *.iml
-/Source/projects.json
 /Source/Exported/
+Source/projects.json
