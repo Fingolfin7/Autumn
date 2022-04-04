@@ -1,5 +1,4 @@
 import os
-import random
 from charts import showBarGraphs, showPieChart
 from timer import Timer
 from projects import Projects
