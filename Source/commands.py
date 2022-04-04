@@ -13,23 +13,35 @@ name_lookup = {}
 def parse_command(in_str: str):
     in_str = in_str.strip()
     str_parts = in_str.split(' ')
-    return str_parts[0], str_parts[1:]
+    func_args = [arg.strip() for arg in " ".join(str_parts[1:]).split(',')]
+
+    if func_args.__contains__(""):
+        func_args.remove("")
+
+    return str_parts[0], func_args
 
 
 def get_index(list_args):
-    if len(list_args) > 0:
-        if isinstance(list_args[0], int):
-            index = list_args[0]
-        else:
-            proj_name = list_args[0]
-            sub_projs = list_args[1:]
-            lookup = f"{proj_name} {sub_projs}"
-            if lookup in name_lookup:
-                index = name_lookup[lookup]
-            else:
-                index = None
+    global timer_list
+    global name_lookup
+    if len(list_args) == 0:
+        return None
 
-        return index
+    try:
+        index = int(list_args[0])
+    except ValueError:
+        proj_name = list_args[0]
+        sub_projs = list_args[1:]
+        lookup = f"{proj_name} {sub_projs}"
+        if lookup in name_lookup:
+            index = name_lookup[lookup]
+        else:
+            index = None
+
+    if index >= len(timer_list):
+        index = None
+
+    return index
 
 
 def get_lookup_list(): return list(name_lookup)
@@ -53,10 +65,15 @@ def start_command(list_args):
 def status_command(list_args):
     global timer_list
 
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
     if len(list_args) > 0:
         i = get_index(list_args)
         if i is None:
-            print(f"Invalid key!\nValid keys: {get_lookup_list()}")
+            print(f"Invalid identifier!\nValid keys: {get_lookup_list()}"
+                  f"\nValid indexes 0 -> {len(timer_list) - 1}")
             return
         timer_list[i].time_spent()
 
@@ -70,6 +87,10 @@ def stop_command(list_args):
     global project_dict
     global timer_list
 
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
     if len(list_args) > 0:
         i = get_index(list_args)
         if i is None:
@@ -79,10 +100,6 @@ def stop_command(list_args):
     else:
         timer = timer_list[-1]
 
-    if len(timer_list) == 0:
-        print("No running projects.")
-        return
-
     project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
     timer_list.remove(timer)
 
@@ -90,15 +107,14 @@ def stop_command(list_args):
 def list_projects():
     global project_dict
     projects = project_dict.get_keys()
-    print("Active Projects: ")
+    print(format_text(f"[underline]Projects:[reset] "))
 
     length = len(projects)
 
     for i in range(length):
-        colour = random.choice(['bright green', 'cyan', '_text256_26_'])
-        output = format_text(f"[{colour}]{projects[i]}[reset], ")
+        output = f"{projects[i]}, "
         if i == length - 1:
-            output = format_text(f"[{colour}]{projects[i]}[reset]")
+            output = f"{projects[i]}"
 
         print("", end=output)
 
@@ -117,13 +133,12 @@ def list_subs(list_args):
 
     sub_projects = list(project_dict.get_project(project)['Sub Projects'].keys())
     length = len(sub_projects)
-    print(f"{project} sub-projects: ")
+    print(format_text(f"[underline]{project} sub-projects:[reset] "))
 
     for i in range(length):
-        colour = random.choice(['bright green', 'cyan', '_text256_26_'])
-        output = format_text(f"[{colour}]{sub_projects[i]}[reset], ")
+        output = f"{sub_projects[i]}, "
         if i == length - 1:
-            output = format_text(f"[{colour}]{sub_projects[i]}[reset]")
+            output = f"{sub_projects[i]}"
 
         print("", end=output)
 
@@ -131,6 +146,17 @@ def list_subs(list_args):
             print()
 
     print()
+
+
+def show_totals(list_args):
+    global project_dict
+
+    if len(list_args) == 0:
+        project_dict.get_totals()
+    elif list_args[0].lower() == 'all':
+        project_dict.get_totals()
+    else:
+        project_dict.get_totals(list_args)
 
 
 def list_cmds():
@@ -221,6 +247,10 @@ def print_project(list_args):
 
 def get_logs(list_args):
     global project_dict
+
+    if len(list_args) == 0:
+        project_dict.log()
+        return
 
     try:
         if list_args[0].lower() == 'all':

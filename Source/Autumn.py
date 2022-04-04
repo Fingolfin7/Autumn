@@ -2,7 +2,7 @@ from commands import *
 from ColourText import format_text
 import os
 
-AUTUMN = format_text('[bold][_text256]Autumn>[reset]', 208)
+AUTUMN = format_text('[_text256]Autumn>[reset]', 208)
 input_color = format_text("[green]")
 reset = format_text("[reset]")
 
@@ -22,6 +22,7 @@ commands = {
     "stop": stop_command,
     "status": status_command,
     "sub-projects": list_subs,
+    "totals": show_totals,
 }
 
 

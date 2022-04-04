@@ -1,4 +1,313 @@
 {
+    "Autumn": {
+        "Start Date": "04-04-2022",
+        "Last Updated": "04-04-2022",
+        "Total Time": 96.15,
+        "Sub Projects": {
+            "testing": 0.4666666666666667
+        },
+        "Session History": [
+            {
+                "Date": "04-04-2022",
+                "Start Time": "11:14:52",
+                "End Time": "12:50:33",
+                "Sub-Projects": [],
+                "Duration": 95.68,
+                "Note": "ability to run more than one project at a time. goodbye green/cyan bars. new commands 'status', and 'stop'"
+            },
+            {
+                "Date": "04-04-2022",
+                "Start Time": "12:52:37",
+                "End Time": "12:53:05",
+                "Sub-Projects": [
+                    "testing"
+                ],
+                "Duration": 0.47,
+                "Note": "seems to be working"
+            }
+        ]
+    },
+    "C++": {
+        "Start Date": "03-18-2022",
+        "Last Updated": "03-27-2022",
+        "Total Time": 111.56,
+        "Sub Projects": {
+            "group_assignment": 111.56
+        },
+        "Session History": [
+            {
+                "Date": "03-18-2022",
+                "Start Time": "12:20:49",
+                "End Time": "13:10:43",
+                "Sub-Projects": [
+                    "group_assignment"
+                ],
+                "Duration": 49.88,
+                "Note": "made the constructors and destructors code example for the group assignment"
+            },
+            {
+                "Date": "03-27-2022",
+                "Start Time": "19:15:39",
+                "End Time": "20:17:20",
+                "Sub-Projects": [
+                    "group_assignment"
+                ],
+                "Duration": 61.68,
+                "Note": "fixed an issue with deleteing unallocated pointers. yay!"
+            }
+        ]
+    },
+    "Chess": {
+        "Start Date": "03-28-2022",
+        "Last Updated": "04-03-2022",
+        "Total Time": 273.38,
+        "Sub Projects": {
+            "OTB": 42.9,
+            "lichess": 145.7,
+            "CAIIGE": 44.2,
+            "puzzles": 84.78333333333333
+        },
+        "Session History": [
+            {
+                "Date": "03-28-2022",
+                "Start Time": "14:17:18",
+                "End Time": "15:00:13",
+                "Sub-Projects": [
+                    "OTB"
+                ],
+                "Duration": 42.9,
+                "Note": "2 losses. Sigh. Edgar, Edgar."
+            },
+            {
+                "Date": "04-01-2022",
+                "Start Time": "00:12:34",
+                "End Time": "00:57:15",
+                "Sub-Projects": [
+                    "lichess"
+                ],
+                "Duration": 44.68,
+                "Note": "winner winner, chicken dinner! beat a 1764 (Alabaster10Ring account)"
+            },
+            {
+                "Date": "04-01-2022",
+                "Start Time": "09:08:50",
+                "End Time": "10:05:39",
+                "Sub-Projects": [
+                    "lichess"
+                ],
+                "Duration": 56.82,
+                "Note": "Beat a 1930, and 2075"
+            },
+            {
+                "Date": "04-01-2022",
+                "Start Time": "16:00:37",
+                "End Time": "16:44:49",
+                "Sub-Projects": [
+                    "lichess",
+                    "CAIIGE"
+                ],
+                "Duration": 44.2,
+                "Note": "wifi's acting up. not that it was going well anyway"
+            },
+            {
+                "Date": "04-03-2022",
+                "Start Time": "18:25:53",
+                "End Time": "19:50:41",
+                "Sub-Projects": [
+                    "puzzles"
+                ],
+                "Duration": 84.78,
+                "Note": "22 puzzles. 16 wins, 6 losses. 2127 (puzzle rating)"
+            }
+        ]
+    },
+    "django": {
+        "Start Date": "03-25-2022",
+        "Last Updated": "03-25-2022",
+        "Total Time": 93.67,
+        "Sub Projects": {
+            "tutorials": 93.67
+        },
+        "Session History": [
+            {
+                "Date": "03-25-2022",
+                "Start Time": "10:11:30",
+                "End Time": "11:45:11",
+                "Sub-Projects": [
+                    "tutorials"
+                ],
+                "Duration": 93.67,
+                "Note": "fantastic tutorials from Corey Schafer! Covered setup, paths and routes, and templates. Next: part 4"
+            }
+        ]
+    },
+    "Inscryption": {
+        "Start Date": "04-02-2022",
+        "Last Updated": "04-02-2022",
+        "Total Time": 93.65,
+        "Sub Projects": {},
+        "Session History": [
+            {
+                "Date": "04-02-2022",
+                "Start Time": "11:17:13",
+                "End Time": "12:20:08",
+                "Sub-Projects": [],
+                "Duration": 62.92,
+                "Note": "was winning. daddy made me stop to make up the bed. he says \"punch and pie\" for no clear reason."
+            },
+            {
+                "Date": "04-02-2022",
+                "Start Time": "12:30:11",
+                "End Time": "13:00:55",
+                "Sub-Projects": [],
+                "Duration": 30.73,
+                "Note": "lost at the pelts guy. furthest we've ever gotten in a single run i think"
+            }
+        ]
+    },
+    "lectures": {
+        "Start Date": "03-21-2022",
+        "Last Updated": "03-30-2022",
+        "Total Time": 999.35,
+        "Sub Projects": {
+            "ED": 439.92,
+            "C++": 287.25,
+            "presentations": 202.83,
+            "PM": 130.82,
+            "SAD": 73.33333333333333,
+            "MIS": 68.03333333333333
+        },
+        "Session History": [
+            {
+                "Date": "03-21-2022",
+                "Start Time": "08:46:00",
+                "End Time": "10:21:07",
+                "Sub-Projects": [
+                    "ED"
+                ],
+                "Duration": 95.1,
+                "Note": "12 characteristics of an entrepreneur; 7 roles entreprenuer plays in economic development"
+            },
+            {
+                "Date": "03-21-2022",
+                "Start Time": "11:48:11",
+                "End Time": "13:28:17",
+                "Sub-Projects": [
+                    "C++",
+                    "presentations"
+                ],
+                "Duration": 100.1,
+                "Note": "frustrating. but i wasn't wrong."
+            },
+            {
+                "Date": "03-21-2022",
+                "Start Time": "14:50:33",
+                "End Time": "15:56:28",
+                "Sub-Projects": [
+                    "PM"
+                ],
+                "Duration": 65.92,
+                "Note": "individual assignment (?), started project preparation, need to catch up on project organization and the '3 dimensions of project organization'"
+            },
+            {
+                "Date": "03-22-2022",
+                "Start Time": "14:23:39",
+                "End Time": "15:37:00",
+                "Sub-Projects": [
+                    "SAD"
+                ],
+                "Duration": 73.33,
+                "Note": "we weren't group 1! also new slides."
+            },
+            {
+                "Date": "03-23-2022",
+                "Start Time": "09:08:01",
+                "End Time": "11:22:11",
+                "Sub-Projects": [
+                    "ED"
+                ],
+                "Duration": 134.17,
+                "Note": "not entirely accurate! should have stopped this at half past 10..."
+            },
+            {
+                "Date": "03-23-2022",
+                "Start Time": "11:22:51",
+                "End Time": "12:30:54",
+                "Sub-Projects": [
+                    "MIS"
+                ],
+                "Duration": 68.03,
+                "Note": "MIS Methodologies; SDLC, RAD, AGILE etc. Systems for wempi problems to be developed"
+            },
+            {
+                "Date": "03-24-2022",
+                "Start Time": "08:58:45",
+                "End Time": "10:41:30",
+                "Sub-Projects": [
+                    "C++",
+                    "presentations"
+                ],
+                "Duration": 102.73,
+                "Note": "again, not accurate. should have stopped at nine-forty something... sigh. anyway."
+            },
+            {
+                "Date": "03-24-2022",
+                "Start Time": "10:45:34",
+                "End Time": "11:50:28",
+                "Sub-Projects": [
+                    "PM"
+                ],
+                "Duration": 64.9,
+                "Note": "New presentations! still in Group 5 (doing tools and techniques? not sure yet) also the other group assignment is still wanted."
+            },
+            {
+                "Date": "03-28-2022",
+                "Start Time": "09:18:41",
+                "End Time": "10:57:40",
+                "Sub-Projects": [
+                    "ED"
+                ],
+                "Duration": 98.97,
+                "Note": "..."
+            },
+            {
+                "Date": "03-28-2022",
+                "Start Time": "12:15:49",
+                "End Time": "13:40:14",
+                "Sub-Projects": [
+                    "C++"
+                ],
+                "Duration": 84.42,
+                "Note": "operator overloading. George's group"
+            },
+            {
+                "Date": "03-30-2022",
+                "Start Time": "08:53:29",
+                "End Time": "10:45:10",
+                "Sub-Projects": [
+                    "ED"
+                ],
+                "Duration": 111.68,
+                "Note": "done! finished the course outline. also got the list of exam topics. also make sure to read in-depth on Inheritance! definitely coming in the exam."
+            }
+        ]
+    },
+    "linkedin": {
+        "Start Date": "03-24-2022",
+        "Last Updated": "03-24-2022",
+        "Total Time": 62.57,
+        "Sub Projects": {},
+        "Session History": [
+            {
+                "Date": "03-24-2022",
+                "Start Time": "12:33:55",
+                "End Time": "13:36:29",
+                "Sub-Projects": [],
+                "Duration": 62.57,
+                "Note": "ended up being a c++ lecture for my group, but i did manage to watch a youtube tutorial on content marketing"
+            }
+        ]
+    },
     "Mars": {
         "Start Date": "03-07-2022",
         "Last Updated": "03-07-2022",
@@ -36,50 +345,93 @@
             }
         ]
     },
-    "moon": {
-        "Start Date": "03-07-2022",
-        "Last Updated": "03-10-2022",
-        "Total Time": 12.05,
+    "MIS": {
+        "Start Date": "03-28-2022",
+        "Last Updated": "03-30-2022",
+        "Total Time": 179.62,
         "Sub Projects": {
-            "lander": 10.63
+            "WeMPIs": 80.09,
+            "group_presentations": 99.53333333333333
         },
         "Session History": [
             {
-                "Date": "03-07-2022",
-                "Start Time": "22:23:44",
-                "End Time": "22:25:09",
-                "Sub-Projects": [],
-                "Duration": 1.42,
-                "Note": "hey i got nuthin"
+                "Date": "03-28-2022",
+                "Start Time": "11:18:41",
+                "End Time": "12:04:57",
+                "Sub-Projects": [
+                    "WeMPIs"
+                ],
+                "Duration": 46.27,
+                "Note": "started, done a lttile bit"
             },
             {
-                "Date": "03-08-2022",
-                "Start Time": "17:35:39",
-                "End Time": "17:46:16",
+                "Date": "03-28-2022",
+                "Start Time": "13:41:03",
+                "End Time": "14:14:52",
                 "Sub-Projects": [
-                    "lander"
+                    "WeMPIs"
                 ],
-                "Duration": 10.6,
-                "Note": "everything seems a-ok from my end!"
+                "Duration": 33.82,
+                "Note": "second one done. done!"
             },
             {
-                "Date": "03-10-2022",
-                "Start Time": "14:27:16",
-                "End Time": "14:27:19",
+                "Date": "03-30-2022",
+                "Start Time": "12:24:33",
+                "End Time": "14:04:05",
                 "Sub-Projects": [
-                    "lander"
+                    "group_presentations"
                 ],
-                "Duration": 0.03,
-                "Note": "quit"
+                "Duration": 99.53,
+                "Note": "done, presented the WeMPI for the second week. went well believe it or not."
             }
         ]
     },
-    "Project_Management": {
-        "Start Date": "03-10-2022",
-        "Last Updated": "03-10-2022",
-        "Total Time": 102.35,
+    "plagiarism_checker": {
+        "Start Date": "03-26-2022",
+        "Last Updated": "04-02-2022",
+        "Total Time": 312.02,
         "Sub Projects": {
-            "notes": 102.3
+            "github-solutions": 180.51666666666668,
+            "APIs": 17.3
+        },
+        "Session History": [
+            {
+                "Date": "03-26-2022",
+                "Start Time": "00:57:08",
+                "End Time": "02:51:21",
+                "Sub-Projects": [],
+                "Duration": 114.2,
+                "Note": "yup not easy. maybe impossible at my current level and with current time restrictions?"
+            },
+            {
+                "Date": "04-02-2022",
+                "Start Time": "16:56:10",
+                "End Time": "19:56:42",
+                "Sub-Projects": [
+                    "github-solutions"
+                ],
+                "Duration": 180.52,
+                "Note": "ok, progress! even added a citation checker - remover file. found an 'ok?' similarity checker."
+            },
+            {
+                "Date": "04-02-2022",
+                "Start Time": "22:34:21",
+                "End Time": "22:51:39",
+                "Sub-Projects": [
+                    "APIs"
+                ],
+                "Duration": 17.3,
+                "Note": "still not viable."
+            }
+        ]
+    },
+    "PM": {
+        "Start Date": "03-10-2022",
+        "Last Updated": "03-21-2022",
+        "Total Time": 267.72,
+        "Sub Projects": {
+            "notes": 267.67,
+            "catch-up": 68.01666666666667
         },
         "Session History": [
             {
@@ -101,6 +453,149 @@
                 ],
                 "Duration": 74.02,
                 "Note": "Finished the first set of slides. Covered \"what are projects?\", \"triple constraints\", and \"business classifications\""
+            },
+            {
+                "Date": "03-15-2022",
+                "Start Time": "12:12:19",
+                "End Time": "13:20:21",
+                "Sub-Projects": [
+                    "notes",
+                    "catch-up"
+                ],
+                "Duration": 68.02,
+                "Note": "project life-cycle, finished 'pm new feb 2020 intro' and 'projects and projecy management doc' slides."
+            },
+            {
+                "Date": "03-21-2022",
+                "Start Time": "21:33:22",
+                "End Time": "23:10:44",
+                "Sub-Projects": [
+                    "notes"
+                ],
+                "Duration": 97.35,
+                "Note": "process up to signing the project agreement/contract/charter, project objectives - 2 dimensions of project agreements and the magic project management triangle"
+            }
+        ]
+    },
+    "SAD": {
+        "Start Date": "03-17-2022",
+        "Last Updated": "03-31-2022",
+        "Total Time": 881.86,
+        "Sub Projects": {
+            "group_assignment": 144.53,
+            "assignment": 737.33
+        },
+        "Session History": [
+            {
+                "Date": "03-17-2022",
+                "Start Time": "19:29:38",
+                "End Time": "21:54:10",
+                "Sub-Projects": [
+                    "group_assignment"
+                ],
+                "Duration": 144.53,
+                "Note": "Finished the first-draft (probably last draft honestly) for the 'Data Flow and Context Diagrams' presentation."
+            },
+            {
+                "Date": "03-28-2022",
+                "Start Time": "15:06:40",
+                "End Time": "16:30:10",
+                "Sub-Projects": [
+                    "assignment"
+                ],
+                "Duration": 83.48,
+                "Note": "i've started at least. just over a page but i've started."
+            },
+            {
+                "Date": "03-29-2022",
+                "Start Time": "18:29:20",
+                "End Time": "20:06:43",
+                "Sub-Projects": [
+                    "assignment"
+                ],
+                "Duration": 97.37,
+                "Note": "Break! Supper time."
+            },
+            {
+                "Date": "03-30-2022",
+                "Start Time": "21:59:06",
+                "End Time": "05:37:37",
+                "Sub-Projects": [
+                    "assignment"
+                ],
+                "Duration": 458.52,
+                "Note": "done! well, almost. did number 1 - 4. just need to do number 3b."
+            },
+            {
+                "Date": "03-30-2022",
+                "Start Time": "15:40:04",
+                "End Time": "16:20:00",
+                "Sub-Projects": [
+                    "assignment"
+                ],
+                "Duration": 39.93,
+                "Note": "nuthin"
+            },
+            {
+                "Date": "03-31-2022",
+                "Start Time": "17:05:59",
+                "End Time": "18:04:02",
+                "Sub-Projects": [
+                    "assignment"
+                ],
+                "Duration": 58.03,
+                "Note": "found the answer!"
+            }
+        ]
+    },
+    "weights": {
+        "Start Date": "03-12-2022",
+        "Last Updated": "03-24-2022",
+        "Total Time": 71.67,
+        "Sub Projects": {
+            "bisceps": 17.25,
+            "biceps": 54.42
+        },
+        "Session History": [
+            {
+                "Date": "03-12-2022",
+                "Start Time": "13:19:28",
+                "End Time": "13:36:44",
+                "Sub-Projects": [
+                    "bisceps"
+                ],
+                "Duration": 17.25,
+                "Note": "two sets of 10 reps at \"full weight\", 4 sets at \"half weight\""
+            },
+            {
+                "Date": "03-17-2022",
+                "Start Time": "22:26:50",
+                "End Time": "22:39:48",
+                "Sub-Projects": [
+                    "biceps"
+                ],
+                "Duration": 12.97,
+                "Note": "1 set at full weight, 3 sets at half weight. Also, I should look into how volume is actually calculated..."
+            },
+            {
+                "Date": "03-21-2022",
+                "Start Time": "23:24:23",
+                "End Time": "23:47:08",
+                "Sub-Projects": [
+                    "biceps"
+                ],
+                "Duration": 22.73,
+                "Note": "(2sets * 10reps * 10kgs) + (3sets * 10reps * 7.5kg) = 425"
+            },
+            {
+                "Date": "03-24-2022",
+                "Start Time": "06:26:18",
+                "End Time": "06:45:01",
+                "Sub-Projects": [
+                    "biceps"
+                ],
+                "Duration": 18.72,
+                "Note": "(4sets * 10reps * 7.5kgs) + (1set * 5reps * 10kgs) = 350kgs"
             }
         ]
     }

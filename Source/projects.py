@@ -1,6 +1,7 @@
 from datetime import datetime
 from datetime import timedelta
 from ColourText import format_text
+from timer import td_str
 import json
 import os
 
@@ -150,11 +151,42 @@ class Projects:
                     day_total = day_total.strftime('%Mm %Ss')
 
                 print(format_text(f"[underline]{print_date}[reset]"
-                                  f" [_text256_77_]({day_total})[reset]"))
+                                  f" [_text256_34_]({day_total})[reset]"))
                 print(print_output)
 
     def aggregate(self):
         self.log('all', 1)
+
+    def get_totals(self, projects="all"):
+        valid_projects = []
+        keys = self.get_keys()
+
+        if str(projects).lower() == 'all':
+            valid_projects = keys
+        else:
+            for prjct in projects:
+                if prjct not in keys:
+                    print(f"Invalid project name! '{prjct}' does not exist!")
+                else:
+                    valid_projects.append(prjct)
+
+        for prj in valid_projects:
+            td = timedelta(minutes=self.__dict[prj]['Total Time'])
+            print(format_text(f"[bright red]{prj}[reset]: [_text256_34_]{td_str(td)}[reset]"))
+
+            sub_ls = list(self.__dict[prj]["Sub Projects"])
+            length = len(sub_ls)
+
+            for i in range(length):
+                sub = sub_ls[i]
+                sub_td = timedelta(minutes=self.__dict[prj]["Sub Projects"][sub])
+
+                if i == 0 and length < 0 or i == length - 1:
+                    print(format_text(f"└───[_text256_26_]{sub}[reset]: {td_str(sub_td)}"))
+                else:
+                    print(format_text(f"├───[_text256_26_]{sub}[reset]: {td_str(sub_td)}"))
+
+            print("")
 
     def __sort_dict(self):
         sorted_keys = sorted(self.get_keys(), key=lambda x: x.lower())
@@ -231,9 +263,9 @@ def main():
     project_dict.update_project(timer.run_timer(), 'Test')
     print(project_dict)"""
 
-    project_dict.export_project("AAtest", "March-2022.json")
-    project_dict.load_exported("March-2022.json", "AAtest")
-    project_dict.print_json_project("AAtest")
+    # project_dict.export_project("AAtest", "March-2022.json")
+    # project_dict.load_exported("March-2022.json", "AAtest")
+    # project_dict.print_json_project("AAtest")
 
 
 if __name__ == "__main__":
