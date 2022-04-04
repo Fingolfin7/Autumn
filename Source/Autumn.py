@@ -19,6 +19,8 @@ commands = {
     "projects": list_projects,
     "quit": quit_autumn,
     "start": start_command,
+    "stop": stop_command,
+    "status": status_command,
     "sub-projects": list_subs,
 }
 

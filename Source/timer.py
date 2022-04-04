@@ -1,7 +1,6 @@
 from datetime import timedelta
 from datetime import datetime
 from ColourText import format_text
-import threading
 import time
 import os
 
@@ -13,71 +12,44 @@ class Timer:
         self.proj_name = project_name
         self.sub_projs = sub_projects
 
-        self.start_time = None
-        self.end_time = None
-        self.duration = None
-        self.cntnue = True
-        self.block_time = 300
+        self._start_time = None
+        self._end_time = None
+        self._duration = None
 
-        self.sub_projs = "[_text256_26_]" + "[reset], [_text256_26_]".join(self.sub_projs) + "[reset]"
-        self.sub_projs = format(self.sub_projs.replace("\"", ""))
-
-    def print_thread(self):
-        blocks = 0
-        while self.cntnue:
-            time.sleep(self.block_time)
-            if self.cntnue:
-                print(format_text("[cyan]█[reset] "), end="")
-                blocks += 1
-
-                if blocks % 6 == 0:
-                    print(" ", end="")
-            else:
-                return
+        self._formatted_subs = "[_text256_26_]" + "[reset], [_text256_26_]".join(self.sub_projs) + "[reset]"
 
     def start(self):
-        self.start_time = time.time()
-        print(format_text(f"Starting project [bright red]{self.proj_name}[reset]"
-                          f" [{self.sub_projs}] at"
+        self._start_time = time.time()
+        print(format_text(f"Started [bright red]{self.proj_name}[reset]"
+                          f" [{self._formatted_subs}] at"
                           f" [bright green]{datetime.today().strftime('%X')}[reset]"))
 
+    def time_spent(self):
+        time_passed = timedelta(seconds=(time.time() - self._start_time))
+        print(format_text(f"Time passed on "
+                          f"[bright red]{self.proj_name}[reset] [{self._formatted_subs}]: "
+                          f"[bright green]{str(time_passed).split('.')[0]}[reset]"))
+
     def stop(self):
-        self.end_time = time.time()
-        self.duration = timedelta(seconds=(time.time() - self.start_time))
-        time_spent_str = format_text(f"[green][bold]{str(self.duration).split('.')[0]}[reset]")
-        print(f"Timer stopped at {datetime.today().strftime('%X')},\nTime tracked: {time_spent_str}")
+        self._end_time = time.time()
+        self._duration = timedelta(seconds=(time.time() - self._start_time))
+        time_spent_str = f"[green][bold]{str(self._duration).split('.')[0]}[reset]"
 
-        return self.duration.seconds / 60
+        print(format_text(f"Stopped [bright red]{self.proj_name}[reset] "
+                          f"stopped at {datetime.today().strftime('%X')},\n"
+                          f"Time tracked: {time_spent_str}"))
 
-    # noinspection PyUnusedLocal
-    def run_timer(self):
-        self.start()
-        print("")
-        print_thread = threading.Thread(target=self.print_thread)
-        print_thread.daemon = True  # a daemon thread is supposed to die when the main func exits
-        print_thread.start()
-
-        """
-        cmd_in = ""
-        while cmd_in.lower() not in ["stop", "-s"]:
-            cmd_in = input(">")
-        """
-
-        stop = input("")
-
-        print("")
-
-        self.cntnue = False
-        duration = self.stop()
-
+        duration = self._duration.seconds / 60
         session_note = input("Session Note: ")
-        return duration, session_note, self.start_time, self.end_time
+        return duration, session_note, self._start_time, self._end_time
 
 
 def main():
     os.system("cls")
     timer = Timer("nothing", ["to", "see"])
-    timer.run_timer()
+    timer.start()
+    time.sleep(5)
+    timer.time_spent()
     # print(f"{timer.run_timer()[0]} minutes")
 
 

@@ -1,9 +1,4 @@
-# noinspection PyShadowingNames
-def args(*args):
-    print(args)
-    ls = args[len(args) - 1]
-    print(ls)
+import argparse
+from Autumn import commands
 
-
-args(1, 2, 3, ['hi', 5])
-
+[print(i.__name__, end=", ") for i in commands.values()]

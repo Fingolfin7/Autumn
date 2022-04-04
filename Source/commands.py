@@ -6,23 +6,85 @@ from projects import Projects
 from ColourText import format_text
 
 project_dict = Projects()
+timer_list = []
+name_lookup = {}
 
 
 def parse_command(in_str: str):
     in_str = in_str.strip()
     str_parts = in_str.split(' ')
-    # print(str_parts)
     return str_parts[0], str_parts[1:]
+
+
+def get_index(list_args):
+    if len(list_args) > 0:
+        if isinstance(list_args[0], int):
+            index = list_args[0]
+        else:
+            proj_name = list_args[0]
+            sub_projs = list_args[1:]
+            lookup = f"{proj_name} {sub_projs}"
+            if lookup in name_lookup:
+                index = name_lookup[lookup]
+            else:
+                index = None
+
+        return index
+
+
+def get_lookup_list(): return list(name_lookup)
 
 
 def start_command(list_args):
     global project_dict
+    global timer_list
 
     proj_name = list_args[0]
     sub_projs = list_args[1:]
 
     timer = Timer(proj_name, sub_projs)
-    project_dict.update_project(timer.run_timer(), proj_name, sub_projs)
+
+    timer_list.append(timer)
+    name_lookup[f"{proj_name} {sub_projs}"] = len(timer_list) - 1
+
+    timer_list[-1].start()
+
+
+def status_command(list_args):
+    global timer_list
+
+    if len(list_args) > 0:
+        i = get_index(list_args)
+        if i is None:
+            print(f"Invalid key!\nValid keys: {get_lookup_list()}")
+            return
+        timer_list[i].time_spent()
+
+    else:
+        for i in range(len(timer_list)):
+            print(f"[{i}]: ", end="")
+            timer_list[i].time_spent()
+
+
+def stop_command(list_args):
+    global project_dict
+    global timer_list
+
+    if len(list_args) > 0:
+        i = get_index(list_args)
+        if i is None:
+            print(f"Invalid key!\nValid keys: {get_lookup_list()}")
+            return
+        timer = timer_list[i]
+    else:
+        timer = timer_list[-1]
+
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
+    project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
+    timer_list.remove(timer)
 
 
 def list_projects():

@@ -134,7 +134,8 @@ class Projects:
                         print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
                                                     f"[cyan]{session['End Time']}[reset] \t"
                                                     f"{time_spent}  "
-                                                    f"{project} {sub_projects} "
+                                                    f"[bright red]{project}[reset] "
+                                                    f"{sub_projects} "
                                                     f" -> [yellow]{session['Note']}[reset]\n")
 
             if print_output != "":
