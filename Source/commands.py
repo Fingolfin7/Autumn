@@ -68,7 +68,7 @@ def status_command(list_args):
         print("No running projects.")
         return
 
-    if len(list_args) > 0:
+    if len(list_args) > 0 and list_args[0] != 'all':
         i = get_index(list_args)
         if i is None:
             print(f"Invalid identifier!\nValid keys: {get_lookup_list()}"
