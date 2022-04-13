@@ -133,12 +133,17 @@ class Projects:
 
                         sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
 
+                        note = session['Note']
+
+                        if len(note) > 100:
+                            note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
+
                         print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
                                                     f"[cyan]{session['End Time']}[reset] \t"
                                                     f"{time_spent}  "
                                                     f"[bright red]{project}[reset] "
                                                     f"{sub_projects} "
-                                                    f" -> [yellow]{session['Note']}[reset]\n")
+                                                    f" -> [yellow]{note}[reset]\n")
 
             if print_output != "":
                 print_date = datetime.strptime(date, "%m-%d-%Y")

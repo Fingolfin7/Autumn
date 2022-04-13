@@ -35,7 +35,7 @@ def get_index(list_args):
         if lookup in name_lookup:
             index = name_lookup[lookup]
         else:
-            index = None
+            return None
 
     if index >= len(timer_list):
         index = None
@@ -71,11 +71,11 @@ def status_command(list_args):
     if len(list_args) > 0 and list_args[0] != 'all':
         i = get_index(list_args)
         if i is None:
-            print(f"Invalid identifier!\nValid keys: {get_lookup_list()}"
-                  f"\nValid indexes 0 -> {len(timer_list) - 1}")
+            print(f"Invalid identifier!\nValid keys: "
+                  f"{[i.replace(' []', '') for i in get_lookup_list()]}"
+                  f"\nValid indexes: 0 -> {len(timer_list) - 1}")
             return
         timer_list[i].time_spent()
-
     else:
         for i in range(len(timer_list)):
             print(f"[{i}]: ", end="")
@@ -298,12 +298,20 @@ def chart(list_args):
     if chart_objects[0].lower() == "all":
         chart_objects = keys
 
-    for name in chart_objects:
-        if name in keys:
-            time_totals.append(project_dict.get_project(name)["Total Time"] / 60)
-            project_names.append(name)
+    if len(chart_objects) == 1:
+        proj = project_dict.get_project(chart_objects[0])
+        for sub_proj in proj["Sub Projects"]:
+            time_totals.append(proj["Sub Projects"][sub_proj])
+            project_names.append(sub_proj)
         else:
-            print(f"Invalid project name! '{name}' does not exist!")
+            print(f"Invalid project name! '{sub_proj}' does not exist!")
+    else:
+        for name in chart_objects:
+            if name in keys:
+                time_totals.append(project_dict.get_project(name)["Total Time"] / 60)
+                project_names.append(name)
+            else:
+                print(f"Invalid project name! '{name}' does not exist!")
 
     if len(time_totals) > 0:
         print(f"Projects: {project_names}")

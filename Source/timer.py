@@ -55,7 +55,7 @@ class Timer:
                           f"started [_text256_34_]{td_str(self._duration)}[reset]ago"))
 
         duration = self._duration.seconds / 60
-        session_note = input("Session Note: ")
+        session_note = input("Session Note: ").strip()
         return duration, session_note, self._start_time, self._end_time
 
 
