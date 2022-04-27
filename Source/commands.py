@@ -53,6 +53,22 @@ def start_command(list_args):
     proj_name = list_args[0]
     sub_projs = list_args[1:]
 
+    if proj_name not in project_dict.get_keys():
+        x = input(format_text(f"'[bright red]{proj_name}[reset]' does not exist. Create it? \n[Y/N]: "))
+        if x in ["Y", "y"]:
+            project_dict.create_project(proj_name, sub_projs)
+        else:
+            return
+
+    for sub_proj in sub_projs:
+        if sub_proj not in project_dict.get_project(proj_name)['Sub Projects']:
+            x = input(format_text(f"Sub-project '[_text256_26_]{sub_proj}[reset]' does not exist. "
+                                  f"Create it? "
+                                  f"\n[Y/N]: ")
+                      )
+            if x not in ["Y", "y"]:
+                return
+
     timer = Timer(proj_name, sub_projs)
 
     timer_list.append(timer)

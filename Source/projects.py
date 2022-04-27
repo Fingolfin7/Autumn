@@ -41,7 +41,7 @@ class Projects:
         project = self.get_project(name)
         print(json.dumps(project, indent=4))
 
-    def __create_project(self, name: str, sub_names=None):
+    def create_project(self, name: str, sub_names=None):
         if name not in self.__dict:
             sub_projects = {}
 
@@ -56,10 +56,12 @@ class Projects:
                 'Sub Projects': sub_projects,
                 'Session History': []
             }
+        return True
 
     def update_project(self, session_out: tuple, name: str, sub_names=None):
         if name not in self.__dict:
-            self.__create_project(name, sub_names)
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
 
         duration = session_out[0]
         session_note = session_out[1]
