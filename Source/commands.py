@@ -1,4 +1,5 @@
 import os
+import _pickle as pickle
 from charts import showBarGraphs, showPieChart
 from timer import Timer
 from projects import Projects
@@ -195,7 +196,21 @@ def list_cmds():
 
 
 def quit_autumn():
+    with open('active_timers.pkl', 'wb') as output:
+        pickle.dump(timer_list, output)
+        pickle.dump(name_lookup, output)
+
     exit(0)
+
+
+def load_pickles():
+    global timer_list, name_lookup
+    try:
+        with open('active_timers.pkl', 'rb') as inpt:
+            timer_list = pickle.load(inpt)
+            name_lookup = pickle.load(inpt)
+    except FileNotFoundError:
+        pass
 
 
 def delete_project(list_args):

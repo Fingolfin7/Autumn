@@ -141,5 +141,5 @@ cython_debug/
 *.xml
 *.iml
 /Source/Exported/
-Source/projects.json
-Source/projects.json
+/Source/projects.json
+/Source/active_timers.pkl

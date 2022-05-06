@@ -1,10 +1,18 @@
 from commands import *
 from ColourText import format_text
+from commands import load_pickles
 import os
+import signal
+import atexit
 
 AUTUMN = format_text('[_text256]Autumn>[reset]', 208)
 input_color = format_text("[green]")
 reset = format_text("[reset]")
+
+# exit handler
+atexit.register(quit_autumn)
+signal.signal(signal.SIGTERM, quit_autumn)
+signal.signal(signal.SIGINT, quit_autumn)
 
 commands = {
     "aggregate": get_aggregate,
@@ -28,10 +36,11 @@ commands = {
 
 def main():
     os.system("")
+    load_pickles()
     while True:
+        cmd_in = input(f"{AUTUMN} {input_color}")
+        print(reset)
         try:
-            cmd_in = input(f"{AUTUMN} {input_color}")
-            print(reset)
             cmd_in, arguments = parse_command(cmd_in)
 
             if cmd_in in commands:
