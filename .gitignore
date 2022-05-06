@@ -143,3 +143,4 @@ cython_debug/
 /Source/Exported/
 /Source/projects.json
 /Source/active_timers.pkl
+Source/projects.json
