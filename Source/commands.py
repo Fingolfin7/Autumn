@@ -99,6 +99,26 @@ def status_command(list_args):
             timer_list[i].time_spent()
 
 
+def remove_timer(list_args):
+    global timer_list
+
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
+    if len(list_args) > 0 and list_args[0] != 'all':
+        i = get_index(list_args)
+        lookup = get_lookup_list()
+        if i is None:
+            print(f"Invalid identifier!\nValid keys: "
+                  f"{[i.replace(' []', '') for i in lookup]}"
+                  f"\nValid indexes: 0 -> {len(timer_list) - 1}")
+            return
+        print(f"Removed timer: {timer_list[i].proj_name}")
+        del timer_list[i]
+        del name_lookup[lookup[i]]
+
+
 def stop_command(list_args):
     global project_dict
     global timer_list
@@ -211,6 +231,18 @@ def load_pickles():
             name_lookup = pickle.load(inpt)
     except FileNotFoundError:
         pass
+
+
+def rename_project(list_args):
+    global project_dict
+    name = list_args[0]
+    new_name = list_args[1]
+
+    x = input(format_text(f"Are you sure you want to rename [yellow]{name}[reset] to "
+                          f"[yellow]{new_name}[reset]? \n[Y/N]: "))
+    if x == "Y" or x == "y":
+        project_dict.rename_project(name, new_name)
+        print(format_text(f"Renamed project [yellow]{name}[reset] to [yellow]{new_name}[reset]"))
 
 
 def delete_project(list_args):

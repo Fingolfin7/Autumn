@@ -37,6 +37,15 @@ class Projects:
         self.__dict.pop(name)
         self.__save()
 
+    def rename_project(self, name:str, new_name: str):
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        proj_data = self.get_project(name)
+        self.delete_project(name)
+        self.__dict[new_name] = proj_data
+
     def print_json_project(self, name: str):
         project = self.get_project(name)
         print(json.dumps(project, indent=4))

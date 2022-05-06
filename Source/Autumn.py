@@ -26,6 +26,8 @@ commands = {
     "print": print_project,
     "projects": list_projects,
     "quit": quit_autumn,
+    "remove-timer": remove_timer,
+    "rename": rename_project,
     "start": start_command,
     "stop": stop_command,
     "status": status_command,
