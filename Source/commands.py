@@ -21,6 +21,22 @@ def parse_command(in_str: str):
     return str_parts[0], func_args
 
 
+def save_pickles():
+    with open('active_timers.pkl', 'wb') as output:
+        pickle.dump(timer_list, output)
+        pickle.dump(name_lookup, output)
+
+
+def load_pickles():
+    global timer_list, name_lookup
+    try:
+        with open('active_timers.pkl', 'rb') as inpt:
+            timer_list = pickle.load(inpt)
+            name_lookup = pickle.load(inpt)
+    except FileNotFoundError:
+        pass
+
+
 def get_index(list_args):
     global timer_list
     global name_lookup
@@ -76,6 +92,7 @@ def start_command(list_args):
     name_lookup[f"{proj_name} {sub_projs}"] = len(timer_list) - 1
 
     timer_list[-1].start()
+    save_pickles()
 
 
 def status_command(list_args):
@@ -117,6 +134,7 @@ def remove_timer(list_args):
         print(f"Removed timer: {timer_list[i].proj_name}")
         del timer_list[i]
         del name_lookup[lookup[i]]
+    save_pickles()
 
 
 def stop_command(list_args):
@@ -138,6 +156,7 @@ def stop_command(list_args):
 
     project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
     timer_list.remove(timer)
+    save_pickles()
 
 
 def list_projects():
@@ -216,21 +235,8 @@ def list_cmds():
 
 
 def quit_autumn():
-    with open('active_timers.pkl', 'wb') as output:
-        pickle.dump(timer_list, output)
-        pickle.dump(name_lookup, output)
-
+    save_pickles()
     exit(0)
-
-
-def load_pickles():
-    global timer_list, name_lookup
-    try:
-        with open('active_timers.pkl', 'rb') as inpt:
-            timer_list = pickle.load(inpt)
-            name_lookup = pickle.load(inpt)
-    except FileNotFoundError:
-        pass
 
 
 def rename_project(list_args):

@@ -45,6 +45,7 @@ class Projects:
         proj_data = self.get_project(name)
         self.delete_project(name)
         self.__dict[new_name] = proj_data
+        self.__save()
 
     def print_json_project(self, name: str):
         project = self.get_project(name)
@@ -65,6 +66,7 @@ class Projects:
                 'Sub Projects': sub_projects,
                 'Session History': []
             }
+        self.__save()
         return True
 
     def update_project(self, session_out: tuple, name: str, sub_names=None):
@@ -146,7 +148,7 @@ class Projects:
 
                         note = session['Note']
 
-                        if len(note) > 100:
+                        if len(note) > 300:
                             note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
 
                         print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
