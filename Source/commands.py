@@ -370,7 +370,7 @@ def chart(list_args):
     if len(chart_objects) == 1:
         proj = project_dict.get_project(chart_objects[0])
         for sub_proj in proj["Sub Projects"]:
-            time_totals.append(proj["Sub Projects"][sub_proj])
+            time_totals.append(proj["Sub Projects"][sub_proj] / 60)
             project_names.append(sub_proj)
         else:
             print(f"Invalid project name! '{sub_proj}' does not exist!")
