@@ -368,12 +368,15 @@ def chart(list_args):
         chart_objects = keys
 
     if len(chart_objects) == 1:
+        if chart_objects[0] not in keys:
+            print(f"Invalid project name! '{chart_objects[0]}' does not exist!")
+            return
+
         proj = project_dict.get_project(chart_objects[0])
         for sub_proj in proj["Sub Projects"]:
             time_totals.append(proj["Sub Projects"][sub_proj] / 60)
             project_names.append(sub_proj)
-        else:
-            print(f"Invalid project name! '{sub_proj}' does not exist!")
+
     else:
         for name in chart_objects:
             if name in keys:
