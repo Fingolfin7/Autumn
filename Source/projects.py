@@ -140,9 +140,9 @@ class Projects:
                         time_spent = datetime.strptime(time_spent, "%H:%M:%S")
                         day_total += session['Duration']
                         if time_spent.hour > 0:
-                            time_spent = time_spent.strftime("%Hhrs %Mm")
+                            time_spent = time_spent.strftime("%Hh %Mm")
                         else:
-                            time_spent = time_spent.strftime("%Mm  %Ss")
+                            time_spent = time_spent.strftime("%Mm %Ss")
 
                         sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
 
@@ -165,7 +165,7 @@ class Projects:
                 day_total = datetime.strptime(day_total, "%H:%M:%S")
 
                 if day_total.hour > 0:
-                    day_total = day_total.strftime('%Hhrs %Mm')
+                    day_total = day_total.strftime('%Hh %Mm')
                 else:
                     day_total = day_total.strftime('%Mm %Ss')
 
