@@ -2,17 +2,11 @@ from commands import *
 from ColourText import format_text
 from commands import load_pickles
 import os
-import signal
-import atexit
+
 
 AUTUMN = format_text('[_text256]Autumn>[reset]', 208)
 input_color = format_text("[green]")
 reset = format_text("[reset]")
-
-# exit handler
-atexit.register(quit_autumn)
-signal.signal(signal.SIGTERM, quit_autumn)
-signal.signal(signal.SIGINT, quit_autumn)
 
 commands = {
     "aggregate": get_aggregate,
@@ -54,12 +48,12 @@ def main():
         except IndexError:
             print(f"Too few arguments for command: {cmd_in}!")
 
-        except KeyboardInterrupt:
-            print(f"{reset}Quitting.")
-            quit_autumn()
-
         print()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"{reset}Quitting.")
+        quit_autumn()
