@@ -222,7 +222,6 @@ class Projects:
 
     def __save(self):
         self.__sort_dict()
-        # prjct_json = json.dumps(self.__dict, indent=4)
         # compress and dump json data
         prjct_json = json.dumps(json_zip(self.__dict))
         with open(self.path, "w") as json_writer:
@@ -232,7 +231,6 @@ class Projects:
         if not os.path.exists(self.path):
             return
         projects = open(self.path, "r").read()
-        # self.__dict = json.loads(projects)
         # load and decompress json data
         self.__dict = json_unzip(json.loads(projects))
         self.__sort_dict()
@@ -276,18 +274,3 @@ class Projects:
         else:
             print(f"'{path}' does not exist!")
 
-
-def main():
-    os.system("")
-    project_dict = Projects()
-    """timer = Timer('Test', [])
-    project_dict.update_project(timer.run_timer(), 'Test')
-    print(project_dict)"""
-
-    # project_dict.export_project("AAtest", "March-2022.json")
-    # project_dict.load_exported("March-2022.json", "AAtest")
-    # project_dict.print_json_project("AAtest")
-
-
-if __name__ == "__main__":
-    main()

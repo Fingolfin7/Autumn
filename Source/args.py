@@ -52,7 +52,7 @@ export_cmd = subparser.add_parser("export")
 export_cmd.add_argument("projects", type=str, nargs="+",  help="name of project(s) to be exported. "
                                                                "use 'all' to export everything")
 export_cmd.add_argument("file", type=str, help="name of file to save exported project to. "
-                                               "Will be loacted in the 'Exported' folder,")
+                                               "Will be located in the 'Exported' folder,")
 
 import_cmd = subparser.add_parser("import")
 import_cmd.add_argument("projects", type=str, nargs="+", help="name of project(s) to be imported")

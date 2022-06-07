@@ -55,16 +55,16 @@ def format_text(line="", colour_code=0):
         if line.find("[_text256_") > -1:
             startIndex = line.index("[_text256_") + len("[_text256_")
             endIndex = line.index("_]")
-            colour_code = int(str(line[startIndex:endIndex]))
-            subStr = "[_text256_" + str(colour_code) + "_]"
-            line = line.replace(subStr, u"\u001b[38;5;" + str(colour_code) + "m")
+            colour_code = line[startIndex:endIndex]
+            subStr = f"[_text256_{colour_code}_]"
+            line = line.replace(subStr, u"\u001b[38;5;" + colour_code + "m")
         line = line.replace("[_background256]", u"\u001b[48;5;" + str(colour_code) + "m")
         if line.find("[__background256_") > -1:
             startIndex = line.index("[__background256_") + len("[__background256_")
             endIndex = line.index("_]")
-            colour_code = int(str(line[startIndex:endIndex]))
-            subStr = "[__background256_" + str(colour_code) + "_]"
-            line = line.replace(subStr, u"\u001b[48;5;" + str(colour_code) + "m")
+            colour_code = line[startIndex:endIndex]
+            subStr = f"[__background256_{colour_code}_]"
+            line = line.replace(subStr, u"\u001b[48;5;" + colour_code + "m")
     return line
 
 
@@ -89,7 +89,7 @@ def main():
     from time import sleep
     from random import randint
 
-    system("cls")
+    system("")
 
     show_256TextColour()
     print()
@@ -98,7 +98,8 @@ def main():
 
     while True:
         random_color = randint(0, 255)
-        print("", end=format_text("\r[_text256]All the colours[reset] [_background256]you want![reset]", random_color))
+        print("", end=format_text("\r[_text256]All the colours[reset] "
+                                  "[_background256]you want![reset]", random_color))
         sleep(0.2)
 
 
