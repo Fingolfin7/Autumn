@@ -230,8 +230,6 @@ class Projects:
 
     def __load(self):
         if not os.path.exists(self.path):
-            print(f"Cannot find file '{self.path}'! Quitting.")
-            exit(0)
             return
         projects = open(self.path, "r").read()
         # self.__dict = json.loads(projects)
