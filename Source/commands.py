@@ -1,5 +1,6 @@
 import os
 import _pickle as pickle
+from config import get_base_path
 from charts import showBarGraphs, showPieChart
 from timer import Timer
 from projects import Projects
@@ -7,6 +8,7 @@ from ColourText import format_text
 
 project_dict = Projects()
 timer_list = []
+pickes_path = os.path.join(get_base_path(), 'active_timers.pkl')
 
 
 def parse_command(in_str: str):
@@ -21,14 +23,14 @@ def parse_command(in_str: str):
 
 
 def save_pickles():
-    with open('active_timers.pkl', 'wb') as output:
+    with open(pickes_path, 'wb') as output:
         pickle.dump(timer_list, output)
 
 
 def load_pickles():
     global timer_list
     try:
-        with open('active_timers.pkl', 'rb') as inpt:
+        with open(pickes_path, 'rb') as inpt:
             timer_list = pickle.load(inpt)
     except FileNotFoundError:
         pass
@@ -207,7 +209,7 @@ def show_totals(list_args):
 
 
 def list_cmds():
-    from Autumn import commands
+    from main import commands
     keys = sorted(commands.keys(), key=lambda x: x.lower())
     length = len(keys)
 

@@ -30,11 +30,11 @@ Autumn has many commands including:
 * totals
 
 ## Usage Examples
-### Python-Window (run the Autumn.py file)
+### Python-Window (run the main.py file)
 
 ![Autumn1](https://user-images.githubusercontent.com/63872314/172470869-4e3a9c30-439a-4b1e-818d-04b774c93ca2.gif)
 
-### Windows Powershell
+### Windows Powershell (renamed `args.py` to `Autumn.py`)
 
 ![Autumn2](https://user-images.githubusercontent.com/63872314/172476433-4be3a8d3-c3ef-4a17-b490-2cc1e1a56abb.gif)
 

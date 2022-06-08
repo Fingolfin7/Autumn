@@ -2,7 +2,6 @@ from datetime import timedelta
 from datetime import datetime
 from ColourText import format_text
 import time
-import os
 
 
 def td_str(td):
@@ -70,16 +69,3 @@ class Timer:
         duration = self._duration.seconds / 60
         session_note = input("Session Note: ").strip()
         return duration, session_note, self._start_time, self._end_time
-
-
-def main():
-    os.system("cls")
-    timer = Timer("nothing", ["to", "see"])
-    timer.start()
-    time.sleep(5)
-    timer.time_spent()
-    # print(f"{timer.run_timer()[0]} minutes")
-
-
-if __name__ == "__main__":
-    main()

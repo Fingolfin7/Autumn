@@ -1,16 +1,18 @@
+import os
+import json
+from timer import td_str
 from datetime import datetime
 from datetime import timedelta
+from config import get_base_path
 from ColourText import format_text
-from timer import td_str
 from compress_json import json_unzip, json_zip
-import json
-import os
 
 
 class Projects:
-    def __init__(self, path="projects.json"):
+    def __init__(self, file="projects.json"):
         self.__dict = {}
-        self.path = path
+        self.path = os.path.join(get_base_path(), file)
+        self.exported_path = os.path.join(get_base_path(), "Exported")
         self.__load()
 
     def __str__(self):
@@ -240,10 +242,10 @@ class Projects:
             print(f"Invalid project name! '{name}' does not exist!")
             return
 
-        if not os.path.isdir("Exported"):
-            os.mkdir("Exported")
+        if not os.path.isdir(self.exported_path):
+            os.mkdir(self.exported_path)
 
-        path = os.path.join("Exported", filename)
+        path = os.path.join(self.exported_path, filename)
 
         if os.path.exists(path):
             file_contents = open(path, "r").read()
@@ -261,7 +263,7 @@ class Projects:
         self.delete_project(name)
 
     def load_exported(self, filename: str, project_name=""):
-        path = os.path.join("Exported", filename)
+        path = os.path.join(self.exported_path, filename)
 
         if os.path.exists(path):
             projects = open(path, "r").read()
