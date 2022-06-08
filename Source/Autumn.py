@@ -1,4 +1,5 @@
 from arg_parse_cmds import *
+from commands import list_cmds
 import argparse
 import os
 
@@ -63,9 +64,13 @@ chart_cmd = subparser.add_parser("chart")
 chart_cmd.add_argument("projects", type=str, nargs="+", help="project names. use 'all' for all projects")
 chart_cmd.add_argument("type", type=str, help="chart type, either 'pie' or 'bar'")
 
+help_cmd = subparser.add_parser("help")
+
+
 args = parser.parse_args()
 load_pickles()
 os.system("")
+print()
 
 if args.command == 'start':
     start_command(args.project, args.subs)
@@ -97,3 +102,7 @@ elif args.command == 'clear':
     clr()
 elif args.command == 'chart':
     chart(args.projects, args.type)
+elif args.command == 'help':
+    list_cmds()
+
+print()
