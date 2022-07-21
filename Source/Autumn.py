@@ -35,7 +35,7 @@ sub_projects.add_argument("project", type=str, nargs="?", default="", help="name
                                                                            " print sub-projects list")
 
 totals_cmd = subparser.add_parser("totals")
-totals_cmd.add_argument("--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
+totals_cmd.add_argument("-prjs", "--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
 
 rename = subparser.add_parser("rename")
 rename.add_argument("name", type=str, help="existing project's name")
@@ -45,8 +45,8 @@ delete_proj = subparser.add_parser("delete")
 delete_proj.add_argument("project", type=str, nargs="?", default="", help="name of project to be deleted")
 
 log_cmd = subparser.add_parser("log")
-log_cmd.add_argument("--projects", type=str, nargs="+", default="all", help="name of project(s) to show.")
-log_cmd.add_argument("--period", type=int, nargs="?", default=None, help="number of days, starting from today,"
+log_cmd.add_argument("-prjs", "--projects", type=str, nargs="+", default="all", help="name of project(s) to show.")
+log_cmd.add_argument("-p", "--period", type=int, nargs="?", default=None, help="number of days, starting from today,"
                                                                          " to print back to")
 
 export_cmd = subparser.add_parser("export")
