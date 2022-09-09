@@ -108,7 +108,7 @@ def remove_timer(timer_index):
               f"Valid indexes: 0 -> {len(timer_list) - 1}")
         print_timers()
         return
-    print(f"Removed timer: {timer_list[i].proj_name}")
+    print(format_text(f"Removed timer: [bright red]{timer_list[i].proj_name}[reset]"))
     del timer_list[i]
 
     save_pickles()

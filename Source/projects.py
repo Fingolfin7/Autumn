@@ -157,8 +157,9 @@ class Projects:
                                                     f"[cyan]{session['End Time']}[reset] \t"
                                                     f"{time_spent}  "
                                                     f"[bright red]{project}[reset] "
-                                                    f"{sub_projects} "
-                                                    f" -> [yellow]{note}[reset]\n")
+                                                    f"{sub_projects} " +
+                                                    (f" -> [yellow]{note}[reset]\n" if note != "" else "\n")
+                                                    )
 
             if print_output != "":
                 print_date = datetime.strptime(date, "%m-%d-%Y")
