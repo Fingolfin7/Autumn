@@ -71,7 +71,19 @@ load_pickles()
 os.system("")
 print()
 
-if args.command == 'start':
+if args.command is None:
+    print(format_text("[cyan]Usage: AUTUMN COMMAND [ARGS]...[reset]\n"))
+    print(format_text("[_text256]Autumn[reset] is a time tracking tool inspired by Watson\n"
+                      "that allows the user to track the amount of time\n"
+                      "they spend working on a given activity.\n\n"
+                      "You just have to tell [_text256]Autumn[reset] when you start working\n"
+                      "on your project with the `[green]start[reset]` command, and you can\n"
+                      "stop the timer when you're done with the`[green]stop[reset]` command.\n\n"
+                      "[underline][cyan]Commands:[reset]", 208
+                      )
+          )
+    list_cmds()
+elif args.command == 'start':
     start_command([args.project] + args.subs)
 elif args.command == 'stop':
     stop_command(args.index if args.index else [])
