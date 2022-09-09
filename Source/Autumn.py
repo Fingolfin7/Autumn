@@ -83,6 +83,7 @@ if args.command is None:
                       )
           )
     list_cmds()
+
 elif args.command == 'start':
     start_command([args.project] + args.subs)
 elif args.command == 'stop':
@@ -105,7 +106,6 @@ elif args.command == 'delete':
 elif args.command == 'log':
     projects = args.projects if args.projects else ['all']
     period = [args.period] if args.period else []
-    print(projects, period)
     get_logs(projects + period)
 
 elif args.command == 'aggregate':
