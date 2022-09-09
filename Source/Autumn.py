@@ -1,5 +1,4 @@
-from arg_parse_cmds import *
-from commands import list_cmds
+from commands import *
 import argparse
 import os
 
@@ -23,8 +22,8 @@ remove.add_argument("index", type=str, nargs="?", default=None, help="remove tim
 
 stop = subparser.add_parser("stop")
 stop.add_argument("index", type=str, nargs="?", default=None, help="stop timer from active timers list. "
-                                                                     "timers are ordered from oldest to newest. "
-                                                                     "oldest/first timer starts at index 0")
+                                                                   "timers are ordered from oldest to newest. "
+                                                                   "oldest/first timer starts at index 0")
 
 projects = subparser.add_parser("projects")
 aggregate = subparser.add_parser("aggregate")
@@ -45,13 +44,13 @@ delete_proj = subparser.add_parser("delete")
 delete_proj.add_argument("project", type=str, nargs="?", default="", help="name of project to be deleted")
 
 log_cmd = subparser.add_parser("log")
-log_cmd.add_argument("-prjs", "--projects", type=str, nargs="+", default="all", help="name of project(s) to show.")
+log_cmd.add_argument("-prjs", "--projects", type=str, nargs="+", default=None, help="name of project(s) to show.")
 log_cmd.add_argument("-p", "--period", type=int, nargs="?", default=None, help="number of days, starting from today,"
-                                                                         " to print back to")
+                                                                               " to print back to")
 
 export_cmd = subparser.add_parser("export")
-export_cmd.add_argument("projects", type=str, nargs="+",  help="name of project(s) to be exported. "
-                                                               "use 'all' to export everything")
+export_cmd.add_argument("projects", type=str, nargs="+", help="name of project(s) to be exported. "
+                                                              "use 'all' to export everything")
 export_cmd.add_argument("file", type=str, help="name of file to save exported project to. "
                                                "Will be located in the 'Exported' folder,")
 
@@ -66,42 +65,58 @@ chart_cmd.add_argument("type", type=str, help="chart type, either 'pie' or 'bar'
 
 help_cmd = subparser.add_parser("help")
 
-
 args = parser.parse_args()
 load_pickles()
+
 os.system("")
 print()
 
 if args.command == 'start':
-    start_command(args.project, args.subs)
+    start_command([args.project] + args.subs)
 elif args.command == 'stop':
-    stop_command(args.index)
+    stop_command(args.index if args.index else [])
 elif args.command == 'status':
-    status_command(args.index)
+    status_command(args.index if args.index else [])
 elif args.command == 'remove':
-    remove_timer(args.index)
+    remove_timer(args.index if args.index else [])
 elif args.command == 'projects':
     list_projects()
 elif args.command == 'sub-projects':
-    list_subs(args.project)
+    list_subs([args.project] if args.project else [])
 elif args.command == 'totals':
-    show_totals(args.projects)
+    show_totals(args.projects if args.projects else [])
 elif args.command == 'rename':
-    rename_project(args.name, args.new_name)
+    rename_project([args.name, args.new_name])
 elif args.command == 'delete':
-    delete_project(args.project)
+    delete_project([args.project] if args.project else [])
+
 elif args.command == 'log':
-    get_logs(args.projects, args.period)
+    projects = args.projects if args.projects else ['all']
+    period = [args.period] if args.period else []
+    print(projects, period)
+    get_logs(projects + period)
+
 elif args.command == 'aggregate':
     get_aggregate()
+
 elif args.command == 'export':
-    export(args.projects, args.file)
+    projects = args.projects if args.projects else []
+    file = [args.file] if args.file else []
+    export(projects + file)
+
 elif args.command == 'import':
-    import_exported(args.projects, args.file)
+    projects = args.projects if args.projects else []
+    file = [args.file] if args.file else []
+    import_exported(projects + file)
+
 elif args.command == 'clear':
     clr()
+
 elif args.command == 'chart':
-    chart(args.projects, args.type)
+    projects = args.projects if args.projects else []
+    chartType = [args.type] if args.type else []
+    chart(projects + chartType)
+
 elif args.command == 'help':
     list_cmds()
 

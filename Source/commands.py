@@ -247,6 +247,9 @@ def rename_project(list_args):
 
 def delete_project(list_args):
     global project_dict
+
+    if len(list_args) == 0:
+        return
     project = list_args[0]
 
     x = input(format_text(f"Are you sure you want to delete [yellow]{project}[reset]? \n[Y/N]: "))
