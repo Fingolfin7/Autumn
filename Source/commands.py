@@ -2,9 +2,10 @@ import os
 import _pickle as pickle
 from config import get_base_path
 from charts import showBarGraphs, showPieChart
-from timer import Timer
+from timer import Timer, td_str
 from projects import Projects
 from ColourText import format_text
+from datetime import datetime, timedelta
 
 project_dict = Projects()
 timer_list = []
@@ -151,6 +152,83 @@ def stop_command(list_args):
     project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
     timer_list.remove(timer)
     save_pickles()
+
+
+def export_to_watson(project_name):
+    global  project_dict
+    if not project_name in project_dict.get_keys():
+        print(format_text(f"'[bright red]{project_name}[reset]' does not exist."))
+        return
+
+    project = project_dict.get_project(project_name)
+
+    for session in project['Session History']:
+        date = datetime.strptime(session['Date'], "%m-%d-%Y")
+        start_time = datetime.strptime(session["Start Time"], "%H:%M:%S")
+        end_time = datetime.strptime(session["End Time"], "%H:%M:%S")
+        duration = end_time - start_time
+        duration = duration.total_seconds() / 60
+
+
+        if duration < 0:
+            start_date = (date - timedelta(days=1))
+            start_time = datetime.strftime(start_date, "%Y-%m-%d") + " " + datetime.strftime(start_time, "%H:%M:%S")
+            end_time = datetime.strftime(date, "%Y-%m-%d") + " " + datetime.strftime(end_time, "%H:%M:%S")
+        else:
+            start_time = datetime.strftime(date, "%Y-%m-%d") + " " + datetime.strftime(start_time, "%H:%M:%S")
+            end_time = datetime.strftime(date, "%Y-%m-%d") + " " + datetime.strftime(end_time, "%H:%M:%S")
+
+        trackWatson = f'watson add --from "{start_time}" --to "{end_time}" ' \
+                      f'{project_name}'
+        for sub_proj in session["Sub-Projects"]:
+            trackWatson += f" + {sub_proj}"
+
+        print(trackWatson)
+        os.system(trackWatson)
+
+
+def track_project(start_time, end_time, project, sub_projects, session_note):
+    global project_dict
+    start_time = datetime.strptime(start_time, '%m-%d-%Y-%H:%M')
+    end_time = datetime.strptime(end_time, '%m-%d-%Y-%H:%M')
+    duration = end_time - start_time
+    duration = duration.total_seconds() / 60
+
+    if project not in project_dict.get_keys():
+        x = input(format_text(f"'[bright red]{project}[reset]' does not exist. Create it? \n[Y/N]: "))
+        if x in ["Y", "y"]:
+            project_dict.create_project(project, sub_projects)
+        else:
+            return
+
+    for sub_proj in sub_projects:
+        if sub_proj not in project_dict.get_project(project)['Sub Projects']:
+            x = input(format_text(f"Sub-project '[_text256_26_]{sub_proj}[reset]' does not exist. "
+                                  f"Create it? "
+                                  f"\n[Y/N]: ")
+                      )
+            if x not in ["Y", "y"]:
+                return
+
+    project_dict.update_project((duration, session_note,
+                                 start_time,
+                                 end_time),
+                                project, sub_projects)
+
+    sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
+
+    duration = str(timedelta(minutes=duration)).split('.')[0]
+    duration = datetime.strptime(duration, "%H:%M:%S")
+    if duration.hour > 0:
+        duration = duration.strftime("%Hh %Mm")
+    else:
+        duration = duration.strftime("%Mm %Ss")
+
+    print(format_text(f"Tracked [bright red]{project}[reset] "
+                      f"{sub_projects} from [cyan]{start_time.strftime('%X')}[reset]"
+                      f" to [cyan]{end_time.strftime('%X')}[reset] "
+                      f"[_text256_34_]({duration})[reset]"
+                      + f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
 
 
 def list_projects():

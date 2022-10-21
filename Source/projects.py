@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from timer import td_str
 from datetime import datetime
 from datetime import timedelta
@@ -78,8 +79,12 @@ class Projects:
 
         duration = session_out[0]
         session_note = session_out[1]
-        start_time = datetime.fromtimestamp(session_out[2]).strftime('%X')
-        end_time = datetime.fromtimestamp(session_out[3]).strftime('%X')
+        if type(session_out[2]) is not datetime:
+            start_time = datetime.fromtimestamp(session_out[2]).strftime('%X')
+            end_time = datetime.fromtimestamp(session_out[3]).strftime('%X')
+        else:
+            start_time = session_out[2].strftime('%X')
+            end_time = session_out[3].strftime('%X')
 
         total_time = float(self.__dict[name]['Total Time']) + duration
         self.__dict[name]['Total Time'] = round(total_time, 2)

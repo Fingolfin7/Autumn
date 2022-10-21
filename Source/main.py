@@ -27,6 +27,7 @@ commands = {
     "status": status_command,
     "sub-projects": list_subs,
     "totals": show_totals,
+    "track": track_project,
 }
 
 

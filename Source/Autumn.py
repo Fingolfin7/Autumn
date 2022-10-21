@@ -25,6 +25,16 @@ stop.add_argument("index", type=str, nargs="?", default=None, help="stop timer f
                                                                    "timers are ordered from oldest to newest. "
                                                                    "oldest/first timer starts at index 0")
 
+track = subparser.add_parser("track")
+track.add_argument('start', type=str, help="Session start time. Format of month-day-year-Hour:Minute")
+track.add_argument('end', type=str, help="Session end time. Format of month-day-year-Hour:Minute")
+track.add_argument("project", type=str, help="name of project to be tracked for the session")
+track.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list of sub-projects that are tracked")
+track.add_argument("-sn", '--note', type=str, default="", help="Session note.")
+
+WatsonExport = subparser.add_parser("WatsonExport")
+WatsonExport.add_argument("project", type=str, help="name of project to be exported to Watson")
+
 projects = subparser.add_parser("projects")
 aggregate = subparser.add_parser("aggregate")
 clear_cmd = subparser.add_parser("clear")
@@ -90,10 +100,14 @@ elif args.command == 'stop':
     stop_command(args.index if args.index else [])
 elif args.command == 'status':
     status_command(args.index if args.index else [])
+elif args.command == 'track':
+    track_project(args.start, args.end, args.project, args.subs, args.note)
 elif args.command == 'remove':
     remove_timer(args.index if args.index else [])
 elif args.command == 'projects':
     list_projects()
+elif args.command == "WatsonExport":
+    export_to_watson(args.project)
 elif args.command == 'sub-projects':
     list_subs([args.project] if args.project else [])
 elif args.command == 'totals':
