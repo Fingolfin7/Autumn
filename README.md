@@ -27,7 +27,9 @@ Autumn has many commands including:
 * status,
 * stop,
 * sub-projects,
-* totals
+* totals,
+* track, 
+* ExportWatson
 
 ## Usage Examples
 ### Python-Window (run the main.py file)
