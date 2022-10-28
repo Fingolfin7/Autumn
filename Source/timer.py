@@ -62,7 +62,7 @@ class Timer:
         self._end_time = time.time()
         self._duration = timedelta(seconds=(time.time() - self._start_time))
 
-        print(format_text(f"Stopping [bright red]{self.proj_name}[reset] "
+        print(format_text(f"Stopped [bright red]{self.proj_name}[reset] "
                           f"[{self._formatted_subs}] at {datetime.today().strftime('%X')}, "
                           f"started [_text256_34_]{td_str(self._duration)}[reset]ago"))
 
