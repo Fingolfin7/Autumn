@@ -271,8 +271,8 @@ def show_totals(projects=None):
 
 
 def list_cmds():
-    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log", "print",
-                "projects", "quit", "remove", "rename", "restart", "start", "stop", "status", "sub-projects",
+    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log", "projects",
+                "quit", "remove", "rename", "restart", "start", "stop", "status", "sub-projects",
                 "totals", "track", "WatsonExport"]
     keys = sorted(commands, key=lambda x: x.lower())
     length = len(keys)
@@ -400,7 +400,7 @@ def chart(projects="all", chart_type="pie"):
     time_totals = []
     project_names = []
 
-    if projects.lower() == "all":
+    if str(projects).lower() == "all":
         projects = keys
 
     if len(projects) == 1:

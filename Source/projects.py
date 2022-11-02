@@ -16,9 +16,11 @@ def listOfDates(fromDate: str, toDate: str):
         if toDate else datetime.today()
 
     # TODO:  if the toDate is earlier than fromDate, and no fromDate is provided,
-    #  set fromDate to the beginning of the current year
+    #  set fromDate to the beginning of the current month
 
-    if (toDate - fromDate).days < 0:
+    # if fromDate > toDate and fromDate and not toDate
+
+    if fromDate > toDate:
         return None
 
     return [(toDate + timedelta(days=-i)).strftime("%m-%d-%Y") for i in range((toDate - fromDate).days + 1)]
@@ -191,10 +193,11 @@ class Projects:
                     valid_projects.append(prjct)
 
         dates = listOfDates(fromDate, toDate)
+        valid_projects = sorted(valid_projects, key=lambda x: x.lower())  # sort by alphabet. maybe try sorting by time?
 
         if not dates:
             print(format_text(f'Invalid input! End date [cyan]"{toDate}"[reset] cannot be earlier '
-                              f'than start date [cyan]"{fromDate}"[reset]".'))
+                              f'than start date [cyan]"{fromDate}"[reset].'))
             return
 
         for date in dates:
@@ -268,7 +271,12 @@ class Projects:
 
         for prj in valid_projects:
             td = timedelta(minutes=self.__dict[prj]['Total Time'])
-            print(format_text(f"[bright red]{prj}[reset]: [_text256_34_]{td_str(td)}[reset]"))
+            startDate = datetime.strptime(self.__dict[prj]['Start Date'], "%m-%d-%Y")
+            endDate = datetime.strptime(self.__dict[prj]['Last Updated'], "%m-%d-%Y")
+            startDate = startDate.strftime("%d %B %Y")
+            endDate = endDate.strftime("%d %B %Y")
+            print(format_text(f"[bright red]{prj}[reset]: [_text256_34_]{td_str(td)}[reset] "
+                              f"([cyan]{startDate}[reset] -> [cyan]{endDate}[reset])"))
 
             sub_ls = list(self.__dict[prj]["Sub Projects"])
             length = len(sub_ls)

@@ -78,8 +78,8 @@ import_cmd.add_argument("file", type=str, help="file to import project from. "
                                                "(Must be located in the 'Exported' folder")
 
 chart_cmd = subparser.add_parser("chart")
-chart_cmd.add_argument("projects", type=str, nargs="+", default="all", help="project names. use 'all' for all projects")
-chart_cmd.add_argument("type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
+chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all projects")
+chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
 
 help_cmd = subparser.add_parser("help")
 
