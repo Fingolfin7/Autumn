@@ -63,8 +63,8 @@ log_cmd = subparser.add_parser("log")
 log_cmd.add_argument("-p", "--projects", type=str, nargs="+", default='all', help="name of project(s) to show.")
 log_cmd.add_argument("-f", "--fromDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-t", "--toDate", type=str, default=None, help="date to start log from")
-log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
-                                                                               " to print back to")
+# log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
+#                                                                               " to print back to")
 
 export_cmd = subparser.add_parser("export")
 export_cmd.add_argument("projects", type=str, nargs="+", help="name of project(s) to be exported. "
@@ -78,7 +78,8 @@ import_cmd.add_argument("file", type=str, help="file to import project from. "
                                                "(Must be located in the 'Exported' folder")
 
 chart_cmd = subparser.add_parser("chart")
-chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all projects")
+chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all "
+                                                                                    "projects")
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
 
 help_cmd = subparser.add_parser("help")
@@ -124,11 +125,7 @@ elif args.command == 'rename':
 elif args.command == 'delete':
     delete_project(args.project)
 elif args.command == 'log':
-    if args:
-        get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate)
-    else:
-        print("this one")
-        get_logs()
+    get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate)
 elif args.command == 'aggregate':
     get_aggregate()
 elif args.command == 'export':
