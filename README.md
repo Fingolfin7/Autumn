@@ -32,9 +32,6 @@ Autumn has many commands including:
 * ExportWatson
 
 ## Usage Examples
-### Python-Window (run the main.py file)
-
-![Autumn1](https://user-images.githubusercontent.com/63872314/172470869-4e3a9c30-439a-4b1e-818d-04b774c93ca2.gif)
 
 ### Windows Powershell (renamed `args.py` to `Autumn.py`)
 

@@ -2,55 +2,28 @@ import os
 import _pickle as pickle
 from config import get_base_path
 from charts import showBarGraphs, showPieChart
-from timer import Timer, td_str
+from timer import Timer
 from projects import Projects
 from ColourText import format_text
 from datetime import datetime, timedelta
 
 project_dict = Projects()
 timer_list = []
-pickes_path = os.path.join(get_base_path(), 'active_timers.pkl')
-
-
-def parse_command(in_str: str):
-    in_str = in_str.strip()
-    str_parts = in_str.split(' ')
-    func_args = [arg.strip() for arg in " ".join(str_parts[1:]).split(',')]
-
-    if func_args.__contains__(""):
-        func_args.remove("")
-
-    return str_parts[0], func_args
+pickles_path = os.path.join(get_base_path(), 'active_timers.pkl')
 
 
 def save_pickles():
-    with open(pickes_path, 'wb') as output:
+    with open(pickles_path, 'wb') as output:
         pickle.dump(timer_list, output)
 
 
 def load_pickles():
     global timer_list
     try:
-        with open(pickes_path, 'rb') as inpt:
+        with open(pickles_path, 'rb') as inpt:
             timer_list = pickle.load(inpt)
     except FileNotFoundError:
         pass
-
-
-def get_index(list_args):
-    global timer_list
-    if len(list_args) == 0:
-        return None
-
-    try:
-        index = int(list_args[0])
-    except ValueError:
-        return None
-
-    if index >= len(timer_list):
-        index = None
-
-    return index
 
 
 def print_timers():
@@ -59,12 +32,9 @@ def print_timers():
         timer_list[index].time_spent()
 
 
-def start_command(list_args):
+def start_command(proj_name, sub_projs):
     global project_dict
     global timer_list
-
-    proj_name = list_args[0]
-    sub_projs = list_args[1:]
 
     if proj_name not in project_dict.get_keys():
         x = input(format_text(f"'[bright red]{proj_name}[reset]' does not exist. Create it? \n[Y/N]: "))
@@ -90,47 +60,7 @@ def start_command(list_args):
     save_pickles()
 
 
-def status_command(list_args):
-    global timer_list
-
-    if len(timer_list) == 0:
-        print("No running projects.")
-        return
-
-    if len(list_args) > 0 and list_args[0] != 'all':
-        i = get_index(list_args)
-        if i is None:
-            print(f"Invalid identifier!\n"
-                  f"Valid indexes: 0 -> {len(timer_list) - 1}")
-            print_timers()
-            return
-        timer_list[i].time_spent()
-    else:
-        for i in range(len(timer_list)):
-            print(f"[{i}]: ", end="")
-            timer_list[i].time_spent()
-
-
-def remove_timer(list_args):
-    global timer_list
-
-    if len(timer_list) == 0:
-        print("No running projects.")
-        return
-
-    if len(list_args) > 0 and list_args[0] != 'all':
-        i = get_index(list_args)
-        if i is None:
-            print(f"Invalid identifier!\n"
-                  f"Valid indexes: 0 -> {len(timer_list) - 1}")
-            print_timers()
-            return
-        print(format_text(f"Removed timer: [bright red]{timer_list[i].proj_name}[reset]"))
-        del timer_list[i]
-    save_pickles()
-
-
-def stop_command(list_args):
+def restart_command(index=-1):
     global project_dict
     global timer_list
 
@@ -138,16 +68,62 @@ def stop_command(list_args):
         print("No running projects.")
         return
 
-    if len(list_args) > 0:
-        i = get_index(list_args)
-        if i is None:
-            print(f"Invalid identifier!\n"
-                  f"Valid indexes: 0 -> {len(timer_list) - 1}")
-            print_timers()
-            return
-        timer = timer_list[i]
-    else:
-        timer = timer_list[-1]
+    if index is None:
+        print(f"Invalid identifier!\n"
+              f"Valid indexes: 0 -> {len(timer_list) - 1}")
+        print_timers()
+        return
+
+    timer = timer_list[index]
+
+    timer.restart()
+    save_pickles()
+
+
+def status_command(index="all"):
+    global timer_list
+
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
+    if index == 'all':
+        for i in range(len(timer_list)):
+            print(f"[{i}]: ", end="")
+            timer_list[i].time_spent()
+        return
+
+    timer_list[int(index)].time_spent()
+
+
+def remove_timer(index):
+    global timer_list
+
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
+    if index is None:
+        print(f"Invalid identifier!\n"
+              f"Valid indexes: 0 -> {len(timer_list) - 1}\n")
+        print_timers()
+        return
+
+    print(format_text(f"Removed timer: [bright red]{timer_list[index].proj_name}[reset]"))
+    del timer_list[index]
+
+    save_pickles()
+
+
+def stop_command(index=-1):
+    global project_dict
+    global timer_list
+
+    if len(timer_list) == 0:
+        print("No running projects.")
+        return
+
+    timer = timer_list[index]
 
     project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
     timer_list.remove(timer)
@@ -155,8 +131,8 @@ def stop_command(list_args):
 
 
 def export_to_watson(project_name):
-    global  project_dict
-    if not project_name in project_dict.get_keys():
+    global project_dict
+    if project_name not in project_dict.get_keys():
         print(format_text(f"'[bright red]{project_name}[reset]' does not exist."))
         return
 
@@ -168,7 +144,6 @@ def export_to_watson(project_name):
         end_time = datetime.strptime(session["End Time"], "%H:%M:%S")
         duration = end_time - start_time
         duration = duration.total_seconds() / 60
-
 
         if duration < 0:
             start_date = (date - timedelta(days=1))
@@ -188,9 +163,18 @@ def export_to_watson(project_name):
 
 
 def track_project(start_time, end_time, project, sub_projects, session_note):
+    """
+    Track a session that wasn't recorded in real-time.
+
+    :param start_time: session start time format: "MM-DD-YYY HH:MM"
+    :param end_time: session end time format: "MM-DD-YYY HH:MM"
+    :param project: project name
+    :param sub_projects: session subprojects
+    :param session_note: session note
+    """
     global project_dict
-    start_time = datetime.strptime(start_time, '%m-%d-%Y-%H:%M')
-    end_time = datetime.strptime(end_time, '%m-%d-%Y-%H:%M')
+    start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
+    end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
     duration = end_time - start_time
     duration = duration.total_seconds() / 60
 
@@ -251,11 +235,13 @@ def list_projects():
     print()
 
 
-def list_subs(list_args):
+def list_subs(project: str):
     global project_dict
-    project = list_args[0]
 
     if project not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{project}[reset]' does not exist."))
+        return
+    elif project == "":
         return
 
     sub_projects = list(project_dict.get_project(project)['Sub Projects'].keys())
@@ -275,20 +261,20 @@ def list_subs(list_args):
     print()
 
 
-def show_totals(list_args):
+def show_totals(projects=None):
     global project_dict
 
-    if len(list_args) == 0:
-        project_dict.get_totals()
-    elif list_args[0].lower() == 'all':
+    if not projects:
         project_dict.get_totals()
     else:
-        project_dict.get_totals(list_args)
+        project_dict.get_totals(projects)
 
 
 def list_cmds():
-    from main import commands
-    keys = sorted(commands.keys(), key=lambda x: x.lower())
+    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log", "projects",
+                "quit", "remove", "rename", "restart", "start", "stop", "status", "sub-projects",
+                "totals", "track", "WatsonExport"]
+    keys = sorted(commands, key=lambda x: x.lower())
     length = len(keys)
 
     print("Here are all the available commands:\n")
@@ -311,10 +297,14 @@ def quit_autumn():
     exit(0)
 
 
-def rename_project(list_args):
+def rename_project(name: str, new_name: str):
     global project_dict
-    name = list_args[0]
-    new_name = list_args[1]
+
+    if name not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{name}[reset]' does not exist."))
+        return
+    elif name == "":
+        return
 
     x = input(format_text(f"Are you sure you want to rename [yellow]{name}[reset] to "
                           f"[yellow]{new_name}[reset]? \n[Y/N]: "))
@@ -323,12 +313,14 @@ def rename_project(list_args):
         print(format_text(f"Renamed project [yellow]{name}[reset] to [yellow]{new_name}[reset]"))
 
 
-def delete_project(list_args):
+def delete_project(project: str):
     global project_dict
 
-    if len(list_args) == 0:
+    if project not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{project}[reset]' does not exist."))
         return
-    project = list_args[0]
+    elif project == "":
+        return
 
     x = input(format_text(f"Are you sure you want to delete [yellow]{project}[reset]? \n[Y/N]: "))
     if x == "Y" or x == "y":
@@ -336,15 +328,8 @@ def delete_project(list_args):
         print(format_text(f"Deleted project [yellow]{project}[reset]"))
 
 
-def export(list_args):
+def export(projects: list, filename: str):
     global project_dict
-
-    if list_args[0].lower() == 'all':
-        projects = project_dict.get_keys()
-    else:
-        projects = list_args[: -1]
-
-    filename = list_args[-1]
 
     if not filename.endswith(".json"):
         filename += ".json"
@@ -358,15 +343,8 @@ def export(list_args):
         print(format_text(f"Exported [yellow]{projects}[reset] to '{filename}'"))
 
 
-def import_exported(list_args):
+def import_exported(projects: list, filename: str):
     global project_dict
-
-    if list_args[0].lower() == 'all':
-        projects = []
-    else:
-        projects = list_args[: -1]
-
-    filename = list_args[-1]
 
     if not filename.endswith(".json"):
         filename += ".json"
@@ -381,34 +359,19 @@ def import_exported(list_args):
         print(format_text(f"Imported [yellow]{projects}[reset] from '{filename}'"))
 
 
-def print_project(list_args):
+def print_project(project):
     global project_dict
-    project = list_args[0]
-
     project_dict.print_json_project(project)
 
 
-def get_logs(list_args):
+def get_logs(**kwargs):
     global project_dict
 
-    if len(list_args) == 0:
+    if len(kwargs.keys()) == 0:
         project_dict.log()
         return
 
-    try:
-        if list_args[0].lower() == 'all':
-            projects = 'all'
-        else:
-            projects = list_args[: -1]
-
-        period = int(list_args[-1])
-        project_dict.log(projects, period)
-    except ValueError:
-        if list_args[0].lower() == 'all':
-            projects = 'all'
-            project_dict.log(projects)
-        else:
-            project_dict.log(list_args)
+    project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"])
 
 
 def get_aggregate():
@@ -420,11 +383,9 @@ def clr():
     os.system("cls")
 
 
-def chart(list_args):
+def chart(projects="all", chart_type="pie"):
     global project_dict
     keys = project_dict.get_keys()
-    chart_objects = list_args[0: -1]
-    chart_type = str(list_args[-1:][0]).lower()
 
     chart_funcs = {
         'bar': showBarGraphs,
@@ -439,21 +400,21 @@ def chart(list_args):
     time_totals = []
     project_names = []
 
-    if chart_objects[0].lower() == "all":
-        chart_objects = keys
+    if str(projects).lower() == "all":
+        projects = keys
 
-    if len(chart_objects) == 1:
-        if chart_objects[0] not in keys:
-            print(f"Invalid project name! '{chart_objects[0]}' does not exist!")
+    if len(projects) == 1:
+        if projects[0] not in keys:
+            print(f"Invalid project name! '{projects[0]}' does not exist!")
             return
 
-        proj = project_dict.get_project(chart_objects[0])
+        proj = project_dict.get_project(projects[0])
         for sub_proj in proj["Sub Projects"]:
             time_totals.append(proj["Sub Projects"][sub_proj] / 60)
             project_names.append(sub_proj)
 
     else:
-        for name in chart_objects:
+        for name in projects:
             if name in keys:
                 time_totals.append(project_dict.get_project(name)["Total Time"] / 60)
                 project_names.append(name)

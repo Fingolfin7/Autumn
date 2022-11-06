@@ -9,8 +9,29 @@ from ColourText import format_text
 from compress_json import json_unzip, json_zip
 
 
+def listOfDates(fromDate: str, toDate: str):
+    fromDate = datetime.strptime(fromDate, "%m-%d-%Y") \
+        if fromDate else datetime.today() - timedelta(days=7)
+    toDate = datetime.strptime(toDate, "%m-%d-%Y") \
+        if toDate else datetime.today()
+
+    # TODO:  if the toDate is earlier than fromDate, and no fromDate is provided,
+    #  set fromDate to the beginning of the current month
+
+    # if fromDate > toDate and fromDate and not toDate
+
+    if fromDate > toDate:
+        return None
+
+    return [(toDate + timedelta(days=-i)).strftime("%m-%d-%Y") for i in range((toDate - fromDate).days + 1)]
+
+
 class Projects:
     def __init__(self, file="projects.json"):
+        """
+        :param file: filename to save and load project data from. File has to be located in the base directory
+        """
+
         self.__dict = {}
         self.path = os.path.join(get_base_path(), file)
         self.exported_path = os.path.join(get_base_path(), "Exported")
@@ -23,9 +44,17 @@ class Projects:
         return len(self.__dict)
 
     def get_keys(self):
+        """
+        Return a list of all the existing project names
+        """
         return list(self.__dict.keys())
 
     def get_project(self, name: str):
+        """
+        Return a project dictionary.
+        :param name: existing project name
+        :return: project dict object
+        """
         if name not in self.__dict:
             print(f"Invalid project name! '{name}' does not exist!")
             return
@@ -33,6 +62,9 @@ class Projects:
         return self.__dict[name]
 
     def delete_project(self, name: str):
+        """
+        Delete an existing project
+        """
         if name not in self.__dict:
             print(f"Invalid project name! '{name}' does not exist!")
             return
@@ -41,6 +73,9 @@ class Projects:
         self.__save()
 
     def rename_project(self, name:str, new_name: str):
+        """
+        Rename existing project
+        """
         if name not in self.__dict:
             print(f"Invalid project name! '{name}' does not exist!")
             return
@@ -55,6 +90,12 @@ class Projects:
         print(json.dumps(project, indent=4))
 
     def create_project(self, name: str, sub_names=None):
+        """
+        Create a new project.
+
+        :param name: project name
+        :param sub_names: names of the project's sub-projects if any.
+        """
         if name not in self.__dict:
             sub_projects = {}
 
@@ -73,12 +114,21 @@ class Projects:
         return True
 
     def update_project(self, session_out: tuple, name: str, sub_names=None):
+        """
+        Save project session history.
+
+        :param session_out: a tuple with the session info including duration, session note, start and end time
+        :param name: project to update
+        :param sub_names: list of session sub-projects
+        """
+
         if name not in self.__dict:
             print(f"Invalid project name! '{name}' does not exist!")
             return
 
         duration = session_out[0]
         session_note = session_out[1]
+
         if type(session_out[2]) is not datetime:
             start_time = datetime.fromtimestamp(session_out[2]).strftime('%X')
             end_time = datetime.fromtimestamp(session_out[3]).strftime('%X')
@@ -121,7 +171,15 @@ class Projects:
 
         self.__save()
 
-    def log(self, projects="all", days=7):
+    def log(self, projects="all", fromDate=None, toDate=None):
+        """
+        Print the session histories of projects over a given period.
+
+        :param projects: list of project names to print session history.
+        :param fromDate: date to start printing logs from in the format of MM-DD-YYY
+        :param toDate: date to stop printing logs at in the format of MM-DD-YYY
+
+        """
         valid_projects = []
         keys = self.get_keys()
 
@@ -134,8 +192,13 @@ class Projects:
                 else:
                     valid_projects.append(prjct)
 
-        dates = [(datetime.today() - timedelta(days=i)).strftime("%m-%d-%Y")
-                 for i in range(days)]
+        dates = listOfDates(fromDate, toDate)
+        valid_projects = sorted(valid_projects, key=lambda x: x.lower())  # sort by alphabet. maybe try sorting by time?
+
+        if not dates:
+            print(format_text(f'Invalid input! End date [cyan]"{toDate}"[reset] cannot be earlier '
+                              f'than start date [cyan]"{fromDate}"[reset].'))
+            return
 
         for date in dates:
             print_output = ""
@@ -182,9 +245,18 @@ class Projects:
                 print(print_output)
 
     def aggregate(self):
-        self.log('all', 1)
+        """
+        Print the session histories of projects for the current day.
+        """
+        today = datetime.today().strftime("%m-%d-%Y")
+        self.log("all", today, today)
 
     def get_totals(self, projects="all"):
+        """
+        Print the time spent totals and subtotals for given projects.
+
+        :param projects: list of project names to show time totals.
+        """
         valid_projects = []
         keys = self.get_keys()
 
@@ -199,7 +271,12 @@ class Projects:
 
         for prj in valid_projects:
             td = timedelta(minutes=self.__dict[prj]['Total Time'])
-            print(format_text(f"[bright red]{prj}[reset]: [_text256_34_]{td_str(td)}[reset]"))
+            startDate = datetime.strptime(self.__dict[prj]['Start Date'], "%m-%d-%Y")
+            endDate = datetime.strptime(self.__dict[prj]['Last Updated'], "%m-%d-%Y")
+            startDate = startDate.strftime("%d %B %Y")
+            endDate = endDate.strftime("%d %B %Y")
+            print(format_text(f"[bright red]{prj}[reset]: [_text256_34_]{td_str(td)}[reset] "
+                              f"([cyan]{startDate}[reset] -> [cyan]{endDate}[reset])"))
 
             sub_ls = list(self.__dict[prj]["Sub Projects"])
             length = len(sub_ls)
@@ -244,6 +321,17 @@ class Projects:
         self.__sort_dict()
 
     def export_project(self, name: str, filename: str):
+        """
+        Export projects to .json files.
+
+        Files are saved in the 'Exported' folder within the project directory.
+        Has to end in .json.
+        If extension isn't added, it will be added by the function.
+
+        :param name: name of existing project to be exported
+        :param filename: filename to save project in.
+
+        """
         if name not in self.__dict:
             print(f"Invalid project name! '{name}' does not exist!")
             return
@@ -269,6 +357,13 @@ class Projects:
         self.delete_project(name)
 
     def load_exported(self, filename: str, project_name=""):
+        """
+        Import previously exported projects.
+
+        :param filename: filename to save project in.
+        :param project_name: name of the project to import from the file
+
+        """
         path = os.path.join(self.exported_path, filename)
 
         if os.path.exists(path):
