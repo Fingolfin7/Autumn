@@ -27,8 +27,9 @@ Autumn has many commands including:
 * status,
 * stop,
 * sub-projects,
-* totals, and
-* track
+* totals,
+* track, 
+* ExportWatson
 
 ## Usage Examples
 
