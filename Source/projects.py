@@ -72,7 +72,7 @@ class Projects:
         self.__dict.pop(name)
         self.__save()
 
-    def rename_project(self, name:str, new_name: str):
+    def rename_project(self, name: str, new_name: str):
         """
         Rename existing project
         """
@@ -193,56 +193,70 @@ class Projects:
                     valid_projects.append(prjct)
 
         dates = listOfDates(fromDate, toDate)
-        valid_projects = sorted(valid_projects, key=lambda x: x.lower())  # sort by alphabet. maybe try sorting by time?
 
         if not dates:
             print(format_text(f'Invalid input! End date [cyan]"{toDate}"[reset] cannot be earlier '
                               f'than start date [cyan]"{fromDate}"[reset].'))
             return
 
+        # create a sessions list
+        sessions_list = [(project, self.__dict[project]["Session History"]) for project in valid_projects]
+        cleaned_sessions = []
+
+        for project, session_list in sessions_list:
+            for session in session_list:
+                if session["Date"] in dates:
+                    cleaned_sessions.append((project, session))
+
+        # sort sessions list by end time
+        session_list = sorted(cleaned_sessions, key=lambda x: datetime.strptime(x[1]["End Time"], "%H:%M:%S"))
+
         for date in dates:
             print_output = ""
             day_total = 0.0
-            for project in valid_projects:
-                for session in self.__dict[project]["Session History"]:
-                    if date == session['Date']:
-                        time_spent = str(timedelta(minutes=session['Duration'])).split(".")[0]
-                        time_spent = datetime.strptime(time_spent, "%H:%M:%S")
-                        day_total += session['Duration']
-                        if time_spent.hour > 0:
-                            time_spent = time_spent.strftime("%Hh %Mm")
-                        else:
-                            time_spent = time_spent.strftime("%Mm %Ss")
+            for project, session in session_list:
+                if date != session['Date']:
+                    continue
+                time_spent = str(timedelta(minutes=session['Duration'])).split(".")[0]
+                time_spent = datetime.strptime(time_spent, "%H:%M:%S")
+                day_total += session['Duration']
 
-                        sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
-
-                        note = session['Note']
-
-                        if len(note) > 300:
-                            note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
-
-                        print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
-                                                    f"[cyan]{session['End Time']}[reset] \t"
-                                                    f"{time_spent}  "
-                                                    f"[bright red]{project}[reset] "
-                                                    f"{sub_projects} " +
-                                                    (f" -> [yellow]{note}[reset]\n" if note != "" else "\n")
-                                                    )
-
-            if print_output != "":
-                print_date = datetime.strptime(date, "%m-%d-%Y")
-                print_date = print_date.strftime("%A %d %B %Y")
-                day_total = str(timedelta(minutes=day_total)).split(".")[0]
-                day_total = datetime.strptime(day_total, "%H:%M:%S")
-
-                if day_total.hour > 0:
-                    day_total = day_total.strftime('%Hh %Mm')
+                if time_spent.hour > 0:
+                    time_spent = time_spent.strftime("%Hh %Mm")
                 else:
-                    day_total = day_total.strftime('%Mm %Ss')
+                    time_spent = time_spent.strftime("%Mm %Ss")
 
-                print(format_text(f"[underline]{print_date}[reset]"
-                                  f" [_text256_34_]({day_total})[reset]"))
-                print(print_output)
+                sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
+
+                note = session['Note']
+
+                if len(note) > 300:
+                    note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
+
+                print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
+                                            f"[cyan]{session['End Time']}[reset] \t"
+                                            f"{time_spent}  "
+                                            f"[bright red]{project}[reset] "
+                                            f"{sub_projects} " +
+                                            (f" -> [yellow]{note}[reset]\n" if note != "" else "\n")
+                                            )
+
+            if print_output == "":
+                continue
+
+            print_date = datetime.strptime(date, "%m-%d-%Y")
+            print_date = print_date.strftime("%A %d %B %Y")
+            day_total = str(timedelta(minutes=day_total)).split(".")[0]
+            day_total = datetime.strptime(day_total, "%H:%M:%S")
+
+            if day_total.hour > 0:
+                day_total = day_total.strftime('%Hh %Mm')
+            else:
+                day_total = day_total.strftime('%Mm %Ss')
+
+            print(format_text(f"[underline]{print_date}[reset]"
+                              f" [_text256_34_]({day_total})[reset]"))
+            print(print_output)
 
     def aggregate(self):
         """
@@ -376,4 +390,3 @@ class Projects:
 
         else:
             print(f"'{path}' does not exist!")
-
