@@ -1,7 +1,7 @@
 import os
 import _pickle as pickle
 from config import get_base_path
-from charts import showBarGraphs, showPieChart
+from charts import *
 from timer import Timer
 from projects import Projects
 from ColourText import format_text
@@ -389,7 +389,8 @@ def chart(projects="all", chart_type="pie"):
 
     chart_funcs = {
         'bar': showBarGraphs,
-        'pie': showPieChart
+        'pie': showPieChart,
+        'scatter': showScatterGraph
     }
 
     if chart_type not in chart_funcs:
@@ -399,6 +400,9 @@ def chart(projects="all", chart_type="pie"):
 
     time_totals = []
     project_names = []
+    dates = []
+    durations = []
+    names_and_hist = []
 
     if str(projects).lower() == "all":
         projects = keys
@@ -418,10 +422,17 @@ def chart(projects="all", chart_type="pie"):
             if name in keys:
                 time_totals.append(project_dict.get_project(name)["Total Time"] / 60)
                 project_names.append(name)
+                sess_hist = project_dict.get_project(name)["Session History"]
+                dates = [datetime.strptime(sess['Date'], "%m-%d-%Y") for sess in sess_hist]
+                durations = [sess['Duration'] / 60 for sess in sess_hist]
+                names_and_hist.append((name, (dates, durations)))
             else:
                 print(f"Invalid project name! '{name}' does not exist!")
 
-    if len(time_totals) > 0:
+    if chart_type == "scatter":
+        print(f"Projects: {project_names}")
+        chart_funcs[chart_type](names_and_hist)
+    elif chart_type in ['bar', 'pie'] and len(time_totals) > 0:
         print(f"Projects: {project_names}")
         print(f"Times: {time_totals}")
         chart_funcs[chart_type](project_names, time_totals)
