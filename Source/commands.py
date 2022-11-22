@@ -175,6 +175,7 @@ def track_project(start_time, end_time, project, sub_projects, session_note):
     global project_dict
     start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
     end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
+    update_date = end_time.strftime("%m-%d-%Y")
     duration = end_time - start_time
     duration = duration.total_seconds() / 60
 
@@ -197,7 +198,7 @@ def track_project(start_time, end_time, project, sub_projects, session_note):
     project_dict.update_project((duration, session_note,
                                  start_time,
                                  end_time),
-                                project, sub_projects)
+                                project, sub_projects, update_date)
 
     sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
 

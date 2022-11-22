@@ -113,13 +113,14 @@ class Projects:
         self.__save()
         return True
 
-    def update_project(self, session_out: tuple, name: str, sub_names=None):
+    def update_project(self, session_out: tuple, name: str, sub_names=None, update_date=datetime.today().strftime("%m-%d-%Y")):
         """
         Save project session history.
 
         :param session_out: a tuple with the session info including duration, session note, start and end time
         :param name: project to update
         :param sub_names: list of session sub-projects
+        :param update_date: date the project was tracked. set to current date by default.
         """
 
         if name not in self.__dict:
@@ -151,12 +152,13 @@ class Projects:
 
             self.__dict[name]['Sub Projects'] = sub_projects
 
-        today = datetime.today().strftime("%m-%d-%Y")
-
-        self.__dict[name]['Last Updated'] = today
+        self.__dict[name]['Last Updated'] = update_date if \
+            datetime.strptime(update_date, "%m-%d-%Y") > \
+            datetime.strptime(self.__dict[name]['Last Updated'], "%m-%d-%Y") \
+            else self.__dict[name]['Last Updated']
 
         history_log = {
-            "Date": today,
+            "Date": update_date,
             "Start Time": start_time,
             "End Time": end_time,
             "Sub-Projects": sub_names,
