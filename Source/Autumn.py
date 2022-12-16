@@ -42,8 +42,6 @@ WatsonExport = subparser.add_parser("WatsonExport")
 WatsonExport.add_argument("project", type=str, help="name of project to be exported to Watson")
 
 projects = subparser.add_parser("projects")
-aggregate = subparser.add_parser("aggregate")
-clear_cmd = subparser.add_parser("clear")
 
 sub_projects = subparser.add_parser("subprojects")
 sub_projects.add_argument("project", type=str, nargs="?", default="", help="name of project to"
@@ -142,8 +140,6 @@ elif args.command == 'delete':
     delete_project(args.project)
 elif args.command == 'log':
     get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate, status=args.status)
-elif args.command == 'aggregate':
-    get_aggregate()
 elif args.command == 'mark':
     if args.status == 'active':
         mark_project_active(args.project)
@@ -155,8 +151,6 @@ elif args.command == 'export':
     export(args.projects, args.file)
 elif args.command == 'import':
     import_exported(args.projects, args.file)
-elif args.command == 'clear':
-    clr()
 elif args.command == 'chart':
     chart(args.projects, args.type, args.status)
 elif args.command == 'help':

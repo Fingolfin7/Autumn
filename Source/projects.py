@@ -249,13 +249,6 @@ class Projects:
                               f" [_text256_34_]({day_total})[reset]"))
             print(print_output)
 
-    def aggregate(self):
-        """
-        Print the session histories of projects for the current day.
-        """
-        today = datetime.today().strftime("%m-%d-%Y")
-        self.log("all", today, today)
-
     def get_totals(self, projects="all", status=None):
         """
         Print the time spent totals and subtotals for given projects.

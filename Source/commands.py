@@ -316,9 +316,10 @@ def show_totals(projects=None, status=None):
 
 
 def list_cmds():
-    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log",
-                "mark", "projects", "quit", "remove", "rename", "restart", "start", "stop",
-                "status", "subprojects", "totals", "track", "WatsonExport"]
+    commands = ["chart", "delete", "export", "help", "import", "log",
+                "mark", "projects", "remove", "rename", "restart",
+                "start", "stop", "status","subprojects", "totals",
+                "track", "WatsonExport"]
     keys = sorted(commands, key=lambda x: x.lower())
     length = len(keys)
 
@@ -452,15 +453,6 @@ def get_logs(**kwargs):
         return
 
     project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"], kwargs["status"])
-
-
-def get_aggregate():
-    global project_dict
-    project_dict.aggregate()
-
-
-def clr():
-    os.system("cls")
 
 
 def chart(projects="all", chart_type="pie", status=None):
