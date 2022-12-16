@@ -1,6 +1,5 @@
 import os
 import json
-import time
 from timer import td_str
 from datetime import datetime
 from datetime import timedelta
@@ -35,6 +34,8 @@ class Projects:
         self.__dict = {}
         self.path = os.path.join(get_base_path(), file)
         self.exported_path = os.path.join(get_base_path(), "Exported")
+        self.__status_tags = ["active", "paused", "completed"]
+
         self.__load()
 
     def __str__(self):
@@ -94,7 +95,7 @@ class Projects:
         Create a new project.
 
         :param name: project name
-        :param sub_names: names of the project's sub-projects if any.
+        :param sub_names: names of the project's subprojects if any.
         """
         if name not in self.__dict:
             sub_projects = {}
@@ -113,13 +114,14 @@ class Projects:
         self.__save()
         return True
 
-    def update_project(self, session_out: tuple, name: str, sub_names=None, update_date=datetime.today().strftime("%m-%d-%Y")):
+    def update_project(self, session_out: tuple, name: str, sub_names=None,
+                       update_date=datetime.today().strftime("%m-%d-%Y")):
         """
         Save project session history.
 
         :param session_out: a tuple with the session info including duration, session note, start and end time
         :param name: project to update
-        :param sub_names: list of session sub-projects
+        :param sub_names: list of session subprojects
         :param update_date: date the project was tracked. set to current date by default.
         """
 
@@ -308,6 +310,32 @@ class Projects:
 
             print("")
 
+    def complete_project(self, name):
+        """
+        :param name: project name
+        Mark a project as completed
+        """
+
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        self.__dict[name]["Status"] = self.__status_tags[2]
+        self.__save()
+
+    def pause_project(self, name):
+        """
+        :param name: project name
+        Mark a project as paused
+        """
+
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        self.__dict[name]["Status"] = self.__status_tags[1]
+        self.__save()
+
     def __sort_dict(self):
         sorted_keys = sorted(self.get_keys(), key=lambda x: x.lower())
         sorted_dict = {}
@@ -334,13 +362,18 @@ class Projects:
         projects = open(self.path, "r").read()
         # load and decompress json data
         self.__dict = json_unzip(json.loads(projects))
+
+        for project in self.__dict:
+            if "Status" not in self.__dict[project]:
+                self.__dict[project]["Status"] = self.__status_tags[0]
+
         self.__sort_dict()
 
     def export_project(self, name: str, filename: str):
         """
         Export projects to .json files.
 
-        Files are saved in the 'Exported' folder within the project directory.
+        Files are saved in the 'Exported' folder within the base directory.
         Has to end in .json.
         If extension isn't added, it will be added by the function.
 
