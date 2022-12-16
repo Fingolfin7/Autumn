@@ -4,25 +4,9 @@ from timer import td_str
 from datetime import datetime
 from datetime import timedelta
 from config import get_base_path
+from functions import listOfDates
 from ColourText import format_text
 from compress_json import json_unzip, json_zip
-
-
-def listOfDates(fromDate: str, toDate: str):
-    fromDate = datetime.strptime(fromDate, "%m-%d-%Y") \
-        if fromDate else datetime.today() - timedelta(days=7)
-    toDate = datetime.strptime(toDate, "%m-%d-%Y") \
-        if toDate else datetime.today()
-
-    # TODO:  if the toDate is earlier than fromDate, and no fromDate is provided,
-    #  set fromDate to the beginning of the current month
-
-    # if fromDate > toDate and fromDate and not toDate
-
-    if fromDate > toDate:
-        return None
-
-    return [(toDate + timedelta(days=-i)).strftime("%m-%d-%Y") for i in range((toDate - fromDate).days + 1)]
 
 
 class Projects:
@@ -34,7 +18,7 @@ class Projects:
         self.__dict = {}
         self.path = os.path.join(get_base_path(), file)
         self.exported_path = os.path.join(get_base_path(), "Exported")
-        self.__status_tags = ["active", "paused", "completed"]
+        self.__status_tags = ["active", "paused", "complete"]
 
         self.__load()
 
@@ -108,6 +92,7 @@ class Projects:
                 'Start Date': datetime.today().strftime("%m-%d-%Y"),
                 'Last Updated': datetime.today().strftime("%m-%d-%Y"),
                 'Total Time': 0.0,
+                'Status': self.__status_tags[0],
                 'Sub Projects': sub_projects,
                 'Session History': []
             }
@@ -175,20 +160,22 @@ class Projects:
 
         self.__save()
 
-    def log(self, projects="all", fromDate=None, toDate=None):
+    def log(self, projects="all", fromDate=None, toDate=None, status=None):
         """
         Print the session histories of projects over a given period.
 
         :param projects: list of project names to print session history.
         :param fromDate: date to start printing logs from in the format of MM-DD-YYY
         :param toDate: date to stop printing logs at in the format of MM-DD-YYY
-
+        :param status: filter logged projects by status. Log either 'active', 'paused', or 'completed' projects
         """
         valid_projects = []
         keys = self.get_keys()
 
         if str(projects).lower() == 'all':
             valid_projects = keys
+            if status and status in self.__status_tags:
+                valid_projects = [key for key in keys if self.__dict[key]['Status'] == status]
         else:
             for prjct in projects:
                 if prjct not in keys:
@@ -336,6 +323,19 @@ class Projects:
         self.__dict[name]["Status"] = self.__status_tags[1]
         self.__save()
 
+    def mark_project_active(self, name):
+        """
+        :param name: project name
+        Mark a project as paused
+        """
+
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        self.__dict[name]["Status"] = self.__status_tags[0]
+        self.__save()
+
     def __sort_dict(self):
         sorted_keys = sorted(self.get_keys(), key=lambda x: x.lower())
         sorted_dict = {}
@@ -417,10 +417,21 @@ class Projects:
 
         if os.path.exists(path):
             projects = open(path, "r").read()
-            if project_name != "":
+            if project_name != "" and project_name != "all":
                 self.__dict[project_name] = json.loads(projects)[project_name]
-            else:
-                self.__dict += json.loads(projects)
+                print(
+                    format_text(f"Imported [yellow]{project_name}[reset] from '{filename}'"))
+
+            elif project_name == "all":
+                temp_dict = json.loads(projects)
+                for project in temp_dict:
+                    if project not in self.__dict:
+                        self.__dict[project] = temp_dict[project]
+                        print(
+                            format_text(f"Imported [yellow]{project}[reset] from '{filename}'"))
+                    else:
+                        print(format_text(f"Conflict error! "
+                                          f"Cannot import [yellow]{project}[reset] as it already exists!"))
             self.__save()
 
         else:

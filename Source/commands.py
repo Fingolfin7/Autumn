@@ -32,19 +32,19 @@ def print_timers():
         timer_list[index].time_spent()
 
 
-def start_command(proj_name, sub_projs):
+def start_command(name, subprojects):
     global project_dict
     global timer_list
 
-    if proj_name not in project_dict.get_keys():
-        x = input(format_text(f"'[bright red]{proj_name}[reset]' does not exist. Create it? \n[Y/N]: "))
+    if name not in project_dict.get_keys():
+        x = input(format_text(f"'[bright red]{name}[reset]' does not exist. Create it? \n[Y/N]: "))
         if x in ["Y", "y"]:
-            project_dict.create_project(proj_name, sub_projs)
+            project_dict.create_project(name, subprojects)
         else:
             return
 
-    for sub_proj in sub_projs:
-        if sub_proj not in project_dict.get_project(proj_name)['Sub Projects']:
+    for sub_proj in subprojects:
+        if sub_proj not in project_dict.get_project(name)['Sub Projects']:
             x = input(format_text(f"Sub-project '[_text256_26_]{sub_proj}[reset]' does not exist. "
                                   f"Create it? "
                                   f"\n[Y/N]: ")
@@ -52,7 +52,7 @@ def start_command(proj_name, sub_projs):
             if x not in ["Y", "y"]:
                 return
 
-    timer = Timer(proj_name, sub_projs)
+    timer = Timer(name, subprojects)
 
     timer_list.append(timer)
 
@@ -219,21 +219,55 @@ def track_project(start_time, end_time, project, sub_projects, session_note):
 def list_projects():
     global project_dict
     projects = project_dict.get_keys()
-    print(format_text(f"[underline]Projects:[reset] "))
 
-    length = len(projects)
+    active_projects = [project for project in projects if project_dict.get_project(project)['Status'] == 'active']
+    paused_projects = [project for project in projects if project_dict.get_project(project)['Status'] == 'paused']
+    complete_projects = [project for project in projects if project_dict.get_project(project)['Status'] == 'complete']
 
-    for i in range(length):
-        output = f"{projects[i]}, "
-        if i == length - 1:
-            output = f"{projects[i]}"
+    if len(complete_projects) > 0:
+        print(format_text(f"[yellow][underline][italic]Complete:[reset] "))
+        length = len(complete_projects)
 
-        print("", end=output)
+        for i in range(length):
+            output = f"{complete_projects[i]}, "
+            if i == length - 1:
+                output = f"{complete_projects[i]}"
 
-        if (i + 1) % 5 == 0:
-            print()
+            print("", end=output)
 
-    print()
+            if (i + 1) % 5 == 0:
+                print()
+        print("\n")
+
+    if len(paused_projects) > 0:
+        print(format_text(f"[magenta][underline][italic]Paused:[reset] "))
+        length = len(paused_projects)
+
+        for i in range(length):
+            output = f"{paused_projects[i]}, "
+            if i == length - 1:
+                output = f"{paused_projects[i]}"
+
+            print("", end=output)
+
+            if (i + 1) % 5 == 0:
+                print()
+        print("\n")
+
+    if len(active_projects) > 0:
+        print(format_text(f"[underline][green][italic]Active:[reset] "))
+        length = len(active_projects)
+
+        for i in range(length):
+            output = f"{active_projects[i]}, "
+            if i == length - 1:
+                output = f"{active_projects[i]}"
+
+            print("", end=output)
+
+            if (i + 1) % 5 == 0:
+                print()
+        print()
 
 
 def list_subs(project: str):
@@ -272,9 +306,9 @@ def show_totals(projects=None):
 
 
 def list_cmds():
-    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log", "projects",
-                "quit", "remove", "rename", "restart", "start", "stop", "status", "sub-projects",
-                "totals", "track", "WatsonExport"]
+    commands = ["aggregate",  "chart", "clear", "delete", "export", "help", "import", "log",
+                "mark", "projects", "quit", "remove", "rename", "restart", "start", "stop",
+                "status", "subprojects", "totals", "track", "WatsonExport"]
     keys = sorted(commands, key=lambda x: x.lower())
     length = len(keys)
 
@@ -296,6 +330,39 @@ def list_cmds():
 def quit_autumn():
     save_pickles()
     exit(0)
+
+
+def mark_project_complete(name):
+    global project_dict
+
+    if name not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{name}[reset]' does not exist."))
+        return
+
+    project_dict.complete_project(name)
+    print(format_text(f"Marked project [bright red]{name}[reset] as completed [bright green]:)[reset]"))
+
+
+def mark_project_paused(name):
+    global project_dict
+
+    if name not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{name}[reset]' does not exist."))
+        return
+
+    project_dict.pause_project(name)
+    print(format_text(f"Marked project [bright red]{name}[reset] as paused"))
+
+
+def mark_project_active(name):
+    global project_dict
+
+    if name not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{name}[reset]' does not exist."))
+        return
+
+    project_dict.mark_project_active(name)
+    print(format_text(f"Marked project [bright red]{name}[reset] as active"))
 
 
 def rename_project(name: str, new_name: str):
@@ -350,14 +417,16 @@ def import_exported(projects: list, filename: str):
     if not filename.endswith(".json"):
         filename += ".json"
 
-    x = input(format_text(f"Are you sure you want to import [yellow]{projects}[reset]"
+    x = input(format_text(f"Are you sure you want to import [yellow]{projects if projects else 'everything'}[reset]"
                           f" from file '{filename}'?\n[Y/N]: "))
 
     if x == "Y" or x == "y":
+        if not projects:
+            project_dict.load_exported(filename, "all")
         for project in projects:
             project_dict.load_exported(filename, project)
 
-        print(format_text(f"Imported [yellow]{projects}[reset] from '{filename}'"))
+        # print(format_text(f"Imported [yellow]{projects if projects else 'everything'}[reset] from '{filename}'"))
 
 
 def print_project(project):
@@ -372,7 +441,7 @@ def get_logs(**kwargs):
         project_dict.log()
         return
 
-    project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"])
+    project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"], kwargs["status"])
 
 
 def get_aggregate():
@@ -384,7 +453,7 @@ def clr():
     os.system("cls")
 
 
-def chart(projects="all", chart_type="pie"):
+def chart(projects="all", chart_type="pie", status=None):
     global project_dict
     keys = project_dict.get_keys()
 
@@ -401,12 +470,12 @@ def chart(projects="all", chart_type="pie"):
 
     time_totals = []
     project_names = []
-    dates = []
-    durations = []
     names_and_hist = []
 
     if str(projects).lower() == "all":
         projects = keys
+        if status:
+            projects = [key for key in keys if project_dict.get_project(key)['Status'] == status]
 
     if len(projects) == 1:
         if projects[0] not in keys:

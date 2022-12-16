@@ -45,9 +45,9 @@ projects = subparser.add_parser("projects")
 aggregate = subparser.add_parser("aggregate")
 clear_cmd = subparser.add_parser("clear")
 
-sub_projects = subparser.add_parser("sub-projects")
+sub_projects = subparser.add_parser("subprojects")
 sub_projects.add_argument("project", type=str, nargs="?", default="", help="name of project to"
-                                                                           " print sub-projects list")
+                                                                           " print subprojects list")
 
 totals_cmd = subparser.add_parser("totals")
 totals_cmd.add_argument("-p", "--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
@@ -59,28 +59,36 @@ rename.add_argument("new_name", type=str, help="new project name")
 delete_proj = subparser.add_parser("delete")
 delete_proj.add_argument("project", type=str, nargs="?", default="", help="name of project to be deleted")
 
+mark_project = subparser.add_parser("mark")
+mark_project.add_argument("project", type=str, nargs="?", default="", help="name of project to update status")
+mark_project.add_argument("status", type=str, nargs="?", default="", help="project status. "
+                                                                          "Either 'active', 'paused' or 'complete'")
+
 log_cmd = subparser.add_parser("log")
 log_cmd.add_argument("-p", "--projects", type=str, nargs="+", default='all', help="name of project(s) to show.")
 log_cmd.add_argument("-f", "--fromDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-t", "--toDate", type=str, default=None, help="date to start log from")
+log_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
+                                                                       "Either 'active', 'paused' or 'complete'")
 # log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
 #                                                                               " to print back to")
 
 export_cmd = subparser.add_parser("export")
-export_cmd.add_argument("projects", type=str, nargs="+", help="name of project(s) to be exported. "
-                                                              "use 'all' to export everything")
-export_cmd.add_argument("file", type=str, help="name of file to save exported project to. "
+export_cmd.add_argument("-p", "--projects", type=str, nargs="+", help="name of project(s) to be exported.")
+export_cmd.add_argument("-f", "--file", type=str, help="name of file to save exported project to. "
                                                "Will be located in the 'Exported' folder,")
 
 import_cmd = subparser.add_parser("import")
-import_cmd.add_argument("projects", type=str, nargs="+", help="name of project(s) to be imported")
-import_cmd.add_argument("file", type=str, help="file to import project from. "
-                                               "(Must be located in the 'Exported' folder")
+import_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="", help="name of project(s) to be imported")
+import_cmd.add_argument("-f", "--file", type=str, help="file to import project(s) from. "
+                                               "(Must be located in the base directory's 'Exported' folder)")
 
 chart_cmd = subparser.add_parser("chart")
 chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all "
                                                                                     "projects")
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
+chart_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
+                                                                       "Either 'active', 'paused' or 'complete'")
 
 help_cmd = subparser.add_parser("help")
 
@@ -116,7 +124,7 @@ elif args.command == 'projects':
     list_projects()
 elif args.command == "WatsonExport":
     export_to_watson(args.project)
-elif args.command == 'sub-projects':
+elif args.command == 'subprojects':
     list_subs(args.project)
 elif args.command == 'totals':
     show_totals(args.projects) if args.projects else show_totals()
@@ -125,9 +133,16 @@ elif args.command == 'rename':
 elif args.command == 'delete':
     delete_project(args.project)
 elif args.command == 'log':
-    get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate)
+    get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate, status=args.status)
 elif args.command == 'aggregate':
     get_aggregate()
+elif args.command == 'mark':
+    if args.status == 'active':
+        mark_project_active(args.project)
+    elif args.status == 'paused':
+        mark_project_paused(args.project)
+    elif args.status == 'complete':
+        mark_project_complete(args.project)
 elif args.command == 'export':
     export(args.projects, args.file)
 elif args.command == 'import':
@@ -135,7 +150,7 @@ elif args.command == 'import':
 elif args.command == 'clear':
     clr()
 elif args.command == 'chart':
-    chart(args.projects, args.type)
+    chart(args.projects, args.type, args.status)
 elif args.command == 'help':
     list_cmds()
 
