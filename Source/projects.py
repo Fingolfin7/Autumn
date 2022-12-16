@@ -256,17 +256,20 @@ class Projects:
         today = datetime.today().strftime("%m-%d-%Y")
         self.log("all", today, today)
 
-    def get_totals(self, projects="all"):
+    def get_totals(self, projects="all", status=None):
         """
         Print the time spent totals and subtotals for given projects.
 
         :param projects: list of project names to show time totals.
+        :param status: filter logged projects by status. Log either 'active', 'paused', or 'completed' projects
         """
         valid_projects = []
         keys = self.get_keys()
 
         if str(projects).lower() == 'all':
             valid_projects = keys
+            if status and status in self.__status_tags:
+                valid_projects = [key for key in keys if self.__dict[key]['Status'] == status]
         else:
             for prjct in projects:
                 if prjct not in keys:

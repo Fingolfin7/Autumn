@@ -51,6 +51,9 @@ sub_projects.add_argument("project", type=str, nargs="?", default="", help="name
 
 totals_cmd = subparser.add_parser("totals")
 totals_cmd.add_argument("-p", "--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
+totals_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
+                                                                       "Either 'active', 'paused' or 'complete'")
+
 
 rename = subparser.add_parser("rename")
 rename.add_argument("name", type=str, help="existing project's name")
@@ -127,7 +130,12 @@ elif args.command == "WatsonExport":
 elif args.command == 'subprojects':
     list_subs(args.project)
 elif args.command == 'totals':
-    show_totals(args.projects) if args.projects else show_totals()
+    if args.projects:
+        show_totals(args.projects, args.status)
+    elif args.status and not args.projects:
+        show_totals("all", args.status)
+    else:
+        show_totals()
 elif args.command == 'rename':
     rename_project(args.name, args.new_name)
 elif args.command == 'delete':

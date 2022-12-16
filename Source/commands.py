@@ -36,6 +36,11 @@ def start_command(name, subprojects):
     global project_dict
     global timer_list
 
+    project_status = project_dict.get_project(name)['Status']
+    if project_status != "active":
+        print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
+        return
+
     if name not in project_dict.get_keys():
         x = input(format_text(f"'[bright red]{name}[reset]' does not exist. Create it? \n[Y/N]: "))
         if x in ["Y", "y"]:
@@ -179,6 +184,11 @@ def track_project(start_time, end_time, project, sub_projects, session_note):
     duration = end_time - start_time
     duration = duration.total_seconds() / 60
 
+    project_status = project_dict.get_project(project)['Status']
+    if project_status != "active":
+        print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
+        return
+
     if project not in project_dict.get_keys():
         x = input(format_text(f"'[bright red]{project}[reset]' does not exist. Create it? \n[Y/N]: "))
         if x in ["Y", "y"]:
@@ -296,13 +306,13 @@ def list_subs(project: str):
     print()
 
 
-def show_totals(projects=None):
+def show_totals(projects=None, status=None):
     global project_dict
 
-    if not projects:
+    if not projects and not status:
         project_dict.get_totals()
     else:
-        project_dict.get_totals(projects)
+        project_dict.get_totals(projects, status)
 
 
 def list_cmds():
