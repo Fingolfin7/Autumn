@@ -160,7 +160,7 @@ class Projects:
 
         self.__save()
 
-    def log(self, projects="all", fromDate=None, toDate=None, status=None):
+    def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
         Print the session histories of projects over a given period.
 
@@ -168,7 +168,10 @@ class Projects:
         :param fromDate: date to start printing logs from in the format of MM-DD-YYY
         :param toDate: date to stop printing logs at in the format of MM-DD-YYY
         :param status: filter logged projects by status. Log either 'active', 'paused', or 'completed' projects
+        :param sessionNotes: show session notes. True will print session notes, False will not.
+        :param noteLength: maximum note length that can be printed before the note is replaced with an ellipse (...)
         """
+
         valid_projects = []
         keys = self.get_keys()
 
@@ -221,7 +224,7 @@ class Projects:
 
                 note = session['Note']
 
-                if len(note) > 300:
+                if len(note) > noteLength:
                     note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
 
                 print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
@@ -229,7 +232,7 @@ class Projects:
                                             f"{time_spent}  "
                                             f"[bright red]{project}[reset] "
                                             f"{sub_projects} " +
-                                            (f" -> [yellow]{note}[reset]\n" if note != "" else "\n")
+                                            (f" -> [yellow]{note}[reset]\n" if note != "" and sessionNotes else "\n")
                                             )
 
             if print_output == "":

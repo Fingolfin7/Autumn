@@ -1,4 +1,5 @@
 from commands import *
+from functions import get_date_last
 import argparse
 import os
 
@@ -69,6 +70,10 @@ log_cmd = subparser.add_parser("log")
 log_cmd.add_argument("-p", "--projects", type=str, nargs="+", default='all', help="name of project(s) to show.")
 log_cmd.add_argument("-f", "--fromDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-t", "--toDate", type=str, default=None, help="date to start log from")
+log_cmd.add_argument("-pd", "--period", type=str, default=None, help="logs for the last day/week/fortnight/month/year")
+log_cmd.add_argument("--notes", type=int, default=1, help="turn session notes On(1) or Off(0)")
+log_cmd.add_argument("--note_length", type=int, default=300, help="max session note length before the note "
+                                                                  "is replaced with an ellipse (...)")
 log_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
                                                                        "Either 'active', 'paused' or 'complete'")
 # log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
@@ -139,14 +144,18 @@ elif args.command == 'rename':
 elif args.command == 'delete':
     delete_project(args.project)
 elif args.command == 'log':
-    get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate, status=args.status)
+    if args.period:
+        get_logs(projects=args.projects, fromDate=get_date_last(args.period), toDate=args.toDate,
+                 status=args.status, sessionNote=bool(args.notes), noteLength=args.note_length)
+    else:
+        get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate,
+                 status=args.status, sessionNote=bool(args.notes), noteLength=args.note_length)
 elif args.command == 'mark':
-    if args.status == 'active':
-        mark_project_active(args.project)
-    elif args.status == 'paused':
-        mark_project_paused(args.project)
-    elif args.status == 'complete':
-        mark_project_complete(args.project)
+    funcs_switch = {'active': mark_project_active,
+                    'paused': mark_project_paused,
+                    'complete': mark_project_complete
+                    }
+    funcs_switch[args.status](args.project)
 elif args.command == 'export':
     export(args.projects, args.file)
 elif args.command == 'import':

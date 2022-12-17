@@ -452,7 +452,8 @@ def get_logs(**kwargs):
         project_dict.log()
         return
 
-    project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"], kwargs["status"])
+    project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"],
+                     kwargs["status"], kwargs["sessionNote"], kwargs["noteLength"])
 
 
 def chart(projects="all", chart_type="pie", status=None):

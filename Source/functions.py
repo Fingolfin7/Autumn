@@ -51,3 +51,21 @@ def td_str(td: timedelta):
         sec_str = ""
 
     return f"{days_str}{hrs_str}{min_str}{sec_str}"
+
+
+def get_date_last(period_str: str):
+    """
+    :param period_str: Year, month, fortnight, week, day
+    :return: the date formatted as a string
+    """
+    today = datetime.today()
+    if period_str == 'year':  # back to the first day of the year
+        return f"01-01-{today.year}"
+    elif period_str == 'month':  # back to the first day of the month
+        return (today - timedelta(days=today.day)).strftime("%m-%d-%Y")
+    elif period_str == 'week':
+        return (today - timedelta(days=7)).strftime("%m-%d-%Y")
+    elif period_str == 'fortnight':
+        return (today - timedelta(days=14)).strftime("%m-%d-%Y")
+    elif period_str == 'day':
+        return (today - timedelta(days=1)).strftime("%m-%d-%Y")
