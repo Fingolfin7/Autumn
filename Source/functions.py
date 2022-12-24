@@ -62,10 +62,10 @@ def get_date_last(period_str: str):
     if period_str == 'year':  # back to the first day of the year
         return f"01-01-{today.year}"
     elif period_str == 'month':  # back to the first day of the month
-        return (today - timedelta(days=today.day)).strftime("%m-%d-%Y")
-    elif period_str == 'week':
-        return (today - timedelta(days=7)).strftime("%m-%d-%Y")
+        return (today - timedelta(days=today.day-1)).strftime("%m-%d-%Y")
     elif period_str == 'fortnight':
         return (today - timedelta(days=14)).strftime("%m-%d-%Y")
+    elif period_str == 'week':
+        return (today - timedelta(days=7)).strftime("%m-%d-%Y")
     elif period_str == 'day':
-        return (today - timedelta(days=1)).strftime("%m-%d-%Y")
+        return today.strftime("%m-%d-%Y")

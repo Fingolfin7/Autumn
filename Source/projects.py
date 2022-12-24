@@ -30,7 +30,7 @@ class Projects:
 
     def get_keys(self):
         """
-        Return a list of all the existing project names
+        :return: a list of all the existing project names
         """
         return list(self.__dict.keys())
 
@@ -160,6 +160,63 @@ class Projects:
 
         self.__save()
 
+    def track(self, start_time, end_time, project, sub_projects, session_note):
+        """
+        Track a session that wasn't recorded in real-time.
+
+        :param start_time: session start time format: "MM-DD-YYY HH:MM"
+        :param end_time: session end time format: "MM-DD-YYY HH:MM"
+        :param project: project name
+        :param sub_projects: session subprojects
+        :param session_note: session note
+        """
+        start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
+        end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
+        update_date = end_time.strftime("%m-%d-%Y")
+        duration = end_time - start_time
+        duration = duration.total_seconds() / 60
+
+        project_status = self.__dict[project]['Status']
+        if project_status != "active":
+            print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
+            return
+
+        if project not in self.__dict:
+            x = input(format_text(f"'[bright red]{project}[reset]' does not exist. Create it? \n[Y/N]: "))
+            if x in ["Y", "y"]:
+                self.create_project(project, sub_projects)
+            else:
+                return
+
+        for sub_proj in sub_projects:
+            if sub_proj not in self.__dict[project]['Sub Projects']:
+                x = input(format_text(f"Sub-project '[_text256_26_]{sub_proj}[reset]' does not exist. "
+                                      f"Create it? "
+                                      f"\n[Y/N]: ")
+                          )
+                if x not in ["Y", "y"]:
+                    return
+
+        self.update_project((duration, session_note,
+                                     start_time,
+                                     end_time),
+                                    project, sub_projects, update_date)
+
+        sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
+
+        duration = str(timedelta(minutes=duration)).split('.')[0]
+        duration = datetime.strptime(duration, "%H:%M:%S")
+        if duration.hour > 0:
+            duration = duration.strftime("%Hh %Mm")
+        else:
+            duration = duration.strftime("%Mm %Ss")
+
+        print(format_text(f"Tracked [bright red]{project}[reset] "
+                          f"{sub_projects} from [cyan]{start_time.strftime('%X')}[reset]"
+                          f" to [cyan]{end_time.strftime('%X')}[reset] "
+                          f"[_text256_34_]({duration})[reset]"
+                          + f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
+
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
         Print the session histories of projects over a given period.
@@ -182,7 +239,7 @@ class Projects:
         else:
             for prjct in projects:
                 if prjct not in keys:
-                    print(f"Invalid project name! '{prjct}' does not exist!")
+                    print(format_text(f"Invalid project name! '[bright red]{prjct}[reset]' does not exist!"))
                 else:
                     valid_projects.append(prjct)
 
@@ -325,7 +382,7 @@ class Projects:
     def mark_project_active(self, name):
         """
         :param name: project name
-        Mark a project as paused
+        Mark a project as active
         """
 
         if name not in self.__dict:

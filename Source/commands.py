@@ -36,17 +36,17 @@ def start_command(name, subprojects):
     global project_dict
     global timer_list
 
-    project_status = project_dict.get_project(name)['Status']
-    if project_status != "active":
-        print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
-        return
-
     if name not in project_dict.get_keys():
         x = input(format_text(f"'[bright red]{name}[reset]' does not exist. Create it? \n[Y/N]: "))
         if x in ["Y", "y"]:
             project_dict.create_project(name, subprojects)
         else:
             return
+
+    project_status = project_dict.get_project(name)['Status']
+    if project_status != "active":
+        print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
+        return
 
     for sub_proj in subprojects:
         if sub_proj not in project_dict.get_project(name)['Sub Projects']:
@@ -70,54 +70,57 @@ def restart_command(index=-1):
     global timer_list
 
     if len(timer_list) == 0:
-        print("No running projects.")
+        print("No running timers.")
         return
 
-    if index is None:
+    try:
+        timer = timer_list[index]
+        timer.restart()
+        save_pickles()
+    except IndexError:
         print(f"Invalid identifier!\n"
               f"Valid indexes: 0 -> {len(timer_list) - 1}")
         print_timers()
-        return
-
-    timer = timer_list[index]
-
-    timer.restart()
-    save_pickles()
 
 
 def status_command(index="all"):
     global timer_list
 
     if len(timer_list) == 0:
-        print("No running projects.")
+        print("No running timers.")
         return
 
     if index == 'all':
-        for i in range(len(timer_list)):
-            print(f"[{i}]: ", end="")
-            timer_list[i].time_spent()
+        print_timers()
         return
 
-    timer_list[int(index)].time_spent()
+    try:
+        timer_list[int(index)].time_spent()
+    except IndexError:
+        print(f"Invalid identifier!\n"
+              f"Valid indexes: 0 -> {len(timer_list) - 1}")
+        print_timers()
 
 
 def remove_timer(index):
     global timer_list
 
     if len(timer_list) == 0:
-        print("No running projects.")
+        print("No running timers.")
         return
 
-    if index is None:
+    if not index:
+        index = -1
+
+    try:
+        timer_name = timer_list[index].proj_name
+        timer_list.pop(index)
+        print(format_text(f"Removed timer: [bright red]{timer_name}[reset]"))
+        save_pickles()
+    except IndexError:
         print(f"Invalid identifier!\n"
-              f"Valid indexes: 0 -> {len(timer_list) - 1}\n")
+              f"Valid indexes: 0 -> {len(timer_list) - 1}")
         print_timers()
-        return
-
-    print(format_text(f"Removed timer: [bright red]{timer_list[index].proj_name}[reset]"))
-    del timer_list[index]
-
-    save_pickles()
 
 
 def stop_command(index=-1):
@@ -125,14 +128,18 @@ def stop_command(index=-1):
     global timer_list
 
     if len(timer_list) == 0:
-        print("No running projects.")
+        print("No running timers.")
         return
+    try:
+        timer = timer_list[index]
 
-    timer = timer_list[index]
-
-    project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
-    timer_list.remove(timer)
-    save_pickles()
+        project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
+        timer_list.remove(timer)
+        save_pickles()
+    except IndexError:
+        print(f"Invalid identifier!\n"
+              f"Valid indexes: 0 -> {len(timer_list) - 1}")
+        print_timers()
 
 
 def export_to_watson(project_name):
@@ -168,62 +175,8 @@ def export_to_watson(project_name):
 
 
 def track_project(start_time, end_time, project, sub_projects, session_note):
-    """
-    Track a session that wasn't recorded in real-time.
-
-    :param start_time: session start time format: "MM-DD-YYY HH:MM"
-    :param end_time: session end time format: "MM-DD-YYY HH:MM"
-    :param project: project name
-    :param sub_projects: session subprojects
-    :param session_note: session note
-    """
     global project_dict
-    start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
-    end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
-    update_date = end_time.strftime("%m-%d-%Y")
-    duration = end_time - start_time
-    duration = duration.total_seconds() / 60
-
-    project_status = project_dict.get_project(project)['Status']
-    if project_status != "active":
-        print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
-        return
-
-    if project not in project_dict.get_keys():
-        x = input(format_text(f"'[bright red]{project}[reset]' does not exist. Create it? \n[Y/N]: "))
-        if x in ["Y", "y"]:
-            project_dict.create_project(project, sub_projects)
-        else:
-            return
-
-    for sub_proj in sub_projects:
-        if sub_proj not in project_dict.get_project(project)['Sub Projects']:
-            x = input(format_text(f"Sub-project '[_text256_26_]{sub_proj}[reset]' does not exist. "
-                                  f"Create it? "
-                                  f"\n[Y/N]: ")
-                      )
-            if x not in ["Y", "y"]:
-                return
-
-    project_dict.update_project((duration, session_note,
-                                 start_time,
-                                 end_time),
-                                project, sub_projects, update_date)
-
-    sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
-
-    duration = str(timedelta(minutes=duration)).split('.')[0]
-    duration = datetime.strptime(duration, "%H:%M:%S")
-    if duration.hour > 0:
-        duration = duration.strftime("%Hh %Mm")
-    else:
-        duration = duration.strftime("%Mm %Ss")
-
-    print(format_text(f"Tracked [bright red]{project}[reset] "
-                      f"{sub_projects} from [cyan]{start_time.strftime('%X')}[reset]"
-                      f" to [cyan]{end_time.strftime('%X')}[reset] "
-                      f"[_text256_34_]({duration})[reset]"
-                      + f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
+    project_dict.track(start_time, end_time, project, sub_projects, session_note)
 
 
 def list_projects():
@@ -318,7 +271,7 @@ def show_totals(projects=None, status=None):
 def list_cmds():
     commands = ["chart", "delete", "export", "help", "import", "log",
                 "mark", "projects", "remove", "rename", "restart",
-                "start", "stop", "status","subprojects", "totals",
+                "start", "stop", "status", "subprojects", "totals",
                 "track", "WatsonExport"]
     keys = sorted(commands, key=lambda x: x.lower())
     length = len(keys)
