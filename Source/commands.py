@@ -304,7 +304,8 @@ def mark_project_complete(name):
         return
 
     project_dict.complete_project(name)
-    print(format_text(f"Marked project [bright red]{name}[reset] as completed [bright green]:)[reset]"))
+    # full list of emoji unicodes here: https://unicode.org/emoji/charts/full-emoji-list.html
+    print(format_text(f"Marked project [bright red]{name}[reset] as completed \U0001F642"))
 
 
 def mark_project_paused(name):
