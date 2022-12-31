@@ -133,6 +133,15 @@ def stop_command(index=-1):
     try:
         timer = timer_list[index]
 
+        if timer.proj_name not in project_dict.get_keys():
+            x = input(format_text(f"'[bright red]{timer.proj_name}[reset]' does not exist. Create it? \n[Y/N]: "))
+            if x in ["Y", "y"]:
+                project_dict.create_project(timer.proj_name, timer.sub_projs)
+            else:
+                timer_list.remove(timer)
+                save_pickles()
+                return
+
         project_dict.update_project(timer.stop(), timer.proj_name, timer.sub_projs)
         timer_list.remove(timer)
         save_pickles()
@@ -182,6 +191,10 @@ def track_project(start_time, end_time, project, sub_projects, session_note):
 def list_projects():
     global project_dict
     projects = project_dict.get_keys()
+
+    if len(projects) == 0:
+        print(format_text("No projects created. "
+                          "You can create projects using the [bright green][italics]start[reset] command"))
 
     active_projects = [project for project in projects if project_dict.get_project(project)['Status'] == 'active']
     paused_projects = [project for project in projects if project_dict.get_project(project)['Status'] == 'paused']
@@ -261,6 +274,10 @@ def list_subs(project: str):
 
 def show_totals(projects=None, status=None):
     global project_dict
+
+    if len(project_dict) == 0:
+        print(format_text("No projects created. "
+                          "You can create projects using the [bright green][italics]start[reset] command"))
 
     if not projects and not status:
         project_dict.get_totals()
@@ -401,6 +418,10 @@ def print_project(project):
 
 def get_logs(**kwargs):
     global project_dict
+
+    if len(project_dict) == 0:
+        print(format_text("No projects created. "
+                          "You can create projects using the [bright green][italics]start[reset] command"))
 
     if len(kwargs.keys()) == 0:
         project_dict.log()

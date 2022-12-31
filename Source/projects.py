@@ -22,6 +22,24 @@ class Projects:
 
         self.__load()
 
+        # on the 1st of January save all the projects of the last year to an archives file
+        if datetime.today().month == 1 and datetime.today().day == 1:
+
+            archive_dir = os.path.join(get_base_path(), "Archives")
+            archive_file = os.path.join(archive_dir, f"Projects-{datetime.today().year - 1}.json")
+
+            if not os.path.isdir(archive_dir):
+                os.mkdir(archive_dir)
+
+            if not os.path.exists(archive_file):
+                prjct_json = json.dumps(self.__dict, indent=4)
+                with open(archive_file, "w") as json_writer:
+                    json_writer.write(prjct_json)
+
+                # empty dict and save
+                self.__dict.clear()
+                self.__save()
+
     def __str__(self):
         return str(self.__dict)
 
