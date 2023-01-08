@@ -440,11 +440,12 @@ class Projects:
         if not os.path.exists(self.path):
             return
         projects = open(self.path, "r").read()
-        # load and decompress json data
+
         try:
+            # load and decompress json data
             self.__dict = json_unzip(json.loads(projects))
-        except Exception as e:
-            print(e)
+        except ...:
+            # load an uncompressed file
             self.__dict = json.loads(projects)
 
         for project in self.__dict:
