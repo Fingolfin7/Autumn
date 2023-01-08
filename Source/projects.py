@@ -22,11 +22,12 @@ class Projects:
 
         self.__load()
 
-        # on the 1st of January save all the projects of the last year to an archives file
-        if datetime.today().month == 1 and datetime.today().day == 1:
+        # if the year is not the same as the year from the last save date,
+        # save all the projects of the last year to an archives file
+        if self.__last_save_date().year != datetime.today().year:
 
             archive_dir = os.path.join(get_base_path(), "Archives")
-            archive_file = os.path.join(archive_dir, f"Projects-{datetime.today().year - 1}.json")
+            archive_file = os.path.join(archive_dir, f"Projects-{self.__last_save_date().year}.json")
 
             if not os.path.isdir(archive_dir):
                 os.mkdir(archive_dir)
@@ -63,6 +64,11 @@ class Projects:
             return
 
         return self.__dict[name]
+
+    def __last_save_date(self):
+        dates = [datetime.strptime(self.__dict[date]['Last Updated'], "%m-%d-%Y") for date in self.__dict]
+        dates.sort()
+        return dates[-1]
 
     def delete_project(self, name: str):
         """
@@ -435,7 +441,11 @@ class Projects:
             return
         projects = open(self.path, "r").read()
         # load and decompress json data
-        self.__dict = json_unzip(json.loads(projects))
+        try:
+            self.__dict = json_unzip(json.loads(projects))
+        except Exception as e:
+            print(e)
+            self.__dict = json.loads(projects)
 
         for project in self.__dict:
             if "Status" not in self.__dict[project]:
