@@ -25,7 +25,6 @@ class Projects:
         # if the year is not the same as the year from the last save date,
         # save all the projects of the last year to an archives file
         if self.__last_save_date().year != datetime.today().year:
-
             archive_dir = os.path.join(get_base_path(), "Archives")
             archive_file = os.path.join(archive_dir, f"Projects-{self.__last_save_date().year}.json")
 
@@ -40,6 +39,9 @@ class Projects:
                 # empty dict and save
                 self.__dict.clear()
                 self.__save()
+
+            print(f"Archived {self.__last_save_date().year} projects to "
+                  f"'Projects-{self.__last_save_date().year}.json' in the Archives directory ({archive_dir}).  ")
 
     def __str__(self):
         return str(self.__dict)
@@ -195,15 +197,24 @@ class Projects:
         :param session_note: session note
         """
         start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
+        if start_time.year != datetime.today().year:
+            print(format_text(f"Start year entered as [cyan]{start_time.year}[reset]. "
+                              f"Did you mean [cyan]{datetime.today().year}[reset]?"))
+            x = input("[Y/N]: ")
+            if x.lower() == 'y':
+                start_time = start_time.replace(year=datetime.today().year)
+
         end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
+        if end_time.year != datetime.today().year:
+            print(format_text(f"End year entered as [cyan]{end_time.year}[reset]. "
+                              f"Did you mean [cyan]{datetime.today().year}[reset]?"))
+            x = input("[Y/N]: ")
+            if x.lower() == 'y':
+                end_time = end_time.replace(year=datetime.today().year)
+
         update_date = end_time.strftime("%m-%d-%Y")
         duration = end_time - start_time
         duration = duration.total_seconds() / 60
-
-        project_status = self.__dict[project]['Status']
-        if project_status != "active":
-            print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
-            return
 
         if project not in self.__dict:
             x = input(format_text(f"'[bright red]{project}[reset]' does not exist. Create it? \n[Y/N]: "))
@@ -211,6 +222,11 @@ class Projects:
                 self.create_project(project, sub_projects)
             else:
                 return
+
+        project_status = self.__dict[project]['Status']
+        if project_status != "active":
+            print(format_text(f"Cannot start a timer for a '[bright magenta]{project_status}[reset]' project."))
+            return
 
         for sub_proj in sub_projects:
             if sub_proj not in self.__dict[project]['Sub Projects']:
@@ -221,10 +237,7 @@ class Projects:
                 if x not in ["Y", "y"]:
                     return
 
-        self.update_project((duration, session_note,
-                                     start_time,
-                                     end_time),
-                                    project, sub_projects, update_date)
+        self.update_project((duration, session_note, start_time, end_time), project, sub_projects, update_date)
 
         sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
 
@@ -503,9 +516,20 @@ class Projects:
         if os.path.exists(path):
             projects = open(path, "r").read()
             if project_name != "" and project_name != "all":
-                self.__dict[project_name] = json.loads(projects)[project_name]
-                print(
-                    format_text(f"Imported [yellow]{project_name}[reset] from '{filename}'"))
+                if project_name not in self.__dict.keys():
+                    try:
+                        self.__dict[project_name] = json.loads(projects)[project_name]
+                        print(
+                            format_text(f"Imported [yellow]{project_name}[reset] from '{filename}'"))
+                    except KeyError:
+                        print(format_text(f"\n[yellow]{project_name}[reset] cannot be found in '{path}'"))
+                        print("Here are all the projects that were found: ")
+                        for itr, name in enumerate(json.loads(projects)):
+                            print(format_text(f"[yellow]{itr+1}.{name}[reset]"))
+
+                else:
+                    print(format_text(f"Conflict error! "
+                                      f"Cannot import [yellow]{project_name}[reset] as it already exists!"))
 
             elif project_name == "all":
                 temp_dict = json.loads(projects)
