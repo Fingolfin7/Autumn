@@ -70,6 +70,10 @@ class Projects:
     def __last_save_date(self):
         dates = [datetime.strptime(self.__dict[date]['Last Updated'], "%m-%d-%Y") for date in self.__dict]
         dates.sort()
+
+        if len(dates) == 0:
+            return datetime.today()
+        
         return dates[-1]
 
     def delete_project(self, name: str):
