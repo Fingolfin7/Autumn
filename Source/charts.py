@@ -41,9 +41,10 @@ def showScatterGraph(name_and_hist):
 def main():
     from projects import Projects
     from datetime import datetime
+    import random
 
     projects = Projects()
-    names = ['AI', 'Java', 'EmergingTech', 'StrategicManagement', 'CompSec']
+    names = list(random.choices(projects.get_keys(), k=5))
     data = []
 
     for name in names:
