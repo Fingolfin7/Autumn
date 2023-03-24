@@ -362,6 +362,21 @@ def rename_project(name: str, new_name: str):
         project_dict.rename_project(name, new_name)
         print(format_text(f"Renamed project [yellow]{name}[reset] to [yellow]{new_name}[reset]"))
 
+# rename subproject
+def rename_subproject(project: str, subproject: str, new_sub_name: str):
+    global project_dict
+
+    if project not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{project}[reset]' does not exist."))
+        return
+    elif project == "":
+        return
+
+    x = input(format_text(f"Are you sure you want to rename subproject [_text256_26_]{subproject}[reset] to "
+                          f"[_text256_26_]{new_sub_name}[reset]? \n[Y/N]: "))
+    if x == "Y" or x == "y":
+        project_dict.rename_subproject(project, subproject, new_sub_name)
+        print(format_text(f"Renamed subproject [_text256_26_]{subproject}[reset] to [_text256_26_]{new_sub_name}[reset]"))
 
 def delete_project(project: str):
     global project_dict
@@ -377,7 +392,19 @@ def delete_project(project: str):
         project_dict.delete_project(project)
         print(format_text(f"Deleted project [yellow]{project}[reset]"))
 
+def merge_projects(first_project: str, second_project:str, new_name:str):
+    global project_dict
 
+    if new_name == "":
+        print("Please specify a name for the merged project.")
+        return
+
+    x = input(format_text(f"Are you sure you want to merge [yellow]{first_project}[reset] and "
+                          f"[yellow]{second_project}[reset]? \n[Y/N]: "))
+    if x == "Y" or x == "y":
+        project_dict.merge(first_project, second_project, new_name)
+        print(format_text(f"Successfully merged [yellow]{first_project}[reset] and [yellow]{second_project}[reset] "
+                          f"into [yellow]{new_name}[reset]"))
 def export(projects: list, filename: str):
     global project_dict
 

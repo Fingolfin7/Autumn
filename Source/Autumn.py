@@ -54,9 +54,17 @@ totals_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Fil
                                                                        "Either 'active', 'paused' or 'complete'")
 
 
-rename = subparser.add_parser("rename")
-rename.add_argument("name", type=str, help="existing project's name")
-rename.add_argument("new_name", type=str, help="new project name")
+# rename = subparser.add_parser("rename")
+# rename.add_argument("name", type=str, help="existing project's name")
+# rename.add_argument("new_name", type=str, help="new project name")
+
+# command to rename projects or subprojects
+rename_cmd = subparser.add_parser("rename")
+rename_cmd.add_argument("project", type=str, help="existing project's name")
+rename_cmd.add_argument("-s", "--sub_name", type=str, help="list of sub-projects that are tracked")
+rename_cmd.add_argument("-nn","--new_name", type=str, help="new project name")
+rename_cmd.add_argument("-ns","--new_sub_name", type=str, help="new sub-project name")
+
 
 delete_proj = subparser.add_parser("delete")
 delete_proj.add_argument("project", type=str, nargs="?", default="", help="name of project to be deleted")
@@ -95,6 +103,12 @@ chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", h
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
 chart_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
                                                                        "Either 'active', 'paused' or 'complete'")
+
+merge_cmd = subparser.add_parser("merge")
+merge_cmd.add_argument("project1", type=str, help="name of first project to be merged")
+merge_cmd.add_argument("project2", type=str, help="name of second project to be merged")
+merge_cmd.add_argument("merged_name", type=str, help="name of the merged project")
+
 
 help_cmd = subparser.add_parser("help")
 
@@ -140,7 +154,10 @@ elif args.command == 'totals':
     else:
         show_totals()
 elif args.command == 'rename':
-    rename_project(args.name, args.new_name)
+    if args.sub_name and args.new_sub_name:
+        rename_subproject(args.project, args.sub_name, args.new_sub_name)
+    elif args.project and args.new_name:
+        rename_project(args.project, args.new_name)
 elif args.command == 'delete':
     delete_project(args.project)
 elif args.command == 'log':
@@ -162,6 +179,8 @@ elif args.command == 'import':
     import_exported(args.projects, args.file)
 elif args.command == 'chart':
     chart(args.projects, args.type, args.status)
+elif args.command == 'merge':
+    merge_projects(args.project1, args.project2, args.merged_name)
 elif args.command == 'help':
     list_cmds()
 

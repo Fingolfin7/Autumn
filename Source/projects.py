@@ -95,9 +95,31 @@ class Projects:
             print(f"Invalid project name! '{name}' does not exist!")
             return
 
-        proj_data = self.get_project(name)
-        self.delete_project(name)
-        self.__dict[new_name] = proj_data
+        # proj_data = self.get_project(name)
+        # self.delete_project(name)
+        self.__dict[new_name] = self.__dict.pop(name)
+        self.__save()
+
+    def rename_subproject(self, name: str, sub_name: str, new_sub_name: str):
+        """
+        Rename existing subproject
+        """
+        if name not in self.__dict:
+            print(f"Invalid project name! '{name}' does not exist!")
+            return
+
+        if sub_name not in self.__dict[name]['Sub Projects']:
+            print(f"Invalid subproject name! '{sub_name}' does not exist!")
+            return
+
+        # rename 'Sub Projects' keys
+        self.__dict[name]['Sub Projects'][new_sub_name] = self.__dict[name]['Sub Projects'].pop(sub_name)
+
+        #rename all the subproject entries in the session history
+        for index in range(len(self.__dict[name]['Session History'])):
+            self.__dict[name]['Session History'][index]['Sub-Projects'] = \
+                [new_sub_name if x == sub_name else x for x in self.__dict[name]['Session History'][index]['Sub-Projects']]
+
         self.__save()
 
     def print_json_project(self, name: str):
@@ -200,21 +222,18 @@ class Projects:
         :param sub_projects: session subprojects
         :param session_note: session note
         """
-        start_time = datetime.strptime(start_time, '%m-%d-%Y %H:%M')
-        if start_time.year != datetime.today().year:
-            print(format_text(f"Start year entered as [cyan]{start_time.year}[reset]. "
-                              f"Did you mean [cyan]{datetime.today().year}[reset]?"))
-            x = input("[Y/N]: ")
-            if x.lower() == 'y':
-                start_time = start_time.replace(year=datetime.today().year)
+        def check_year(time):
+            time = datetime.strptime(time, '%m-%d-%Y %H:%M')
+            if time.year != datetime.today().year:
+                print(format_text(f"Year entered as [cyan]{time.year}[reset]. "
+                                  f"Did you mean [cyan]{datetime.today().year}[reset]?"))
+                confirm = input("[Y/N]: ")
+                if confirm.lower() == 'y':
+                    time = time.replace(year=datetime.today().year)
+            return time
 
-        end_time = datetime.strptime(end_time, '%m-%d-%Y %H:%M')
-        if end_time.year != datetime.today().year:
-            print(format_text(f"End year entered as [cyan]{end_time.year}[reset]. "
-                              f"Did you mean [cyan]{datetime.today().year}[reset]?"))
-            x = input("[Y/N]: ")
-            if x.lower() == 'y':
-                end_time = end_time.replace(year=datetime.today().year)
+        start_time = check_year(start_time)
+        end_time = check_year(end_time)
 
         update_date = end_time.strftime("%m-%d-%Y")
         duration = end_time - start_time
@@ -255,8 +274,68 @@ class Projects:
         print(format_text(f"Tracked [bright red]{project}[reset] "
                           f"{sub_projects} from [cyan]{start_time.strftime('%X')}[reset]"
                           f" to [cyan]{end_time.strftime('%X')}[reset] "
-                          f"[_text256_34_]({duration})[reset]"
-                          + f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
+                          f"[_text256_34_]({duration})[reset]"),end="")
+
+        print(format_text(f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
+
+
+    def merge(self, project1:str, project2:str, new_name:str):
+        if project1 not in self.get_keys():
+            print(format_text(f"Invalid project name! '[bright red]{project1}[reset]' does not exist!"))
+        if project2 not in self.get_keys():
+            print(format_text(f"Invalid project name! '[bright red]{project2}[reset]' does not exist!"))
+
+        project1 = self.__dict[project1]
+        project2 = self.__dict[project2]
+        try:
+            # get all the keys from both projects and initially set them to 0
+            subs = {**project1['Sub Projects'],  **project2['Sub Projects']}
+            new_subs = {}
+            for key in subs:
+                new_subs[key] = 0.0
+
+            merged_project = {
+                'Start Date': project1['Start Date'] if
+                datetime.strptime(project1['Start Date'], '%m-%d-%Y') < datetime.strptime(project2['Start Date'], '%m-%d-%Y')
+                else project2['Start Date'],
+
+                'Last Updated': project1['Last Updated'] if
+                datetime.strptime(project1['Last Updated'], '%m-%d-%Y') > datetime.strptime(project2['Last Updated'], '%m-%d-%Y')
+                else project2['Last Updated'],
+
+                "Status": project1['Status'],
+
+                "Total Time": 0.0,
+
+                "Sub Projects": new_subs,
+
+                "Session History": sorted(
+                    [ # combine session histories and sort by date
+                        *project1['Session History'],
+                        *project2['Session History']
+                    ],
+                    #sort array by date and end time
+                    key=lambda x: (datetime.strptime(x['Date'], '%m-%d-%Y'),
+                                   datetime.strptime(x["End Time"], "%H:%M:%S")
+                                   )
+                ),
+            }
+
+            # sum up total time from session histories
+            for session in merged_project['Session History']:
+                merged_project['Total Time'] += float(session['Duration'])
+                # do the same for subprojects
+                for sub in merged_project['Sub Projects']:
+                    if sub in session['Sub-Projects']:
+                        merged_project['Sub Projects'][sub] += round(float(session['Duration']),2)
+
+            merged_project['Total Time'] = round(merged_project['Total Time'], 2)
+
+            self.__dict[new_name] = merged_project
+            self.__save()
+        except Exception as e:
+            print(f"An error occurred when trying to merge: {e}")
+
 
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
@@ -331,7 +410,7 @@ class Projects:
                                             f"[bright red]{project}[reset] "
                                             f"{sub_projects} " +
                                             (f" -> [yellow]{note}[reset]\n" if note != "" and sessionNotes else "\n")
-                                            )
+                                )
 
             if print_output == "":
                 continue
@@ -441,10 +520,6 @@ class Projects:
             sorted_dict[key] = self.__dict[key]
 
         self.__dict = sorted_dict
-
-    def __save_to_dict(self, project: dict):
-        name = list(project.keys())[0]
-        self.__dict[name] = project[name]
 
     def __save(self):
         self.__sort_dict()
