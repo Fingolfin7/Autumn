@@ -278,7 +278,6 @@ class Projects:
 
         print(format_text(f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
 
-
     def merge(self, project1:str, project2:str, new_name:str):
         if project1 not in self.get_keys():
             print(format_text(f"Invalid project name! '[bright red]{project1}[reset]' does not exist!"))
@@ -336,7 +335,6 @@ class Projects:
         except Exception as e:
             print(f"An error occurred when trying to merge: {e}")
 
-
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
         Print the session histories of projects over a given period.
@@ -382,51 +380,72 @@ class Projects:
         # sort sessions list by end time
         session_list = sorted(cleaned_sessions, key=lambda x: datetime.strptime(x[1]["End Time"], "%H:%M:%S"))
 
-        for date in dates:
-            print_output = ""
-            day_total = 0.0
-            for project, session in session_list:
-                if date != session['Date']:
-                    continue
-                time_spent = str(timedelta(minutes=session['Duration'])).split(".")[0]
-                time_spent = datetime.strptime(time_spent, "%H:%M:%S")
-                day_total += session['Duration']
+        # Sort session_list by date
+        session_list.sort(key=lambda x: datetime.strptime(x[1]['Date'], "%m-%d-%Y"))
 
-                if time_spent.hour > 0:
-                    time_spent = time_spent.strftime("%Hh %Mm")
-                else:
-                    time_spent = time_spent.strftime("%Mm %Ss")
-
-                sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
-
-                note = session['Note']
-
-                if len(note) > noteLength:
-                    note = note[0: note.find(" ")] + "... " + note[note.rfind(" "):]
-
-                print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
-                                            f"[cyan]{session['End Time']}[reset] \t"
-                                            f"{time_spent}  "
-                                            f"[bright red]{project}[reset] "
-                                            f"{sub_projects} " +
-                                            (f" -> [yellow]{note}[reset]\n" if note != "" and sessionNotes else "\n")
-                                )
-
-            if print_output == "":
-                continue
-
-            print_date = datetime.strptime(date, "%m-%d-%Y")
-            print_date = print_date.strftime("%A %d %B %Y")
-            day_total = str(timedelta(minutes=day_total)).split(".")[0]
-            day_total = datetime.strptime(day_total, "%H:%M:%S")
-
-            if day_total.hour > 0:
-                day_total = day_total.strftime('%Hh %Mm')
+        def format_time(time):
+            if time.hour > 0:
+                time = time.strftime("%Hh %Mm")
             else:
-                day_total = day_total.strftime('%Mm %Ss')
+                time = time.strftime("%Mm %Ss")
+            return time
+
+        def truncate_note(nte, nteLength):
+            if len(nte) > nteLength:
+                nte = nte[0: nte.find(" ")] + "... " + nte[nte.rfind(" "):]
+            return nte
+
+        # Initialize variables
+        current_date = None
+        print_output = ""
+        day_total = 0.0
+
+        def print_date_output(crrnt_date, d_total):
+            print_date = datetime.strptime(crrnt_date, "%m-%d-%Y")
+            print_date = print_date.strftime("%A %d %B %Y")
+            d_total = str(timedelta(minutes=d_total)).split(".")[0]
+            d_total = datetime.strptime(d_total, "%H:%M:%S")
+            d_total = format_time(d_total)
 
             print(format_text(f"[underline]{print_date}[reset]"
-                              f" [_text256_34_]({day_total})[reset]"))
+                              f" [_text256_34_]({d_total})[reset]"))
+
+        # Iterate over sessions
+        for project, session in reversed(session_list):
+            # Check if date has changed
+            if current_date != session['Date']:
+                # Print output for previous date
+                if current_date is not None:
+                    print_date_output(current_date, day_total)
+                    print(print_output)
+
+                # Reset variables for new date
+                current_date = session['Date']
+                print_output = ""
+                day_total = 0.0
+
+            # Calculate time spent and add to day total
+            time_spent = str(timedelta(minutes=session['Duration'])).split(".")[0]
+            time_spent = datetime.strptime(time_spent, "%H:%M:%S")
+            day_total += session['Duration']
+            time_spent = format_time(time_spent)
+
+            # Format subprojects and note
+            sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in session['Sub-Projects']]
+            note = truncate_note(session['Note'], noteLength)
+
+            # Add session details to print output
+            print_output += format_text(f"[cyan]{session['Start Time']}[reset] to "
+                                        f"[cyan]{session['End Time']}[reset] \t"
+                                        f"{time_spent}  "
+                                        f"[bright red]{project}[reset] "
+                                        f"{sub_projects} " +
+                                        (f" -> [yellow]{note}[reset]\n" if note != "" and sessionNotes else "\n")
+                            )
+
+        # Print output for last date
+        if current_date is not None:
+            print_date_output(current_date, day_total)
             print(print_output)
 
     def get_totals(self, projects="all", status=None):
