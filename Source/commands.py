@@ -285,27 +285,30 @@ def show_totals(projects=None, status=None):
         project_dict.get_totals(projects, status)
 
 
-def list_cmds():
-    commands = ["chart", "delete", "export", "help", "import", "log",
-                "mark", "projects", "remove", "rename", "restart",
-                "start", "stop", "status", "subprojects", "totals",
-                "track", "WatsonExport"]
-    keys = sorted(commands, key=lambda x: x.lower())
-    length = len(keys)
-
-    print("Here are all the available commands:\n")
-
-    for i in range(length):
-        output = f"{keys[i]}, "
-        if i == length - 1:
-            output = f"{keys[i]}"
-
-        print("", end=output)
-
-        if (i + 1) % 3 == 0 and i != length - 1:
-            print()
-
-    print()
+def help():
+    help_str = \
+    "[underline][cyan]Here's a list of commands and their descriptions[reset] " \
+    "(use `autumn COMMAND -h, --help` for more info on a command):\n"\
+    "[bold][green]start[reset]: start a new timer\n"\
+    "[bold][green]stop[reset]: stop the current timer\n"\
+    "[bold][green]status[reset]: show the status of the current timer\n"\
+    "[bold][green]track[reset]: track a project for a given time period\n"\
+    "[bold][green]remove[reset]: remove a timer from the log\n"\
+    "[bold][green]restart[reset]: restart the current timer\n"\
+    "[bold][green]projects[reset]: list all projects and show `active`, `paused` and `complete` projects\n"\
+    "[bold][green]subprojects[reset]: list all subprojects for a given project\n"\
+    "[bold][green]totals[reset]: show the total time spent on a project and its subprojects\n"\
+    "[bold][green]rename[reset]: rename a project or subproject\n"\
+    "[bold][green]delete[reset]: delete a project\n"\
+    "[bold][green]log[reset]: show activity logs for the week or a given time period\n"\
+    "[bold][green]mark[reset]: mark a project as `active`, `paused` or `complete`\n"\
+    "[bold][green]export[reset]: export a project to a file in the 'Exported' folder\n"\
+    "[bold][green]import[reset]: import a project from a file from the 'Exported' folder\n"\
+    "[bold][green]chart[reset]: show a chart of the time spent on (a) project(s) choose between bar, pie, and scatter charts\n"\
+    "[bold][green]merge[reset]: merge two projects\n"\
+    "[bold][green]WatsonExport[reset]: export a project to Watson\n"\
+    "[bold][green]help[reset]: show this help message"
+    print(format_text(help_str))
 
 
 def quit_autumn():

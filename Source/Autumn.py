@@ -119,15 +119,15 @@ os.system("")
 print()
 
 if args.command is None:
-    print(format_text("[cyan]Usage: AUTUMN COMMAND [ARGS]...[reset]\n"))
     print(format_text("[_text256]Autumn[reset] is a time tracking tool inspired by Watson\n"
                       "that allows the user to track the amount of time\n"
                       "they spend working on a given activity.\n\n"
+                      "[cyan]Usage: AUTUMN COMMAND -h, --help [ARGS]...[reset]\n\n"
                       "You just have to tell [_text256]Autumn[reset] when you start working\n"
                       "on your project with the `[green]start[reset]` command, and you can\n"
-                      "stop the timer when you're done with the`[green]stop[reset]` command.\n\n"
-                      "[underline][cyan]Commands:[reset]", 208))
-    list_cmds()
+                      "stop the timer when you're done with the `[green]stop[reset]` command\n"
+                      "and add an optional session note.\n", 208))
+    help()
 elif args.command == 'start':
     start_command(args.project, args.subs)
 elif args.command == 'stop':
@@ -182,6 +182,8 @@ elif args.command == 'chart':
 elif args.command == 'merge':
     merge_projects(args.project1, args.project2, args.merged_name)
 elif args.command == 'help':
-    list_cmds()
+    help()
 
 print()
+
+
