@@ -50,7 +50,7 @@ sub_projects.add_argument("project", type=str, nargs="?", default="", help="name
 
 totals_cmd = subparser.add_parser("totals")
 totals_cmd.add_argument("-p", "--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
-totals_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
+totals_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
                                                                        "Either 'active', 'paused' or 'complete'")
 
 
@@ -79,8 +79,8 @@ log_cmd.add_argument("-p", "--projects", type=str, nargs="+", default='all', hel
 log_cmd.add_argument("-f", "--fromDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-t", "--toDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-pd", "--period", type=str, default=None, help="logs for the last day/week/fortnight/month/year")
-log_cmd.add_argument("-x", "--hide-notes", action="store_true", help="exclude session notes in log output")
-log_cmd.add_argument("-m", "--max-note-length", type=int, default=300, help="maximum session note length before truncation")
+log_cmd.add_argument("-x", "--hide_notes", action="store_true", help="exclude session notes in log output")
+log_cmd.add_argument("-m", "--max_note_length", type=int, default=300, help="maximum session note length before truncation")
 log_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
                                                                        "Either 'active', 'paused' or 'complete'")
 # log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
@@ -100,7 +100,7 @@ chart_cmd = subparser.add_parser("chart")
 chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all "
                                                                                     "projects")
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
-chart_cmd.add_argument("--status", type=str, nargs="?", default=None, help="Filter by project status. "
+chart_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
                                                                        "Either 'active', 'paused' or 'complete'")
 
 merge_cmd = subparser.add_parser("merge")
