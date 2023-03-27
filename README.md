@@ -61,9 +61,9 @@ Autumn has many commands including (use `autumn COMMAND -h, --help` for more inf
 - **delete**: delete a project
 - **log**: show activity logs for the week or a given time period
 - **mark**: mark a project as `active`, `paused` or `complete`
-- **export**: export a project to a file in the 'Exported' folder
-- **import**: import a project from a file from the 'Exported' folder
-- **chart**: show a chart of the time spent on (a) project(s) choose between bar, pie, and scatter charts
+- **export**: export a project to a file in the `Autumn\Source\Exported` folder
+- **import**: import a project from a file from the `Autumn\Source\Exported` folder
+- **chart**: show a chart of the time spent on (a) project(s) choose between `bar`, `pie`, and `scatter` charts
 - **merge**: merge two projects
 - **WatsonExport**: export a project to Watson
 - **help**: show this help message
