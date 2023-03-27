@@ -1,12 +1,42 @@
 # Autumn
 CLI Time Tracking software inspired by [Watson](https://github.com/TailorDev/Watson) that allows the user to track the amount of time they spend working on a given activity. 
-Autumn allows users to create `projects` which can have sub activities or `sub-projects`.
+Autumn allows users to create `projects` which can have sub activities or `subprojects`.
 Projects are stored in a .json file called `projects.json`
 
 ## Setup
-Download or clone the repo using git and install the requirements using:
+Here is a possible text for your readme file using the keywords you provided:
+
+To set up my command line app and add it to the system or user PATH on windows, follow these steps:
+
+1. Download or clone the repo using git and install the requirements using:
 
 `pip install -r requirements.txt`
+
+2. Add the `Autumn\Source` directory to your system PATH or user PATH variable. This will allow you to use autumn from any terminal without specifying the full path. To do this, you can use the `setx` command in an elevated command prompt or edit the environment variables from the system settings .
+
+For example, to add the directory to the user PATH variable using `setx`, you can run:
+
+`setx path "%PATH%;C:\...\Autumn\Source"`
+
+To add it to the system PATH variable (for all users), you can run:
+
+`setx /M path "%PATH%;C:\...\Autumn\Source"`
+
+3. Add `.PY` to your PATHEXT variable. This will allow you to run Python scripts without typing the `.py` extension. You can also use `setx` or edit the environment variables for this step.
+
+For example, to add `.PY` to the user PATHEXT variable using `setx`, you can run:
+
+`setx pathext "%PATHEXT%;.PY"`
+
+To add it to the system PATHEXT variable (for all users), you can run:
+
+`setx /M pathext "%PATHEXT%;.PY"`
+
+4. Restart your terminal or open a new one to apply the changes. You should be able to use autumn as a command from any directory.
+
+## Usage Exampls
+
+AUTUMN COMMAND -h, --help [ARGS]
 
 ## Commands
 Autumn has many commands including:
