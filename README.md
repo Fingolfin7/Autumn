@@ -8,11 +8,12 @@ Here is a possible text for your readme file using the keywords you provided:
 
 To set up my command line app and add it to the system or user PATH on windows, follow these steps:
 
-1. Download or clone the repo using git and install the requirements using:
+Download or clone the repo using git and install the requirements using:
 
-`pip install -r requirements.txt`
+        `pip install -r requirements.txt`
 
-2. Add the `Autumn\Source` directory to your system PATH or user PATH variable. This will allow you to use autumn from any terminal without specifying the full path. To do this, you can use the `setx` command in an elevated command prompt or edit the environment variables from the system settings .
+Add the `Autumn\Source` directory to your system PATH or user PATH variable. This will allow you to use autumn from any terminal without specifying the full path. 
+To do this, you can use the `setx` command in an elevated command prompt or edit the environment variables from the system settings.
 
 For example, to add the directory to the user PATH variable using `setx`, you can run:
 
@@ -22,7 +23,7 @@ To add it to the system PATH variable (for all users), you can run:
 
 `setx /M path "%PATH%;C:\...\Autumn\Source"`
 
-3. Add `.PY` to your PATHEXT variable. This will allow you to run Python scripts without typing the `.py` extension. You can also use `setx` or edit the environment variables for this step.
+Add `.PY` to your PATHEXT variable. This will allow you to run Python scripts without typing the `.py` extension. You can also use `setx` or edit the environment variables for this step.
 
 For example, to add `.PY` to the user PATHEXT variable using `setx`, you can run:
 
@@ -32,14 +33,21 @@ To add it to the system PATHEXT variable (for all users), you can run:
 
 `setx /M pathext "%PATHEXT%;.PY"`
 
-4. Restart your terminal or open a new one to apply the changes. You should be able to use autumn as a command from any directory.
+Restart your terminal or open a new one to apply the changes. You should be able to use autumn as a command from any directory.
 
-## Usage Exampls
+## Usage
 
-AUTUMN COMMAND -h, --help [ARGS]
+To use Autumn, you can run the command `Autumn` or `Autumn.py` (not case sensitive) from any directory like so:
+
+
+`AUTUMN COMMAND -h, --help [ARGS]`
+
+For example:
+
+`autumn start Mars -s Dragon Falcon "Falcon Heavy" Starship`
 
 ## Commands
-Autumn has many commands including:
+Autumn has many commands including (use `autumn COMMAND -h, --help` for more info on a command):
 - **start**: start a new timer
 - **stop**: the current timer
 - **status**: show the status of the current timer
