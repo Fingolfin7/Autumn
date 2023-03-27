@@ -481,31 +481,45 @@ def chart(projects="all", chart_type="pie", status=None):
     names_and_hist = []
 
     if str(projects).lower() == "all":
-        projects = keys
         if status:
             projects = [key for key in keys if project_dict.get_project(key)['Status'] == status]
+        else:
+            projects = keys
 
     if len(projects) == 1:
         if projects[0] not in keys:
             print(f"Invalid project name! '{projects[0]}' does not exist!")
             return
 
-        proj = project_dict.get_project(projects[0])
-        for sub_proj in proj["Sub Projects"]:
-            time_totals.append(proj["Sub Projects"][sub_proj] / 60)
-            project_names.append(sub_proj)
+        if chart_type == "scatter": # get the dates and durations for each subproject to show on the scatter graph
+            proj = project_dict.get_project(projects[0])
+            sess_hist = proj["Session History"]
+
+            for sub_proj in proj["Sub Projects"]:
+                dates = [datetime.strptime(sess['Date'], "%m-%d-%Y") for sess in sess_hist
+                         if sub_proj in sess['Sub-Projects']]
+                durations = [sess['Duration'] / 60 for sess in sess_hist
+                             if sub_proj in sess['Sub-Projects']]
+                project_names.append(sub_proj)
+                names_and_hist.append((sub_proj, (dates, durations))) # append the subproject name, its dates, and durations
+
+        else: # get the total time for each subproject to show on the pie or bar graph
+            sess = project_dict.get_project(projects[0])
+            for sub_proj in sess["Sub Projects"]:
+                time_totals.append(sess["Sub Projects"][sub_proj] / 60)
+                project_names.append(sub_proj)
 
     else:
         for name in projects:
-            if name in keys:
+            if name in keys and len(projects) > 1:
                 time_totals.append(project_dict.get_project(name)["Total Time"] / 60)
-                project_names.append(name)
                 sess_hist = project_dict.get_project(name)["Session History"]
                 dates = [datetime.strptime(sess['Date'], "%m-%d-%Y") for sess in sess_hist]
                 durations = [sess['Duration'] / 60 for sess in sess_hist]
                 names_and_hist.append((name, (dates, durations)))
             else:
                 print(f"Invalid project name! '{name}' does not exist!")
+
 
     if chart_type == "scatter":
         print(f"Projects: {project_names}")

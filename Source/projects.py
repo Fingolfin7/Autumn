@@ -216,14 +216,27 @@ class Projects:
         """
         Track a session that wasn't recorded in real-time.
 
-        :param start_time: session start time format: "MM-DD-YYY HH:MM"
-        :param end_time: session end time format: "MM-DD-YYY HH:MM"
+        :param start_time: session start time format: "MM-DD-YYYY HH:MM" if MM-DD-YYYY
+        is not specified, track for the current day
+
+        :param end_time: session end time format: "MM-DD-YYYY HH:MM" if MM-DD-YYYY
+        is not specified, track for the current day
+
         :param project: project name
         :param sub_projects: session subprojects
         :param session_note: session note
         """
+
+        def check_date(time):
+            # check if date is specified in the time string, if not set it to today
+            if len(time.split(" ")) == 1: # if only time is specified
+                time = datetime.strptime(time, '%H:%M')
+                time = time.replace(year=datetime.today().year, month=datetime.today().month, day=datetime.today().day)
+                return time
+            else:
+                return datetime.strptime(time, '%m-%d-%Y %H:%M')
         def check_year(time):
-            time = datetime.strptime(time, '%m-%d-%Y %H:%M')
+            time = check_date(time)
             if time.year != datetime.today().year:
                 print(format_text(f"Year entered as [cyan]{time.year}[reset]. "
                                   f"Did you mean [cyan]{datetime.today().year}[reset]?"))
@@ -658,8 +671,3 @@ class Projects:
 
         else:
             print(f"'{path}' does not exist!")
-
-
-if __name__ == "__main__":
-    projects = Projects()
-    projects.merge("weights", "Chess", "Chess 3")
