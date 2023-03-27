@@ -281,8 +281,10 @@ class Projects:
     def merge(self, project1:str, project2:str, new_name:str):
         if project1 not in self.get_keys():
             print(format_text(f"Invalid project name! '[bright red]{project1}[reset]' does not exist!"))
+            return
         if project2 not in self.get_keys():
             print(format_text(f"Invalid project name! '[bright red]{project2}[reset]' does not exist!"))
+            return
 
         project1 = self.__dict[project1]
         project2 = self.__dict[project2]
@@ -319,6 +321,19 @@ class Projects:
                                    )
                 ),
             }
+
+            # remove redundant session histories
+            seen = set() # use a set to keep track of unique sessions
+            new_session_history = [] # create a new session history
+
+            for session in merged_project['Session History']:
+                # create a tuple with the values of the keys used to determine uniqueness
+                key = (session['Date'], session['Start Time'], session['End Time'], tuple(session['Sub-Projects']))
+                if key not in seen: # if the tuple is not in the set, add it and add the session to the new session history
+                    seen.add(key)
+                    new_session_history.append(session)
+
+            merged_project['Session History'] = new_session_history # set the new session history
 
             # sum up total time from session histories
             for session in merged_project['Session History']:
@@ -643,3 +658,8 @@ class Projects:
 
         else:
             print(f"'{path}' does not exist!")
+
+
+if __name__ == "__main__":
+    projects = Projects()
+    projects.merge("weights", "Chess", "Chess 3")
