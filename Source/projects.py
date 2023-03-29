@@ -407,7 +407,7 @@ class Projects:
             return False
 
     # method to sync projects with a remote server or local file
-    def _sync(self, filepath, is_remote=False):
+    def sync(self, filepath, is_remote=False):
         """
         Sync projects with a local file. Projects from both files will be merged and both files will be updated.
         :param filepath: the path to the remote file (a .json file)

@@ -409,7 +409,7 @@ def merge_projects(first_project: str, second_project:str, new_name:str):
 
 def sync_projects(file, is_remote:bool = False):
     global project_dict
-    project_dict.sync_projects(file, is_remote)
+    project_dict.sync(file, is_remote)
 
 
 
