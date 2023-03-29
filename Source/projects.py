@@ -6,7 +6,7 @@ from datetime import timedelta
 from config import get_base_path
 from functions import listOfDates
 from ColourText import format_text
-from compress_json import json_unzip, json_zip
+from compress_json import json_unzip, json_zip, ZIPJSON_KEY
 
 
 class Projects:
@@ -362,6 +362,116 @@ class Projects:
             self.__save()
         except Exception as e:
             print(f"An error occurred when trying to merge: {e}")
+
+    def backup(self):
+        """
+        Creates a backup of the projects file.
+        :return: path to the backup file or False if an error occurred
+        """
+
+        backup_dir = os.path.join(get_base_path(), "Backups")
+        backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date()}.json")
+        try:
+            with open(f"backup_path", 'w') as f:
+               f.write(json.dumps(self.__dict, indent=4))
+            return backup_path
+        except Exception as e:
+            print(f"An error occurred when trying to create a backup projects: {e}")
+            return False
+
+    def restore_backup(self, backup_path):
+        """
+        Restores the projects file from a backup. Overwrites the current projects file.
+        :param backup_path:
+        :return:  True if the backup was restored successfully, False if an error occurred
+        """
+
+        # check if the backup file exists
+        if not os.path.exists(backup_path):
+            print(f"Backup file does not exist: {backup_path}")
+            return False
+
+        # load the backup file
+        try:
+            with open(backup_path, 'r') as f:
+                backup = json.load(f)
+                # check if the backup is compressed and decompress it if it is
+                if ZIPJSON_KEY in backup:
+                    backup = json_unzip(backup)
+
+                self.__dict = backup
+                self.__save()
+                return True
+        except Exception as e:
+            print(f"An error occurred when trying to restore the backup: {e}")
+            return False
+
+    # method to sync projects with a remote server or local file
+    def _sync(self, filepath, is_remote=False):
+        """
+        Sync projects with a local file. Projects from both files will be merged and both files will be updated.
+        :param filepath: the path to the remote file (a .json file)
+        :return: True if the sync was successful, False if an error occurred
+        """
+        # check if the network path is accessible
+        if is_remote:
+            try:
+                with open(filepath, 'r'):
+                    pass
+            except Exception as e:
+                print(f"An error occurred when trying to access the remote file: {e}")
+                return False
+
+        print(f"Syncing projects with file: {filepath}")
+
+        # get the data from the remote file
+        try:
+            with open(filepath, 'r') as f:
+                remote_data = json.load(f)
+
+                # check if remote file is compressed and unzip it if it is
+                if ZIPJSON_KEY in remote_data:
+                    remote_data = json_unzip(remote_data)
+        except Exception as e:
+            print(f"An error occurred when trying to open the remote file: {e}")
+            return False
+
+        # backup current projects
+        backup_path = self.backup()
+        if backup_path:
+            print(f"Backup created: {backup_path}")
+        else:
+            print("Failed to create backup! Sync aborted!")
+            return False
+
+        # use the merge method to merge the remote projects with the local projects
+        for project in remote_data:
+            if project in self.get_keys():
+                self.merge(project, project, project) # the project have the same name, so they will be merged into one project
+                print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
+            else:
+                self.__dict[project] = remote_data[project] # otherwise just add the project to the local projects
+                print(format_text(f"[yellow]{project}[reset] added to projects"))
+
+        # update remote file
+        try:
+            with open(filepath, 'w') as f:
+                # compress the data before writing it to the file if the file was originally compressed
+                if remote_data[ZIPJSON_KEY]:
+                    f.write(json_zip(self.__dict))
+                else: # otherwise just write the data to the file
+                    f.write(json.dumps(self.__dict, indent=4))
+        except Exception as e:
+            print(f"An error occurred when trying to update the remote file: {e}")
+            return False
+
+        # save the local projects
+        self.__save()
+        print(f"Sync successful! Data backed up to: {backup_path}")
+        return True
+
+
+
 
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """

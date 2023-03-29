@@ -338,7 +338,6 @@ def mark_project_paused(name):
     project_dict.pause_project(name)
     print(format_text(f"Marked project [bright red]{name}[reset] as paused"))
 
-
 def mark_project_active(name):
     global project_dict
 
@@ -348,7 +347,6 @@ def mark_project_active(name):
 
     project_dict.mark_project_active(name)
     print(format_text(f"Marked project [bright red]{name}[reset] as active"))
-
 
 def rename_project(name: str, new_name: str):
     global project_dict
@@ -408,6 +406,13 @@ def merge_projects(first_project: str, second_project:str, new_name:str):
         project_dict.merge(first_project, second_project, new_name)
         print(format_text(f"Successfully merged [yellow]{first_project}[reset] and [yellow]{second_project}[reset] "
                           f"into [yellow]{new_name}[reset]"))
+
+def sync_projects(file, is_remote:bool = False):
+    global project_dict
+    project_dict.sync_projects(file, is_remote)
+
+
+
 def export(projects: list, filename: str):
     global project_dict
 
@@ -421,7 +426,6 @@ def export(projects: list, filename: str):
             project_dict.export_project(project, filename)
 
         print(format_text(f"Exported [yellow]{projects}[reset] to '{filename}'"))
-
 
 def import_exported(projects: list, filename: str):
     global project_dict
@@ -440,11 +444,9 @@ def import_exported(projects: list, filename: str):
 
         # print(format_text(f"Imported [yellow]{projects if projects else 'everything'}[reset] from '{filename}'"))
 
-
 def print_project(project):
     global project_dict
     project_dict.print_json_project(project)
-
 
 def get_logs(**kwargs):
     global project_dict
@@ -459,7 +461,6 @@ def get_logs(**kwargs):
 
     project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"],
                      kwargs["status"], kwargs["sessionNote"], kwargs["noteLength"])
-
 
 def chart(projects="all", chart_type="pie", status=None):
     global project_dict

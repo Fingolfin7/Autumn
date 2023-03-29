@@ -108,6 +108,10 @@ merge_cmd.add_argument("project1", type=str, help="name of first project to be m
 merge_cmd.add_argument("project2", type=str, help="name of second project to be merged")
 merge_cmd.add_argument("merged_name", type=str, help="name of the merged project")
 
+# add sync command
+sync_cmd = subparser.add_parser("sync")
+sync_cmd.add_argument("-f", "--file", type=str, help="File to sync with. ")
+sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a network file?")
 
 help_cmd = subparser.add_parser("help")
 
@@ -180,6 +184,8 @@ elif args.command == 'chart':
     chart(args.projects, args.type, args.status)
 elif args.command == 'merge':
     merge_projects(args.project1, args.project2, args.merged_name)
+elif args.command == 'sync':
+    sync_projects(args.file, not args.remote)
 elif args.command == 'help':
     help()
 
