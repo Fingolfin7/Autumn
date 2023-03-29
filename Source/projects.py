@@ -372,7 +372,7 @@ class Projects:
         backup_dir = os.path.join(get_base_path(), "Backups")
         backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date()}.json")
         try:
-            with open(f"backup_path", 'w') as f:
+            with open(backup_path, 'w') as f:
                f.write(json.dumps(self.__dict, indent=4))
             return backup_path
         except Exception as e:
@@ -451,7 +451,10 @@ class Projects:
                 print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
             else:
                 self.__dict[project] = remote_data[project] # otherwise just add the project to the local projects
-                print(format_text(f"[yellow]{project}[reset] added to projects"))
+                print(format_text(f"[green]{project}[reset] added to projects"))
+
+        # save the local projects
+        self.__save()
 
         # update remote file
         try:
@@ -465,8 +468,6 @@ class Projects:
             print(f"An error occurred when trying to update the remote file: {e}")
             return False
 
-        # save the local projects
-        self.__save()
         print(f"Sync successful! Data backed up to: {backup_path}")
         return True
 
