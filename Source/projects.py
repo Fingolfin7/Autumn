@@ -369,7 +369,12 @@ class Projects:
         :return: path to the backup file or False if an error occurred
         """
 
+
         backup_dir = os.path.join(get_base_path(), "Backups")
+
+        if not os.path.exists(backup_dir):
+            os.mkdir("Backups")
+
         backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date()}.json")
         try:
             with open(backup_path, 'w') as f:
