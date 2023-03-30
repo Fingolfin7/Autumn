@@ -145,3 +145,4 @@ cython_debug/
 /Source/active_timers.pkl
 Source/projects.json
 *.json
+/Source/Backups/

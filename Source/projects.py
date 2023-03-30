@@ -375,7 +375,7 @@ class Projects:
         if not os.path.exists(backup_dir):
             os.mkdir("Backups")
 
-        backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date()}.json")
+        backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date().strftime('%m-%d-%Y')}.json")
         try:
             with open(backup_path, 'w') as f:
                f.write(json.dumps(self.__dict, indent=4))
