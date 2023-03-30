@@ -373,7 +373,7 @@ class Projects:
         backup_dir = os.path.join(get_base_path(), "Backups")
 
         if not os.path.exists(backup_dir):
-            os.mkdir("Backups")
+            os.mkdir(backup_dir)
 
         backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date().strftime('%m-%d-%Y')}.json")
         try:
