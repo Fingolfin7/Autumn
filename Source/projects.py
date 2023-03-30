@@ -429,13 +429,15 @@ class Projects:
 
         print(f"Syncing projects with file: {filepath}")
 
+        is_compressed = False
+
         # get the data from the remote file
         try:
             with open(filepath, 'r') as f:
                 remote_data = json.load(f)
-
+                is_compressed = ZIPJSON_KEY in remote_data
                 # check if remote file is compressed and unzip it if it is
-                if ZIPJSON_KEY in remote_data:
+                if is_compressed:
                     remote_data = json_unzip(remote_data)
         except Exception as e:
             print(f"An error occurred when trying to open the remote file: {e}")
@@ -460,20 +462,21 @@ class Projects:
 
         # save the local projects
         self.__save()
+        self.__load()
 
         # update remote file
         try:
             with open(filepath, 'w') as f:
                 # compress the data before writing it to the file if the file was originally compressed
-                if remote_data[ZIPJSON_KEY]:
-                    f.write(json_zip(self.__dict))
+                if is_compressed:
+                    f.write(json.dumps(json_zip(self.__dict)))
                 else: # otherwise just write the data to the file
                     f.write(json.dumps(self.__dict, indent=4))
         except Exception as e:
             print(f"An error occurred when trying to update the remote file: {e}")
             return False
 
-        print(f"Sync successful! Data backed up to: {backup_path}")
+        print(f"Sync successful!")
         return True
 
 
