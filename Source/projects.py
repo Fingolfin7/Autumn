@@ -360,7 +360,6 @@ class Projects:
         :return: path to the backup file or False if an error occurred
         """
 
-
         backup_dir = os.path.join(get_base_path(), "Backups")
 
         if not os.path.exists(backup_dir):
@@ -442,15 +441,10 @@ class Projects:
             print(f"An error occurred when trying to open the remote file: {e}")
             return False
 
-
-
         # use the merge method to merge the remote projects with the local projects
         for project in remote_data:
             if project in self.get_keys():
-                # print("Local: ", json.dumps(self.__dict[project]['Session History'][-1], indent=4))
-                # print("Remote: ", json.dumps(remote_data[project]['Session History'][-1], indent=4))
                 self.merge(self.__dict[project], remote_data[project], project) # the project have the same name, so they will be merged into one project
-                # print("Merged: ", json.dumps(self.__dict[project]['Session History'][-1], indent=4))
                 print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
             else:
                 self.__dict[project] = remote_data[project] # otherwise just add the project to the local projects
