@@ -110,7 +110,8 @@ merge_cmd.add_argument("merged_name", type=str, help="name of the merged project
 
 # add sync command
 sync_cmd = subparser.add_parser("sync")
-sync_cmd.add_argument("-f", "--file", type=str, help="File to sync with. ")
+sync_cmd.add_argument("-f", "--file", type=str, default=None, help="File to sync with. Note you ca add a list of file locations in "
+                                                     "a 'sync.txt' file that will be synced with.")
 sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a network file?")
 
 help_cmd = subparser.add_parser("help")

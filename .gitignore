@@ -146,3 +146,4 @@ cython_debug/
 Source/projects.json
 *.json
 /Source/Backups/
+/Source/sync.txt

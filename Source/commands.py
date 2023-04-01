@@ -287,27 +287,29 @@ def show_totals(projects=None, status=None):
 
 def help():
     help_str = \
-    "[underline][cyan]Here's a list of commands and their descriptions[reset] " \
-    "(use `autumn COMMAND -h, --help` for more info on a command):\n"\
-    "[bold][green]start[reset]: start a new timer\n"\
-    "[bold][green]stop[reset]: stop the current timer\n"\
-    "[bold][green]status[reset]: show the status of the current timer\n"\
-    "[bold][green]track[reset]: track a project for a given time period\n"\
-    "[bold][green]remove[reset]: remove a timer from the log\n"\
-    "[bold][green]restart[reset]: restart the current timer\n"\
-    "[bold][green]projects[reset]: list all projects and show `active`, `paused` and `complete` projects\n"\
-    "[bold][green]subprojects[reset]: list all subprojects for a given project\n"\
-    "[bold][green]totals[reset]: show the total time spent on a project and its subprojects\n"\
-    "[bold][green]rename[reset]: rename a project or subproject\n"\
-    "[bold][green]delete[reset]: delete a project\n"\
-    "[bold][green]log[reset]: show activity logs for the week or a given time period\n"\
-    "[bold][green]mark[reset]: mark a project as `active`, `paused` or `complete`\n"\
-    "[bold][green]export[reset]: export a project to a file in the 'Exported' folder\n"\
-    "[bold][green]import[reset]: import a project from a file from the 'Exported' folder\n"\
-    "[bold][green]chart[reset]: show a chart of the time spent on (a) project(s) choose between bar, pie, and scatter charts\n"\
-    "[bold][green]merge[reset]: merge two projects\n"\
-    "[bold][green]WatsonExport[reset]: export a project to Watson\n"\
-    "[bold][green]help[reset]: show this help message"
+        "[underline][cyan]Here's a list of commands and their descriptions[reset] " \
+        "(use `autumn COMMAND -h, --help` for more info on a command):\n" \
+        "[bold][green]start[reset]: start a new timer\n" \
+        "[bold][green]stop[reset]: stop the current timer\n" \
+        "[bold][green]status[reset]: show the status of the current timer\n" \
+        "[bold][green]track[reset]: track a project for a given time period\n" \
+        "[bold][green]remove[reset]: remove a timer from the log\n" \
+        "[bold][green]restart[reset]: restart the current timer\n" \
+        "[bold][green]projects[reset]: list all projects and show `active`, `paused` and `complete` projects\n" \
+        "[bold][green]subprojects[reset]: list all subprojects for a given project\n" \
+        "[bold][green]totals[reset]: show the total time spent on a project and its subprojects\n" \
+        "[bold][green]rename[reset]: rename a project or subproject\n" \
+        "[bold][green]delete[reset]: delete a project\n" \
+        "[bold][green]log[reset]: show activity logs for the week or a given time period\n" \
+        "[bold][green]mark[reset]: mark a project as `active`, `paused` or `complete`\n" \
+        "[bold][green]export[reset]: export a project to a file in the 'Exported' folder\n" \
+        "[bold][green]import[reset]: import a project from a file from the 'Exported' folder\n" \
+        "[bold][green]chart[reset]: show a chart of the time spent on (a) project(s) choose between bar, pie, and scatter charts\n" \
+        "[bold][green]merge[reset]: merge two projects\n" \
+        "[bold][green]sync[reset]: sync project data with a different file. " \
+        "You can specify a file with the -f flag or add a list of them (each location on a new line) in a sync.txt file\n" \
+        "[bold][green]WatsonExport[reset]: export a project to Watson\n" \
+        "[bold][green]help[reset]: show this help message"
     print(format_text(help_str))
 
 
@@ -338,6 +340,7 @@ def mark_project_paused(name):
     project_dict.pause_project(name)
     print(format_text(f"Marked project [bright red]{name}[reset] as paused"))
 
+
 def mark_project_active(name):
     global project_dict
 
@@ -347,6 +350,7 @@ def mark_project_active(name):
 
     project_dict.mark_project_active(name)
     print(format_text(f"Marked project [bright red]{name}[reset] as active"))
+
 
 def rename_project(name: str, new_name: str):
     global project_dict
@@ -363,6 +367,7 @@ def rename_project(name: str, new_name: str):
         project_dict.rename_project(name, new_name)
         print(format_text(f"Renamed project [yellow]{name}[reset] to [yellow]{new_name}[reset]"))
 
+
 # rename subproject
 def rename_subproject(project: str, subproject: str, new_sub_name: str):
     global project_dict
@@ -377,7 +382,9 @@ def rename_subproject(project: str, subproject: str, new_sub_name: str):
                           f"[_text256_26_]{new_sub_name}[reset]? \n[Y/N]: "))
     if x == "Y" or x == "y":
         project_dict.rename_subproject(project, subproject, new_sub_name)
-        print(format_text(f"Renamed subproject [_text256_26_]{subproject}[reset] to [_text256_26_]{new_sub_name}[reset]"))
+        print(
+            format_text(f"Renamed subproject [_text256_26_]{subproject}[reset] to [_text256_26_]{new_sub_name}[reset]"))
+
 
 def delete_project(project: str):
     global project_dict
@@ -393,7 +400,8 @@ def delete_project(project: str):
         project_dict.delete_project(project)
         print(format_text(f"Deleted project [yellow]{project}[reset]"))
 
-def merge_projects(first_project: str, second_project:str, new_name:str):
+
+def merge_projects(first_project: str, second_project: str, new_name: str):
     global project_dict
 
     if first_project not in project_dict.get_keys():
@@ -417,10 +425,22 @@ def merge_projects(first_project: str, second_project:str, new_name:str):
         print(format_text(f"Successfully merged [yellow]{first_project}[reset] and [yellow]{second_project}[reset] "
                           f"into [yellow]{new_name}[reset]"))
 
-def sync_projects(file, is_remote:bool = False):
-    global project_dict
-    project_dict.sync(file, is_remote)
 
+def sync_projects(file: str = None, is_remote: bool = False):
+    global project_dict
+    if file is None:
+        sync_file = os.path.join(get_base_path(), "sync.txt")
+        if not os.path.exists(sync_file):
+            print("No sync.txt file found in current directory. Please create one and "
+                  "add locations to sync to on separate line.")
+            return
+        with open(sync_file, "r") as f:
+            files = f.readlines()
+
+        for file in files:
+            project_dict.sync(file, is_remote)
+    else:
+        project_dict.sync(file, is_remote)
 
 
 def export(projects: list, filename: str):
@@ -436,6 +456,7 @@ def export(projects: list, filename: str):
             project_dict.export_project(project, filename)
 
         print(format_text(f"Exported [yellow]{projects}[reset] to '{filename}'"))
+
 
 def import_exported(projects: list, filename: str):
     global project_dict
@@ -454,9 +475,11 @@ def import_exported(projects: list, filename: str):
 
         # print(format_text(f"Imported [yellow]{projects if projects else 'everything'}[reset] from '{filename}'"))
 
+
 def print_project(project):
     global project_dict
     project_dict.print_json_project(project)
+
 
 def get_logs(**kwargs):
     global project_dict
@@ -471,6 +494,7 @@ def get_logs(**kwargs):
 
     project_dict.log(kwargs["projects"], kwargs["fromDate"], kwargs["toDate"],
                      kwargs["status"], kwargs["sessionNote"], kwargs["noteLength"])
+
 
 def chart(projects="all", chart_type="pie", status=None):
     global project_dict
@@ -502,7 +526,7 @@ def chart(projects="all", chart_type="pie", status=None):
             print(f"Invalid project name! '{projects[0]}' does not exist!")
             return
 
-        if chart_type == "scatter": # get the dates and durations for each subproject to show on the scatter graph
+        if chart_type == "scatter":  # get the dates and durations for each subproject to show on the scatter graph
             proj = project_dict.get_project(projects[0])
             sess_hist = proj["Session History"]
 
@@ -512,9 +536,10 @@ def chart(projects="all", chart_type="pie", status=None):
                 durations = [sess['Duration'] / 60 for sess in sess_hist
                              if sub_proj in sess['Sub-Projects']]
                 project_names.append(sub_proj)
-                names_and_hist.append((sub_proj, (dates, durations))) # append the subproject name, its dates, and durations
+                names_and_hist.append(
+                    (sub_proj, (dates, durations)))  # append the subproject name, its dates, and durations
 
-        else: # get the total time for each subproject to show on the pie or bar graph
+        else:  # get the total time for each subproject to show on the pie or bar graph
             sess = project_dict.get_project(projects[0])
             for sub_proj in sess["Sub Projects"]:
                 time_totals.append(sess["Sub Projects"][sub_proj] / 60)
@@ -530,7 +555,6 @@ def chart(projects="all", chart_type="pie", status=None):
                 names_and_hist.append((name, (dates, durations)))
             else:
                 print(f"Invalid project name! '{name}' does not exist!")
-
 
     if chart_type == "scatter":
         print(f"Projects: {project_names}")
