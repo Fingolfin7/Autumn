@@ -396,6 +396,13 @@ def delete_project(project: str):
 def merge_projects(first_project: str, second_project:str, new_name:str):
     global project_dict
 
+    if first_project not in project_dict.get_keys():
+        print(format_text(f"Invalid project name! '[bright red]{first_project}[reset]' does not exist!"))
+        return
+    if second_project not in project_dict.get_keys():
+        print(format_text(f"Invalid project name! '[bright red]{second_project}[reset]' does not exist!"))
+        return
+
     if new_name == "":
         print("Please specify a name for the merged project.")
         return
@@ -403,7 +410,10 @@ def merge_projects(first_project: str, second_project:str, new_name:str):
     x = input(format_text(f"Are you sure you want to merge [yellow]{first_project}[reset] and "
                           f"[yellow]{second_project}[reset]? \n[Y/N]: "))
     if x == "Y" or x == "y":
-        project_dict.merge(first_project, second_project, new_name)
+        project1 = project_dict.get_project(first_project)
+        project2 = project_dict.get_project(second_project)
+
+        project_dict.merge(project1, project2, new_name)
         print(format_text(f"Successfully merged [yellow]{first_project}[reset] and [yellow]{second_project}[reset] "
                           f"into [yellow]{new_name}[reset]"))
 

@@ -291,16 +291,7 @@ class Projects:
 
         print(format_text(f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
 
-    def merge(self, project1:str, project2:str, new_name:str):
-        if project1 not in self.get_keys():
-            print(format_text(f"Invalid project name! '[bright red]{project1}[reset]' does not exist!"))
-            return
-        if project2 not in self.get_keys():
-            print(format_text(f"Invalid project name! '[bright red]{project2}[reset]' does not exist!"))
-            return
-
-        project1 = self.__dict[project1]
-        project2 = self.__dict[project2]
+    def merge(self, project1:dict, project2:dict, new_name:str):
         try:
             # get all the keys from both projects and initially set them to 0
             subs = {**project1['Sub Projects'],  **project2['Sub Projects']}
@@ -429,6 +420,14 @@ class Projects:
 
         print(f"Syncing projects with file: {filepath}")
 
+        # backup current projects
+        backup_path = self.backup()
+        if backup_path:
+            print(f"Backup created: {backup_path}")
+        else:
+            print("Failed to create backup! Sync aborted!")
+            return False
+
         is_compressed = False
 
         # get the data from the remote file
@@ -443,18 +442,15 @@ class Projects:
             print(f"An error occurred when trying to open the remote file: {e}")
             return False
 
-        # backup current projects
-        backup_path = self.backup()
-        if backup_path:
-            print(f"Backup created: {backup_path}")
-        else:
-            print("Failed to create backup! Sync aborted!")
-            return False
+
 
         # use the merge method to merge the remote projects with the local projects
         for project in remote_data:
             if project in self.get_keys():
-                self.merge(project, project, project) # the project have the same name, so they will be merged into one project
+                # print("Local: ", json.dumps(self.__dict[project]['Session History'][-1], indent=4))
+                # print("Remote: ", json.dumps(remote_data[project]['Session History'][-1], indent=4))
+                self.merge(self.__dict[project], remote_data[project], project) # the project have the same name, so they will be merged into one project
+                # print("Merged: ", json.dumps(self.__dict[project]['Session History'][-1], indent=4))
                 print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
             else:
                 self.__dict[project] = remote_data[project] # otherwise just add the project to the local projects
@@ -462,7 +458,6 @@ class Projects:
 
         # save the local projects
         self.__save()
-        self.__load()
 
         # update remote file
         try:
