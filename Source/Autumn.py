@@ -12,25 +12,24 @@ start.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list o
                                                                          " along with main project")
 
 restart = subparser.add_parser("restart")
-restart.add_argument("index", type=int, nargs="?", default=None, help="restart timer from active timers list. "
-                                                                     "timers are ordered from oldest to newest. "
-                                                                     "oldest/first timer starts at index 0")
-
+restart.add_argument("index", type=int, default=None, help="restart timer from active timers list. "
+                                                           "timers are ordered from oldest to newest. "
+                                                           "oldest/first timer starts at index 0")
 
 status = subparser.add_parser("status")
-status.add_argument("index", type=int, nargs="?", default=None, help="get status for a timer at a specific index"
-                                                                     " in the active timers list. "
-                                                                     "oldest/first timer starts at index 0")
+status.add_argument("index", type=int, default=None, help="get status for a timer at a specific index"
+                                                          " in the active timers list. "
+                                                          "oldest/first timer starts at index 0")
 
 remove = subparser.add_parser("remove")
-remove.add_argument("index", type=int, nargs="?", default=None, help="remove timer from active timers list. "
-                                                                     "timers are ordered from oldest to newest. "
-                                                                     "oldest/first timer starts at index 0")
+remove.add_argument("index", type=int, default=None, help="remove timer from active timers list. "
+                                                          "timers are ordered from oldest to newest. "
+                                                          "oldest/first timer starts at index 0")
 
 stop = subparser.add_parser("stop")
-stop.add_argument("index", type=int, nargs="?", default=None, help="stop timer from active timers list. "
-                                                                   "timers are ordered from oldest to newest. "
-                                                                   "oldest/first timer starts at index 0")
+stop.add_argument("index", type=int, default=None, help="stop timer from active timers list. "
+                                                        "timers are ordered from oldest to newest. "
+                                                        "oldest/first timer starts at index 0")
 
 track = subparser.add_parser("track")
 track.add_argument('start', type=str, help="Session start time. Format of month-day-year-Hour:Minute")
@@ -45,14 +44,13 @@ WatsonExport.add_argument("project", type=str, help="name of project to be expor
 projects = subparser.add_parser("projects")
 
 sub_projects = subparser.add_parser("subprojects")
-sub_projects.add_argument("project", type=str, nargs="?", default="", help="name of project to"
-                                                                           " print subprojects list")
+sub_projects.add_argument("project", type=str, default="", help="name of project to"
+                                                                " print subprojects list")
 
 totals_cmd = subparser.add_parser("totals")
 totals_cmd.add_argument("-p", "--projects", type=str, nargs="+", default=None, help="name of projects to be printed")
-totals_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
-                                                                       "Either 'active', 'paused' or 'complete'")
-
+totals_cmd.add_argument("-st", "--status", type=str, default=None, help="Filter by project status. "
+                                                                        "Either 'active', 'paused' or 'complete'")
 
 # rename = subparser.add_parser("rename")
 # rename.add_argument("name", type=str, help="existing project's name")
@@ -62,17 +60,16 @@ totals_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, he
 rename_cmd = subparser.add_parser("rename")
 rename_cmd.add_argument("project", type=str, help="existing project's name")
 rename_cmd.add_argument("-s", "--sub_name", type=str, help="list of sub-projects that are tracked")
-rename_cmd.add_argument("-nn","--new_name", type=str, help="new project name")
-rename_cmd.add_argument("-ns","--new_sub_name", type=str, help="new sub-project name")
-
+rename_cmd.add_argument("-nn", "--new_name", type=str, help="new project name")
+rename_cmd.add_argument("-ns", "--new_sub_name", type=str, help="new sub-project name")
 
 delete_proj = subparser.add_parser("delete")
-delete_proj.add_argument("project", type=str, nargs="?", default="", help="name of project to be deleted")
+delete_proj.add_argument("project", type=str, default="", help="name of project to be deleted")
 
 mark_project = subparser.add_parser("mark")
-mark_project.add_argument("project", type=str, nargs="?", default="", help="name of project to update status")
-mark_project.add_argument("status", type=str, nargs="?", default="", help="project status. "
-                                                                          "Either 'active', 'paused' or 'complete'")
+mark_project.add_argument("project", type=str, default="", help="name of project to update status")
+mark_project.add_argument("status", type=str, default="", help="project status. "
+                                                               "Either 'active', 'paused' or 'complete'")
 
 log_cmd = subparser.add_parser("log")
 log_cmd.add_argument("-p", "--projects", type=str, nargs="+", default='all', help="name of project(s) to show.")
@@ -80,28 +77,31 @@ log_cmd.add_argument("-f", "--fromDate", type=str, default=None, help="date to s
 log_cmd.add_argument("-t", "--toDate", type=str, default=None, help="date to start log from")
 log_cmd.add_argument("-pd", "--period", type=str, default=None, help="logs for the last day/week/fortnight/month/year")
 log_cmd.add_argument("-x", "--hide_notes", action="store_true", help="exclude session notes in log output")
-log_cmd.add_argument("-m", "--max_note_length", type=int, default=300, help="maximum session note length before truncation")
+log_cmd.add_argument("-m", "--max_note_length", type=int, default=300,
+                     help="maximum session note length before truncation")
 log_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
-                                                                       "Either 'active', 'paused' or 'complete'")
+                                                                                "Either 'active', 'paused' or "
+                                                                                "'complete'")
 # log_cmd.add_argument("-d", "--days", type=int, nargs="?", default=7, help="number of days, starting from today,"
 #                                                                               " to print back to")
 
 export_cmd = subparser.add_parser("export")
 export_cmd.add_argument("-p", "--projects", type=str, nargs="+", help="name of project(s) to be exported.")
 export_cmd.add_argument("-f", "--file", type=str, help="name of file to save exported project to. "
-                                               "Will be located in the 'Exported' folder,")
+                                                       "Will be located in the 'Exported' folder,")
 
 import_cmd = subparser.add_parser("import")
 import_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="", help="name of project(s) to be imported")
 import_cmd.add_argument("-f", "--file", type=str, help="file to import project(s) from. "
-                                               "(Must be located in the base directory's 'Exported' folder)")
+                                                       "(Must be located in the base directory's 'Exported' folder)")
 
 chart_cmd = subparser.add_parser("chart")
 chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all "
                                                                                     "projects")
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
-chart_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
-                                                                       "Either 'active', 'paused' or 'complete'")
+chart_cmd.add_argument("-st", "--status", type=str, default=None, help="Filter by project status. "
+                                                                       "Either 'active', 'paused' or "
+                                                                       "'complete'")
 
 merge_cmd = subparser.add_parser("merge")
 merge_cmd.add_argument("project1", type=str, help="name of first project to be merged")
@@ -110,8 +110,9 @@ merge_cmd.add_argument("merged_name", type=str, help="name of the merged project
 
 # add sync command
 sync_cmd = subparser.add_parser("sync")
-sync_cmd.add_argument("-f", "--file", type=str, default=None, help="File to sync with. Note you ca add a list of file locations in "
-                                                     "a 'sync.txt' file that will be synced with.")
+sync_cmd.add_argument("-f", "--file", type=str, default=None,
+                      help="File to sync with. Note you ca add a list of file locations in "
+                           "a 'sync.txt' file that will be synced with.")
 sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a network file?")
 
 help_cmd = subparser.add_parser("help")
@@ -191,5 +192,3 @@ elif args.command == 'help':
     help()
 
 print()
-
-
