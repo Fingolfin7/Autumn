@@ -468,9 +468,6 @@ class Projects:
         print(f"Sync successful!")
         return True
 
-
-
-
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
         Print the session histories of projects over a given period.
