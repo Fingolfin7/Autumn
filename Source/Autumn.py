@@ -13,23 +13,23 @@ start.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list o
 
 restart = subparser.add_parser("restart")
 restart.add_argument("index", type=int, nargs='?', default=None, help="restart timer from active timers list. "
-                                                           "timers are ordered from oldest to newest. "
-                                                           "oldest/first timer starts at index 0")
+                                                                      "timers are ordered from oldest to newest. "
+                                                                      "oldest/first timer starts at index 0")
 
 status = subparser.add_parser("status")
 status.add_argument("index", type=int, nargs='?', default=None, help="get status for a timer at a specific index"
-                                                          " in the active timers list. "
-                                                          "oldest/first timer starts at index 0")
+                                                                     " in the active timers list. "
+                                                                     "oldest/first timer starts at index 0")
 
 remove = subparser.add_parser("remove")
 remove.add_argument("index", type=int, nargs='?', default=None, help="remove timer from active timers list. "
-                                                          "timers are ordered from oldest to newest. "
-                                                          "oldest/first timer starts at index 0")
+                                                                     "timers are ordered from oldest to newest. "
+                                                                     "oldest/first timer starts at index 0")
 
 stop = subparser.add_parser("stop")
 stop.add_argument("index", type=int, nargs='?', default=None, help="stop timer from active timers list. "
-                                                        "timers are ordered from oldest to newest. "
-                                                        "oldest/first timer starts at index 0")
+                                                                   "timers are ordered from oldest to newest. "
+                                                                   "oldest/first timer starts at index 0")
 
 track = subparser.add_parser("track")
 track.add_argument('start', type=str, help="Session start time. Format of month-day-year-Hour:Minute")
