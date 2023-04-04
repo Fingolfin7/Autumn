@@ -99,10 +99,11 @@ chart_cmd = subparser.add_parser("chart")
 chart_cmd.add_argument("-p", "--projects", type=str, nargs="+", default="all", help="project names. use 'all' for all "
                                                                                     "projects")
 chart_cmd.add_argument("-t", "--type", type=str, default="pie", help="chart type, either 'pie' or 'bar'")
-chart_cmd.add_argument("-st", "--status", type=str, default=None, help="Filter by project status. "
-                                                                       "Either 'active', 'paused' or "
-                                                                       "'complete'")
-
+chart_cmd.add_argument('-an', "--annotate", action="store_true", help="annotate chart with values (for heatmap values)")
+chart_cmd.add_argument("-ac", "--accuracy", type=int, default=0, help="decimal point accuracy (for heatmap values)")
+chart_cmd.add_argument("-st", "--status", type=str, nargs="?", default=None, help="Filter by project status. "
+                                                                                  "Either 'active', 'paused' or "
+                                                                                  "'complete'")
 merge_cmd = subparser.add_parser("merge")
 merge_cmd.add_argument("project1", type=str, help="name of first project to be merged")
 merge_cmd.add_argument("project2", type=str, help="name of second project to be merged")
@@ -117,78 +118,81 @@ sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a
 
 help_cmd = subparser.add_parser("help")
 
-args = parser.parse_args()
-load_pickles()
+try:
+    args = parser.parse_args()
+    load_pickles()
 
-os.system("")
-print()
+    os.system("")
+    print()
 
-if args.command is None:
-    print(format_text("[_text256]Autumn[reset] is a time tracking tool inspired by Watson\n"
-                      "that allows the user to track the amount of time\n"
-                      "they spend working on a given activity.\n\n"
-                      "[cyan]Usage: AUTUMN COMMAND -h, --help [ARGS]...[reset]\n\n"
-                      "You just have to tell [_text256]Autumn[reset] when you start working\n"
-                      "on your project with the `[green]start[reset]` command, and you can\n"
-                      "stop the timer when you're done with the `[green]stop[reset]` command\n"
-                      "and add an optional session note.\n", 208))
-    help()
-elif args.command == 'start':
-    start_command(args.project, args.subs)
-elif args.command == 'stop':
-    stop_command(args.index) if args.index else stop_command()
-elif args.command == 'status':
-    status_command(args.index) if args.index else status_command()
-elif args.command == 'track':
-    track_project(args.start, args.end, args.project, args.subs, args.note)
-elif args.command == 'remove':
-    remove_timer(args.index)
-elif args.command == 'restart':
-    restart_command(args.index) if args.index else restart_command()
-elif args.command == 'projects':
-    list_projects()
-elif args.command == "WatsonExport":
-    export_to_watson(args.project)
-elif args.command == 'subprojects':
-    list_subs(args.project)
-elif args.command == 'totals':
-    if args.projects:
-        show_totals(args.projects, args.status)
-    elif args.status and not args.projects:
-        show_totals("all", args.status)
-    else:
-        show_totals()
-elif args.command == 'rename':
-    if args.sub_name and args.new_sub_name:
-        rename_subproject(args.project, args.sub_name, args.new_sub_name)
-    elif args.project and args.new_name:
-        rename_project(args.project, args.new_name)
-elif args.command == 'delete':
-    delete_project(args.project)
-elif args.command == 'log':
-    if args.period:
-        get_logs(projects=args.projects, fromDate=get_date_last(args.period), toDate=args.toDate,
-                 status=args.status, sessionNote=not args.hide_notes, noteLength=args.max_note_length)
-    else:
-        get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate,
-                 status=args.status, sessionNote=not args.hide_notes, noteLength=args.max_note_length)
-elif args.command == 'mark':
-    funcs_switch = {'active': mark_project_active,
-                    'paused': mark_project_paused,
-                    'complete': mark_project_complete
-                    }
-    funcs_switch[args.status](args.project)
-elif args.command == 'export':
-    export(args.projects, args.file)
-elif args.command == 'import':
-    import_exported(args.projects, args.file)
-elif args.command == 'chart':
-    chart(args.projects, args.type, args.status)
-elif args.command == 'merge':
-    merge_projects(args.project1, args.project2, args.merged_name)
-elif args.command == 'sync':
-    sync_projects(args.file, not args.remote)
-elif args.command == 'help':
-    help()
+    if args.command is None:
+        print(format_text("[_text256]Autumn[reset] is a time tracking tool inspired by Watson\n"
+                          "that allows the user to track the amount of time\n"
+                          "they spend working on a given activity.\n\n"
+                          "[cyan]Usage: AUTUMN COMMAND -h, --help [ARGS]...[reset]\n\n"
+                          "You just have to tell [_text256]Autumn[reset] when you start working\n"
+                          "on your project with the `[green]start[reset]` command, and you can\n"
+                          "stop the timer when you're done with the `[green]stop[reset]` command\n"
+                          "and add an optional session note.\n", 208))
+        help()
+    elif args.command == 'start':
+        start_command(args.project, args.subs)
+    elif args.command == 'stop':
+        stop_command(args.index) if args.index else stop_command()
+    elif args.command == 'status':
+        status_command(args.index) if args.index else status_command()
+    elif args.command == 'track':
+        track_project(args.start, args.end, args.project, args.subs, args.note)
+    elif args.command == 'remove':
+        remove_timer(args.index)
+    elif args.command == 'restart':
+        restart_command(args.index) if args.index else restart_command()
+    elif args.command == 'projects':
+        list_projects()
+    elif args.command == "WatsonExport":
+        export_to_watson(args.project)
+    elif args.command == 'subprojects':
+        list_subs(args.project)
+    elif args.command == 'totals':
+        if args.projects:
+            show_totals(args.projects, args.status)
+        elif args.status and not args.projects:
+            show_totals("all", args.status)
+        else:
+            show_totals()
+    elif args.command == 'rename':
+        if args.sub_name and args.new_sub_name:
+            rename_subproject(args.project, args.sub_name, args.new_sub_name)
+        elif args.project and args.new_name:
+            rename_project(args.project, args.new_name)
+    elif args.command == 'delete':
+        delete_project(args.project)
+    elif args.command == 'log':
+        if args.period:
+            get_logs(projects=args.projects, fromDate=get_date_last(args.period), toDate=args.toDate,
+                     status=args.status, sessionNote=not args.hide_notes, noteLength=args.max_note_length)
+        else:
+            get_logs(projects=args.projects, fromDate=args.fromDate, toDate=args.toDate,
+                     status=args.status, sessionNote=not args.hide_notes, noteLength=args.max_note_length)
+    elif args.command == 'mark':
+        funcs_switch = {'active': mark_project_active,
+                        'paused': mark_project_paused,
+                        'complete': mark_project_complete
+                        }
+        funcs_switch[args.status](args.project)
+    elif args.command == 'export':
+        export(args.projects, args.file)
+    elif args.command == 'import':
+        import_exported(args.projects, args.file)
+    elif args.command == 'chart':
+        chart(args.projects, args.type, args.status, args.annotate, args.accuracy)
+    elif args.command == 'merge':
+        merge_projects(args.project1, args.project2, args.merged_name)
+    elif args.command == 'sync':
+        sync_projects(args.file, not args.remote)
+    elif args.command == 'help':
+        help()
+except Exception as e:
+    print(format_text("[magenta]Error: " + str(e) + "[reset]"))
 
 print()

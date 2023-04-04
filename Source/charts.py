@@ -1,4 +1,8 @@
 import matplotlib.pyplot as plt
+from datetime import datetime
+import seaborn as sns
+import plotly.express as px
+import pandas as pd
 
 
 def showPieChart(names, totals):
@@ -38,33 +42,55 @@ def showScatterGraph(name_and_hist):
     plt.show()
 
 
+def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annotate=False, accuracy: int = 0):
+    data = []
+    for session in project_histories:
+        day = datetime.strptime(session["Date"], "%m-%d-%Y").strftime("%A")
+        try:
+            time = datetime.strptime(session["End Time"], "%H:%M").strftime("%H:%M")
+        except ValueError:
+            time = datetime.strptime(session["End Time"], "%H:%M:%S").strftime("%H:%M")
+        duration = float(session["Duration"]) / 60
+        data.append((day, time, duration))
+
+    df = pd.DataFrame(columns=['Day', 'End Time', 'Duration'], data=data)
+
+    # Group times into hourly buckets
+    df['End Time'] = pd.to_datetime(df['End Time'], format='%H:%M')
+    df['End Time'] = df['End Time'].dt.floor('H').dt.time
+
+    # Use pd.Categorical to list days of the week in order
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    df['Day'] = pd.Categorical(df['Day'], categories=days, ordered=True)
+
+    heatmap_data = df.pivot_table(index='End Time', columns='Day', values='Duration')
+
+    # Fill empty spots with 0s
+    heatmap_data.fillna(0, inplace=True)
+
+    # Convert index to DatetimeIndex and format x-axis ticks
+    heatmap_data.index = pd.to_datetime(heatmap_data.index, format='%H:%M:%S').strftime('%H:%M')
+
+    sns.heatmap(heatmap_data, annot=annotate, fmt=f'.{accuracy}f', linewidths=0.5)
+    plt.title(title)
+    plt.show()
+
+
 def main():
     from projects import Projects
-    from datetime import datetime
     import random
 
     projects = Projects()
-    names = list(random.choices(projects.get_keys(), k=5))
+    num = random.randint(1, 3)
+    names = list(random.choices(projects.get_keys(), k=num))
     data = []
 
     for name in names:
-        sess_hist = projects.get_project(name)["Session History"]
+        data += projects.get_project(name)['Session History']
 
-        dates = []
-        durations = []
-
-        for sess in sess_hist:
-            dates.append(datetime.strptime(sess['Date'], "%m-%d-%Y"))
-            durations.append(sess['Duration'] / 60)
-
-        data.append(
-            (name, (dates, durations))
-        )
-    for entry in data:
-        print(entry)
-
-    showScatterGraph(data)
+    showHeatMap(data, title=f"Random Projects Heatmap ({', '.join(names)})")
 
 
 if __name__ == "__main__":
     main()
+

@@ -446,6 +446,8 @@ def sync_projects(file: str = None, is_remote: bool = False):
 def export(projects: list, filename: str):
     global project_dict
 
+    if not filename:
+        filename = datetime.today().strftime("%m-%d-%Y") + ".json"
     if not filename.endswith(".json"):
         filename += ".json"
 
@@ -496,14 +498,16 @@ def get_logs(**kwargs):
                      kwargs["status"], kwargs["sessionNote"], kwargs["noteLength"])
 
 
-def chart(projects="all", chart_type="pie", status=None):
+def chart(projects="all", chart_type="pie", status=None, annotate=False, accuracy=0):
     global project_dict
     keys = project_dict.get_keys()
 
     chart_funcs = {
         'bar': showBarGraphs,
         'pie': showPieChart,
-        'scatter': showScatterGraph
+        'scatter': showScatterGraph,
+        'heat': showHeatMap,
+        'heatmap': showHeatMap,
     }
 
     if chart_type not in chart_funcs:
@@ -558,8 +562,15 @@ def chart(projects="all", chart_type="pie", status=None):
 
     if chart_type == "scatter":
         print(f"Projects: {project_names}")
-        chart_funcs[chart_type](names_and_hist)
+        chart_funcs['scatter'](names_and_hist)
     elif chart_type in ['bar', 'pie'] and len(time_totals) > 0:
-        print(f"Projects: {project_names}")
+        print(f"Projects: {projects}")
         print(f"Times: {time_totals}")
-        chart_funcs[chart_type](project_names, time_totals)
+        chart_funcs[chart_type](projects, time_totals)
+    elif chart_type == 'heatmap' or chart_type == 'heat':
+        print(f"Projects: {projects}")
+        data = []
+        for name in projects:
+            data += project_dict.get_project(name)['Session History']
+        chart_funcs['heatmap'](data, annotate=annotate, accuracy=accuracy)
+
