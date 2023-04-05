@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 import seaborn as sns
 import plotly.express as px
 import pandas as pd
@@ -46,12 +46,26 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
     data = []
     for session in project_histories:
         day = datetime.strptime(session["Date"], "%m-%d-%Y").strftime("%A")
-        try:
-            time = datetime.strptime(session["End Time"], "%H:%M").strftime("%H:%M")
-        except ValueError:
-            time = datetime.strptime(session["End Time"], "%H:%M:%S").strftime("%H:%M")
+
+        end_time = datetime.strptime(session["End Time"], "%H:%M:%S")
+        start_time = datetime.strptime(session["Start Time"], "%H:%M:%S")
+        # duration = float(session["Duration"]) / 60
+        # spread = ((end_time - start_time).seconds // 3600) + 1
+        #
+        # for i in range(spread):
+        #     time = (end_time - timedelta(hours=i)).strftime("%H:%M")
+        #     data.append((day, time, duration / spread))
+
         duration = float(session["Duration"]) / 60
-        data.append((day, time, duration))
+        if duration < 1:
+            data.append((day, start_time.strftime("%H:%M"), duration))
+        else:
+            for i in range(int(duration)):
+                time = (start_time + timedelta(hours=i)).strftime("%H:%M")
+                if i == int(duration) - 1 and (duration % 1 != 0):  # if this is the last hour and there is a remainder
+                    data.append((day, time, duration % 1))  # add the remainder of the last hour
+                else:
+                    data.append((day, time, 1))
 
     df = pd.DataFrame(columns=['Day', 'End Time', 'Duration'], data=data)
 
@@ -71,7 +85,7 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
     # Convert index to DatetimeIndex and format x-axis ticks
     heatmap_data.index = pd.to_datetime(heatmap_data.index, format='%H:%M:%S').strftime('%H:%M')
 
-    sns.heatmap(heatmap_data, annot=annotate, fmt=f'.{accuracy}f', linewidths=0.5)
+    sns.heatmap(heatmap_data, annot=annotate, fmt=f'.{accuracy}f')
     plt.title(title)
     plt.show()
 
