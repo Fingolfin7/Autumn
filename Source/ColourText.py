@@ -50,16 +50,21 @@ format_codes = {
 
 
 def format_text(line="", colour_code=0):
-    for code in format_codes:
-        line = re.sub(rf"\[{code}\]", format_codes[code], line)
-        line = re.sub(r"\[_text256\]", u"\u001b[38;5;" + str(colour_code) + "m", line)
-        line = re.sub(r"\[__background256\]", u"\u001b[48;5;" + str(colour_code) + "m", line)
-        matches = re.findall(r"\[_text256_(\d+)_\]", line)
-        for match in matches:
-            line = re.sub(rf"\[_text256_{match}_\]", u"\u001b[38;5;" + match + "m", line)
-        matches = re.findall(r"\[__background256_(\d+)_\]", line)
-        for match in matches:
-            line = re.sub(rf"\[__background256_{match}_\]", u"\u001b[48;5;" + match + "m", line)
+    pattern = '|'.join(rf"\[{code}\]" for code in format_codes)
+    line = re.sub(pattern, lambda match: format_codes[match.group()[1:-1]], line)
+
+    line = re.sub(r"\[_text256\]", u"\u001b[38;5;" + str(colour_code) + "m", line)
+
+    line = re.sub(r"\[_background256\]", u"\u001b[48;5;" + str(colour_code) + "m", line)
+
+    matches = re.findall(r"\[_text256_(\d+)_\]", line)
+    for match in matches:
+        line = re.sub(rf"\[_text256_{match}_\]", u"\u001b[38;5;" + match + "m", line)
+
+    matches = re.findall(r"\[_background256_(\d+)_\]", line)
+    for match in matches:
+        line = re.sub(rf"\[_background256_{match}_\]", u"\u001b[48;5;" + match + "m", line)
+
     return line
 
 
@@ -93,8 +98,8 @@ def main():
 
     while True:
         random_color = randint(0, 255)
-        print("", end=format_text("\r[_text256]All the colours[reset] "
-                                  "[_background256]you want![reset]", random_color))
+        print("", end=format_text("\r[_text256][underline][italic]All[reset][_text256][underline] the colours[reset] "
+                                  "[_background256][bold]you want![reset]", random_color))
         sleep(0.2)
 
 
