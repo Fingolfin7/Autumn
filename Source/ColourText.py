@@ -1,4 +1,5 @@
 import sys
+import re
 
 format_codes = {
     "black": "\u001b[30m",
@@ -50,21 +51,15 @@ format_codes = {
 
 def format_text(line="", colour_code=0):
     for code in format_codes:
-        line = line.replace("[" + code + "]", format_codes.get(code))
-        line = line.replace("[_text256]", u"\u001b[38;5;" + str(colour_code) + "m")
-        if line.find("[_text256_") > -1:
-            startIndex = line.index("[_text256_") + len("[_text256_")
-            endIndex = line.index("_]")
-            colour_code = line[startIndex:endIndex]
-            subStr = f"[_text256_{colour_code}_]"
-            line = line.replace(subStr, u"\u001b[38;5;" + colour_code + "m")
-        line = line.replace("[_background256]", u"\u001b[48;5;" + str(colour_code) + "m")
-        if line.find("[__background256_") > -1:
-            startIndex = line.index("[__background256_") + len("[__background256_")
-            endIndex = line.index("_]")
-            colour_code = line[startIndex:endIndex]
-            subStr = f"[__background256_{colour_code}_]"
-            line = line.replace(subStr, u"\u001b[48;5;" + colour_code + "m")
+        line = re.sub(rf"\[{code}\]", format_codes[code], line)
+        line = re.sub(r"\[_text256\]", u"\u001b[38;5;" + str(colour_code) + "m", line)
+        line = re.sub(r"\[__background256\]", u"\u001b[48;5;" + str(colour_code) + "m", line)
+        matches = re.findall(r"\[_text256_(\d+)_\]", line)
+        for match in matches:
+            line = re.sub(rf"\[_text256_{match}_\]", u"\u001b[38;5;" + match + "m", line)
+        matches = re.findall(r"\[__background256_(\d+)_\]", line)
+        for match in matches:
+            line = re.sub(rf"\[__background256_{match}_\]", u"\u001b[48;5;" + match + "m", line)
     return line
 
 

@@ -564,10 +564,13 @@ def chart(projects="all", chart_type="pie", status=None, annotate=False, accurac
         print(f"Projects: {project_names}")
         chart_funcs['scatter'](names_and_hist)
     elif chart_type in ['bar', 'pie'] and len(time_totals) > 0:
+        if len(project_names) > len(projects):
+            projects = project_names
+
         print(f"Projects: {projects}")
         print(f"Times: {time_totals}")
         chart_funcs[chart_type](projects, time_totals)
-    elif chart_type == 'heatmap' or chart_type == 'heat':
+    elif chart_type in ['heatmap', 'heat']:
         print(f"Projects: {projects}")
         data = []
         for name in projects:
