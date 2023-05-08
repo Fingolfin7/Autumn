@@ -508,6 +508,7 @@ def chart(projects="all", chart_type="pie", status=None, annotate=False, accurac
         'scatter': showScatterGraph,
         'heat': showHeatMap,
         'heatmap': showHeatMap,
+        'calendar': showCalendar,
     }
 
     if chart_type not in chart_funcs:
@@ -570,10 +571,14 @@ def chart(projects="all", chart_type="pie", status=None, annotate=False, accurac
         print(f"Projects: {projects}")
         print(f"Times: {time_totals}")
         chart_funcs[chart_type](projects, time_totals)
-    elif chart_type in ['heatmap', 'heat']:
+    elif chart_type in ['heatmap', 'heat', 'calendar']:
         print(f"Projects: {projects}")
         data = []
         for name in projects:
             data += project_dict.get_project(name)['Session History']
-        chart_funcs['heatmap'](data, annotate=annotate, accuracy=accuracy)
+
+        if chart_type == 'calendar':
+            chart_funcs['calendar'](data, annotate=annotate)
+        else:
+            chart_funcs['heatmap'](data, annotate=annotate, accuracy=accuracy)
 

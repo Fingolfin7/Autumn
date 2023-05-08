@@ -622,7 +622,10 @@ class Projects:
                     print(format_text(f"└───[_text256_26_]{sub}[reset]: {td_str(sub_td)}"))
                 else:
                     print(format_text(f"├───[_text256_26_]{sub}[reset]: {td_str(sub_td)}"))
-
+            sess_count = len(self.__dict[prj]["Session History"])
+            if sess_count > 0:
+                print(format_text(f"*[_text256]Session Count: {sess_count}[reset]\n"
+                                  f"*[_text256]Average duration: {td_str(td/sess_count)}[reset]", 66))
             print("")
 
     def complete_project(self, name):

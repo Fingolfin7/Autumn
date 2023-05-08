@@ -1,9 +1,8 @@
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import seaborn as sns
-import plotly.express as px
 import pandas as pd
-
+import calplot
 
 def showPieChart(names, totals):
     final_total = sum(totals)
@@ -46,15 +45,7 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
     data = []
     for session in project_histories:
         day = datetime.strptime(session["Date"], "%m-%d-%Y").strftime("%A")
-
-        end_time = datetime.strptime(session["End Time"], "%H:%M:%S")
         start_time = datetime.strptime(session["Start Time"], "%H:%M:%S")
-        # duration = float(session["Duration"]) / 60
-        # spread = ((end_time - start_time).seconds // 3600) + 1
-        #
-        # for i in range(spread):
-        #     time = (end_time - timedelta(hours=i)).strftime("%H:%M")
-        #     data.append((day, time, duration / spread))
 
         duration = float(session["Duration"]) / 60
         if duration < 1:
@@ -82,10 +73,59 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
     # Fill empty spots with 0s
     heatmap_data.fillna(0, inplace=True)
 
+    print(heatmap_data)
+
     # Convert index to DatetimeIndex and format x-axis ticks
     heatmap_data.index = pd.to_datetime(heatmap_data.index, format='%H:%M:%S').strftime('%H:%M')
 
     sns.heatmap(heatmap_data, annot=annotate, fmt=f'.{accuracy}f')
+    plt.title(title)
+    plt.show()
+
+
+# function to show calendar heatmap
+def showCalendar(project_histories: list, title: str = "Projects Calender", annotate=False):
+    # Initialize variables
+    current_date = None
+    day_total = 0.0
+    data = []
+    dates = []
+
+    for session in project_histories:
+        if current_date != session['Date']:
+            # Print output for previous date
+            if current_date is not None:
+                data.append(day_total / 60)  # convert to hours
+                dates.append(current_date)
+
+            # Reset variables for new date
+            current_date = session['Date']
+            day_total = 0.0
+
+        # add duration to day total
+        day_total += session['Duration']
+
+    # Print output for last date
+    if current_date is not None:
+        data.append(day_total / 60)
+        dates.append(current_date)
+
+    # use pandas to convert the dates into a datetime format
+    dates = pd.to_datetime(dates, format="%m-%d-%Y")
+
+    # Convert data to DataFrame
+    df = pd.DataFrame(index=dates, data=data, columns=['Duration'])
+
+    # make pandas series from the dataframe
+    calendar_series = pd.Series(df['Duration'].values, index=df.index)
+
+    if annotate:
+        calplot.calplot(calendar_series, cmap='YlGn', textformat='{:.1f}', linewidth=0.5,
+                        yearlabel_kws={'fontname': 'sans-serif'})
+    else:
+        calplot.calplot(calendar_series, cmap='YlGn', linewidth=0.5,
+                        yearlabel_kws={'fontname': 'sans-serif'})
+
     plt.title(title)
     plt.show()
 
@@ -101,10 +141,8 @@ def main():
 
     for name in names:
         data += projects.get_project(name)['Session History']
-
-    showHeatMap(data, title=f"Random Projects Heatmap ({', '.join(names)})")
+    showCalendar(data, title=f"Random Projects Heatmap ({', '.join(names)})")
 
 
 if __name__ == "__main__":
     main()
-
