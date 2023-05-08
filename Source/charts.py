@@ -4,6 +4,7 @@ import seaborn as sns
 import pandas as pd
 import calplot
 
+
 def showPieChart(names, totals):
     final_total = sum(totals)
 
