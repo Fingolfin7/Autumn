@@ -63,7 +63,7 @@ Autumn has many commands including (use `autumn COMMAND -h, --help` for more inf
 - **mark**: mark a project as `active`, `paused` or `complete`
 - **export**: export a project to a file in the `Autumn\Source\Exported` folder
 - **import**: import a project from a file from the `Autumn\Source\Exported` folder
-- **chart**: show a chart of the time spent on (a) project(s) choose between `bar`, `pie`, `heatmaps`, and `scatter` charts
+- **chart**: show a chart of the time spent on (a) project(s) choose between `bar`, `pie`, `heatmap`, `calendar`, and `scatter` charts
 - **merge**: merge two projects
 - **sync**: sync project data with a different file. You can specify a file with the `-f` flag or add a list of them (each location on a new line) in a `sync.txt` file
 - **WatsonExport**: export a project to Watson
