@@ -35,7 +35,7 @@ track = subparser.add_parser("track")
 track.add_argument('start', type=str, help="Session start time. Format of month-day-year-Hour:Minute")
 track.add_argument('end', type=str, help="Session end time. Format of month-day-year-Hour:Minute")
 track.add_argument("project", type=str, help="name of project to be tracked for the session")
-track.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list of sub-projects that are tracked")
+track.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list of subprojects that are tracked")
 track.add_argument("-sn", '--note', type=str, default="", help="Session note.")
 
 WatsonExport = subparser.add_parser("WatsonExport")
@@ -59,12 +59,13 @@ totals_cmd.add_argument("-st", "--status", type=str, default=None, help="Filter 
 # command to rename projects or subprojects
 rename_cmd = subparser.add_parser("rename")
 rename_cmd.add_argument("project", type=str, help="existing project's name")
-rename_cmd.add_argument("-s", "--sub_name", type=str, help="list of sub-projects that are tracked")
-rename_cmd.add_argument("-nn", "--new_name", type=str, help="new project name")
-rename_cmd.add_argument("-ns", "--new_sub_name", type=str, help="new sub-project name")
+rename_cmd.add_argument("-s", "--sub", type=str, help="list of subprojects that are tracked")
+rename_cmd.add_argument("-nn", "--new", type=str, help="new project name")
+rename_cmd.add_argument("-ns", "--new_sub", type=str, help="new sub-project name")
 
 delete_proj = subparser.add_parser("delete")
 delete_proj.add_argument("project", type=str, default="", help="name of project to be deleted")
+delete_proj.add_argument("-s", "--sub", type=str, help="name of subproject to be deleted/removed")
 
 mark_project = subparser.add_parser("mark")
 mark_project.add_argument("project", type=str, default="", help="name of project to update status")
@@ -116,6 +117,7 @@ sync_cmd.add_argument("-f", "--file", type=str, default=None,
                            "a 'sync.txt' file that will be synced with.")
 sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a network file?")
 
+backup_cmd = subparser.add_parser("backup")
 help_cmd = subparser.add_parser("help")
 
 try:
@@ -134,7 +136,7 @@ try:
                           "on your project with the `[green]start[reset]` command, and you can\n"
                           "stop the timer when you're done with the `[green]stop[reset]` command\n"
                           "and add an optional session note.\n", 208))
-        help()
+        help_info()
     elif args.command == 'start':
         start_command(args.project, args.subs)
     elif args.command == 'stop':
@@ -161,12 +163,15 @@ try:
         else:
             show_totals()
     elif args.command == 'rename':
-        if args.sub_name and args.new_sub_name:
-            rename_subproject(args.project, args.sub_name, args.new_sub_name)
-        elif args.project and args.new_name:
-            rename_project(args.project, args.new_name)
+        if args.sub and args.new_sub:
+            rename_subproject(args.project, args.sub, args.new_sub)
+        elif args.project and args.new:
+            rename_project(args.project, args.new)
     elif args.command == 'delete':
-        delete_project(args.project)
+        if args.project and args.sub:
+            remove_subproject(args.project, args.sub)
+        else:
+            delete_project(args.project)
     elif args.command == 'log':
         if args.period:
             get_logs(projects=args.projects, fromDate=get_date_last(args.period), toDate=args.toDate,
@@ -190,9 +195,14 @@ try:
         merge_projects(args.project1, args.project2, args.merged_name)
     elif args.command == 'sync':
         sync_projects(args.file, not args.remote)
+    elif args.command == 'backup':
+        backup_projects()
     elif args.command == 'help':
-        help()
+        help_info()
+
 except Exception as e:
     print(format_text("[magenta]Error: " + str(e) + "[reset]"))
 
 print()
+
+

@@ -73,7 +73,7 @@ class Projects:
 
         if len(dates) == 0:
             return datetime.today()
-        
+
         return dates[-1]
 
     def delete_project(self, name: str):
@@ -115,12 +115,50 @@ class Projects:
         # rename 'Sub Projects' keys
         self.__dict[name]['Sub Projects'][new_sub_name] = self.__dict[name]['Sub Projects'].pop(sub_name)
 
-        #rename all the subproject entries in the session history
+        # rename all the subproject entries in the session history
         for index in range(len(self.__dict[name]['Session History'])):
             self.__dict[name]['Session History'][index]['Sub-Projects'] = \
-                [new_sub_name if x == sub_name else x for x in self.__dict[name]['Session History'][index]['Sub-Projects']]
+                [new_sub_name if x == sub_name else x for x in
+                 self.__dict[name]['Session History'][index]['Sub-Projects']]
 
         self.__save()
+
+    def remove_subproject(self, name, sub_name):
+        project = self.get_project(name)
+        if sub_name not in project['Sub Projects']:
+            print(f"Invalid subproject name! '{sub_name}' does not exist!")
+            return
+
+        old_total_time = project['Total Time']
+
+        # remove session history entries with the subproject IF the subproject is the only one in the entry
+        for session in project['Session History']:
+            if len(session['Sub-Projects']) == 1 and sub_name in session['Sub-Projects']:
+                project['Session History'].remove(session)
+            # otherwise, remove the subproject from the entry
+            elif len(session['Sub-Projects']) > 1 and sub_name in session['Sub-Projects']:
+                session['Sub-Projects'].remove(sub_name)
+            else:  # do nothing
+                pass
+
+        # update the total time
+        project['Total Time'] = 0
+        for session in project['Session History']:
+            project['Total Time'] += float(session['Duration'])
+
+        project['Total Time'] = round(project['Total Time'], 2)
+
+        # remove the subproject from the project dict
+        project['Sub Projects'].pop(sub_name)
+
+        print(format_text(f"Removed subproject [_text256_26_]{sub_name}[reset] from project [bright red]{name}[reset]"))
+        print(format_text(f"Total time for project [bright red]{name}[reset] is now "
+                          f"[_text256_34_]{round(project['Total Time']/60, 2)} hours[reset], "
+                          f"from [_text256_34_]{round(old_total_time/60, 2)} hours[reset]"))
+        # update and save dict
+        self.__dict[name] = project
+        self.__save()
+
 
     def print_json_project(self, name: str):
         project = self.get_project(name)
@@ -229,12 +267,13 @@ class Projects:
 
         def check_date(time):
             # check if date is specified in the time string, if not set it to today
-            if len(time.split(" ")) == 1: # if only time is specified
+            if len(time.split(" ")) == 1:  # if only time is specified
                 time = datetime.strptime(time, '%H:%M')
                 time = time.replace(year=datetime.today().year, month=datetime.today().month, day=datetime.today().day)
                 return time
             else:
                 return datetime.strptime(time, '%m-%d-%Y %H:%M')
+
         def check_year(time):
             time = check_date(time)
             if time.year != datetime.today().year:
@@ -287,25 +326,27 @@ class Projects:
         print(format_text(f"Tracked [bright red]{project}[reset] "
                           f"{sub_projects} from [cyan]{start_time.strftime('%X')}[reset]"
                           f" to [cyan]{end_time.strftime('%X')}[reset] "
-                          f"[_text256_34_]({duration})[reset]"),end="")
+                          f"[_text256_34_]({duration})[reset]"), end="")
 
         print(format_text(f" -> [yellow]{session_note}[reset]" if session_note != "" else ""))
 
-    def merge(self, project1:dict, project2:dict, new_name:str):
+    def merge(self, project1: dict, project2: dict, new_name: str):
         try:
             # get all the keys from both projects and initially set them to 0
-            subs = {**project1['Sub Projects'],  **project2['Sub Projects']}
+            subs = {**project1['Sub Projects'], **project2['Sub Projects']}
             new_subs = {}
             for key in subs:
                 new_subs[key] = 0.0
 
             merged_project = {
                 'Start Date': project1['Start Date'] if
-                datetime.strptime(project1['Start Date'], '%m-%d-%Y') < datetime.strptime(project2['Start Date'], '%m-%d-%Y')
+                datetime.strptime(project1['Start Date'], '%m-%d-%Y') < datetime.strptime(project2['Start Date'],
+                                                                                          '%m-%d-%Y')
                 else project2['Start Date'],
 
                 'Last Updated': project1['Last Updated'] if
-                datetime.strptime(project1['Last Updated'], '%m-%d-%Y') > datetime.strptime(project2['Last Updated'], '%m-%d-%Y')
+                datetime.strptime(project1['Last Updated'], '%m-%d-%Y') > datetime.strptime(project2['Last Updated'],
+                                                                                            '%m-%d-%Y')
                 else project2['Last Updated'],
 
                 "Status": project1['Status'],
@@ -315,11 +356,11 @@ class Projects:
                 "Sub Projects": new_subs,
 
                 "Session History": sorted(
-                    [ # combine session histories and sort by date
+                    [  # combine session histories and sort by date
                         *project1['Session History'],
                         *project2['Session History']
                     ],
-                    #sort array by date and end time
+                    # sort array by date and end time
                     key=lambda x: (datetime.strptime(x['Date'], '%m-%d-%Y'),
                                    datetime.strptime(x["End Time"], "%H:%M:%S")
                                    )
@@ -327,17 +368,17 @@ class Projects:
             }
 
             # remove redundant session histories
-            seen = set() # use a set to keep track of unique sessions
-            new_session_history = [] # create a new session history
+            seen = set()  # use a set to keep track of unique sessions
+            new_session_history = []  # create a new session history
 
             for session in merged_project['Session History']:
                 # create a tuple with the values of the keys used to determine uniqueness
                 key = (session['Date'], session['Start Time'], session['End Time'], tuple(session['Sub-Projects']))
-                if key not in seen: # if the tuple is not in the set, add it and add the session to the new session history
+                if key not in seen:  # if the tuple is not in the set, add it and add the session to the new session history
                     seen.add(key)
                     new_session_history.append(session)
 
-            merged_project['Session History'] = new_session_history # set the new session history
+            merged_project['Session History'] = new_session_history  # set the new session history
 
             # sum up total time from session histories
             for session in merged_project['Session History']:
@@ -345,7 +386,7 @@ class Projects:
                 # do the same for subprojects
                 for sub in merged_project['Sub Projects']:
                     if sub in session['Sub-Projects']:
-                        merged_project['Sub Projects'][sub] += round(float(session['Duration']),2)
+                        merged_project['Sub Projects'][sub] += round(float(session['Duration']), 2)
 
             merged_project['Total Time'] = round(merged_project['Total Time'], 2)
 
@@ -368,7 +409,7 @@ class Projects:
         backup_path = os.path.join(backup_dir, f"backup-{self.__last_save_date().strftime('%m-%d-%Y')}.json")
         try:
             with open(backup_path, 'w') as f:
-               f.write(json.dumps(self.__dict, indent=4))
+                f.write(json.dumps(self.__dict, indent=4))
             return backup_path
         except Exception as e:
             print(f"An error occurred when trying to create a backup projects: {e}")
@@ -444,10 +485,11 @@ class Projects:
         # use the merge method to merge the remote projects with the local projects
         for project in remote_data:
             if project in self.get_keys():
-                self.merge(self.__dict[project], remote_data[project], project) # the project have the same name, so they will be merged into one project
+                self.merge(self.__dict[project], remote_data[project],
+                           project)  # the project have the same name, so they will be merged into one project
                 print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
             else:
-                self.__dict[project] = remote_data[project] # otherwise just add the project to the local projects
+                self.__dict[project] = remote_data[project]  # otherwise just add the project to the local projects
                 print(format_text(f"[green]{project}[reset] added to projects"))
 
         # save the local projects
@@ -459,7 +501,7 @@ class Projects:
                 # compress the data before writing it to the file if the file was originally compressed
                 if is_compressed:
                     f.write(json.dumps(json_zip(self.__dict)))
-                else: # otherwise just write the data to the file
+                else:  # otherwise just write the data to the file
                     f.write(json.dumps(self.__dict, indent=4))
         except Exception as e:
             print(f"An error occurred when trying to update the remote file: {e}")
@@ -525,7 +567,8 @@ class Projects:
 
         def truncate_note(nte, nteLength):
             if len(nte) > nteLength:
-                nte = nte[0: nte.find(" ")] + "... " + nte[nte.rfind(" "):]
+                nte = nte[0: nte.find(" ")] + "[red].[green].[blue].[yellow] " + nte[nte.rfind(" "):]
+                # differentiate truncations from normal ellipses by adding color (RGB)
             return nte
 
         # Initialize variables
@@ -574,7 +617,7 @@ class Projects:
                                         f"[bright red]{project}[reset] "
                                         f"{sub_projects} " +
                                         (f" -> [yellow]{note}[reset]\n" if note != "" and sessionNotes else "\n")
-                            )
+                                        )
 
         # Print output for last date
         if current_date is not None:
@@ -625,7 +668,7 @@ class Projects:
             sess_count = len(self.__dict[prj]["Session History"])
             if sess_count > 0:
                 print(format_text(f"*[_text256]Session Count: {sess_count}[reset]\n"
-                                  f"*[_text256]Average duration: {td_str(td/sess_count)}[reset]", 66))
+                                  f"*[_text256]Average duration: {td_str(td / sess_count)}[reset]", 66))
             print("")
 
     def complete_project(self, name):
@@ -759,7 +802,7 @@ class Projects:
                         print(format_text(f"\n[yellow]{project_name}[reset] cannot be found in '{path}'"))
                         print("Here are all the projects that were found: ")
                         for itr, name in enumerate(json.loads(projects)):
-                            print(format_text(f"[yellow]{itr+1}.{name}[reset]"))
+                            print(format_text(f"[yellow]{itr + 1}.{name}[reset]"))
 
                 else:
                     print(format_text(f"Conflict error! "

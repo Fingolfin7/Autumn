@@ -285,7 +285,7 @@ def show_totals(projects=None, status=None):
         project_dict.get_totals(projects, status)
 
 
-def help():
+def help_info():
     help_str = \
         "[underline][cyan]Here's a list of commands and their descriptions[reset] " \
         "(use `autumn COMMAND -h, --help` for more info on a command):\n" \
@@ -299,18 +299,35 @@ def help():
         "[bold][green]subprojects[reset]: list all subprojects for a given project\n" \
         "[bold][green]totals[reset]: show the total time spent on a project and its subprojects\n" \
         "[bold][green]rename[reset]: rename a project or subproject\n" \
-        "[bold][green]delete[reset]: delete a project\n" \
+        "[bold][green]delete[reset]: delete a project or subproject\n" \
         "[bold][green]log[reset]: show activity logs for the week or a given time period\n" \
         "[bold][green]mark[reset]: mark a project as `active`, `paused` or `complete`\n" \
         "[bold][green]export[reset]: export a project to a file in the 'Exported' folder\n" \
         "[bold][green]import[reset]: import a project from a file from the 'Exported' folder\n" \
-        "[bold][green]chart[reset]: show a chart of the time spent on (a) project(s) choose between bar, pie, and scatter charts\n" \
+        "[bold][green]chart[reset]: show a chart of the time spent on (a) project(s) choose between" \
+        " bar, pie, heatmap, calendar, and scatter charts\n" \
         "[bold][green]merge[reset]: merge two projects\n" \
         "[bold][green]sync[reset]: sync project data with a different file. " \
-        "You can specify a file with the -f flag or add a list of them (each location on a new line) in a sync.txt file\n" \
+        "You can specify a file with the -f flag or add a list of them (each location on a new line) " \
+        "in a sync.txt file\n" \
         "[bold][green]WatsonExport[reset]: export a project to Watson\n" \
         "[bold][green]help[reset]: show this help message"
     print(format_text(help_str))
+
+
+def backup_projects():
+    global project_dict
+
+    if len(project_dict) == 0:
+        print(format_text("No projects created. "
+                          "You can create projects using the [bright green][italics]start[reset] command"))
+        return
+
+    backup_path = project_dict.backup()
+    if backup_path:
+        print(f"Backup created: {backup_path}")
+    else:
+        print("Failed to create backup!")
 
 
 def quit_autumn():
@@ -368,6 +385,22 @@ def rename_project(name: str, new_name: str):
         print(format_text(f"Renamed project [yellow]{name}[reset] to [yellow]{new_name}[reset]"))
 
 
+def remove_subproject(project: str, subproject: str):
+    global project_dict
+
+    if project not in project_dict.get_keys():
+        print(format_text(f"'[bright red]{project}[reset]' does not exist."))
+        return
+    elif project == "":
+        return
+
+    x = input(format_text(f"Are you sure you want to remove subproject [yellow]{subproject}[reset] from "
+                          f"[yellow]{project}[reset]? \n[Y/N]: "))
+
+    if x == "Y" or x == "y":
+        project_dict.remove_subproject(project, subproject)
+
+
 # rename subproject
 def rename_subproject(project: str, subproject: str, new_sub_name: str):
     global project_dict
@@ -382,6 +415,13 @@ def rename_subproject(project: str, subproject: str, new_sub_name: str):
                           f"[_text256_26_]{new_sub_name}[reset]? \n[Y/N]: "))
     if x == "Y" or x == "y":
         project_dict.rename_subproject(project, subproject, new_sub_name)
+
+        # check if the old subproject is still in project and remove it if it is
+        if subproject in project_dict.get_project(project)['Sub Projects']:
+            print(format_text(f"Subproject [_text256_26_]{subproject}[reset] was still in project [birght]{project}[reset]. "
+                              f"Removing it."))
+            project_dict.remove_subproject(project, subproject)
+
         print(
             format_text(f"Renamed subproject [_text256_26_]{subproject}[reset] to [_text256_26_]{new_sub_name}[reset]"))
 
