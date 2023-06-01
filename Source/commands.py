@@ -109,7 +109,7 @@ def remove_timer(index):
         print("No running timers.")
         return
 
-    if not index:
+    if index is None:
         index = -1
 
     try:
@@ -131,6 +131,7 @@ def stop_command(index=-1):
         print("No running timers.")
         return
     try:
+
         timer = timer_list[index]
 
         if timer.proj_name not in project_dict.get_keys():
@@ -486,8 +487,11 @@ def sync_projects(file: str = None, is_remote: bool = False):
 def export(projects: list, filename: str):
     global project_dict
 
-    if not filename:
+    if not filename and len(projects) > 1:
         filename = datetime.today().strftime("%m-%d-%Y") + ".json"
+    elif not filename and len(projects) == 1:
+        filename = projects[0] + ".json"
+
     if not filename.endswith(".json"):
         filename += ".json"
 

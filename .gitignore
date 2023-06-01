@@ -147,3 +147,4 @@ Source/projects.json
 *.json
 /Source/Backups/
 /Source/sync.txt
+active_timers.pkl

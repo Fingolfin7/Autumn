@@ -483,14 +483,17 @@ class Projects:
             return False
 
         # use the merge method to merge the remote projects with the local projects
-        for project in remote_data:
-            if project in self.get_keys():
+        for project in {**self.__dict, **remote_data}:  # combine the project keys of both dicts
+            if project in self.get_keys() and project in remote_data.keys():
                 self.merge(self.__dict[project], remote_data[project],
                            project)  # the project have the same name, so they will be merged into one project
                 print(format_text(f"[yellow]{project}[reset] already exists, merging..."))
+            elif project not in remote_data.keys():
+                print(format_text(f"[green]{project}[reset] not found in remote file, adding..."))
             else:
                 self.__dict[project] = remote_data[project]  # otherwise just add the project to the local projects
                 print(format_text(f"[green]{project}[reset] added to projects"))
+
 
         # save the local projects
         self.__save()

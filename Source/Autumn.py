@@ -140,15 +140,16 @@ try:
     elif args.command == 'start':
         start_command(args.project, args.subs)
     elif args.command == 'stop':
-        stop_command(args.index) if args.index else stop_command()
+        stop_command(args.index) if args.index is not None else stop_command()
     elif args.command == 'status':
-        status_command(args.index) if args.index else status_command()
+        status_command(args.index) if args.index is not None else status_command()
     elif args.command == 'track':
         track_project(args.start, args.end, args.project, args.subs, args.note)
     elif args.command == 'remove':
+        print(args.index)
         remove_timer(args.index)
     elif args.command == 'restart':
-        restart_command(args.index) if args.index else restart_command()
+        restart_command(args.index) if args.index is not None else restart_command()
     elif args.command == 'projects':
         list_projects()
     elif args.command == "WatsonExport":
