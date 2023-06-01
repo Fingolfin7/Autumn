@@ -443,20 +443,25 @@ class Projects:
             return False
 
     # method to sync projects with a remote server or local file
-    def sync(self, filepath, is_remote=False):
+    def sync(self, filepath):
         """
         Sync projects with a local file. Projects from both files will be merged and both files will be updated.
         :param filepath: the path to the remote file (a .json file)
         :return: True if the sync was successful, False if an error occurred
         """
-        # check if the network path is accessible
-        if is_remote:
-            try:
-                with open(filepath, 'r'):
+        # check if the path is accessible
+        try:
+            if not os.path.exists(filepath):
+                if not os.path.isdir(os.path.dirname(filepath)):
+                    os.makedirs(os.path.dirname(filepath))
+                with open(filepath, 'w'):
                     pass
-            except Exception as e:
-                print(f"An error occurred when trying to access the remote file: {e}")
-                return False
+
+            with open(filepath, 'r'):
+                pass
+        except Exception as e:
+            print(f"An error occurred when trying to access the remote file: {e}")
+            return False
 
         print(f"Syncing projects with file: {filepath}")
 
@@ -473,11 +478,13 @@ class Projects:
         # get the data from the remote file
         try:
             with open(filepath, 'r') as f:
-                remote_data = json.load(f)
-                is_compressed = ZIPJSON_KEY in remote_data
-                # check if remote file is compressed and unzip it if it is
-                if is_compressed:
-                    remote_data = json_unzip(remote_data)
+                remote_data = {}
+                if os.stat(filepath).st_size != 0:  # if the file is not empty, load the data
+                    remote_data = json.load(f)
+                    is_compressed = ZIPJSON_KEY in remote_data
+                    # check if remote file is compressed and unzip it if so
+                    if is_compressed:
+                        remote_data = json_unzip(remote_data)
         except Exception as e:
             print(f"An error occurred when trying to open the remote file: {e}")
             return False
@@ -493,7 +500,6 @@ class Projects:
             else:
                 self.__dict[project] = remote_data[project]  # otherwise just add the project to the local projects
                 print(format_text(f"[green]{project}[reset] added to projects"))
-
 
         # save the local projects
         self.__save()

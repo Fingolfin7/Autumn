@@ -115,7 +115,6 @@ sync_cmd = subparser.add_parser("sync")
 sync_cmd.add_argument("-f", "--file", type=str, default=None,
                       help="File to sync with. Note you ca add a list of file locations in "
                            "a 'sync.txt' file that will be synced with.")
-sync_cmd.add_argument("-r", "--remote", action="store_true", help="is the file a network file?")
 
 backup_cmd = subparser.add_parser("backup")
 help_cmd = subparser.add_parser("help")
@@ -195,7 +194,7 @@ try:
     elif args.command == 'merge':
         merge_projects(args.project1, args.project2, args.merged_name)
     elif args.command == 'sync':
-        sync_projects(args.file, not args.remote)
+        sync_projects(args.file)
     elif args.command == 'backup':
         backup_projects()
     elif args.command == 'help':

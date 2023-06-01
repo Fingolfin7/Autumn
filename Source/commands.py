@@ -467,7 +467,7 @@ def merge_projects(first_project: str, second_project: str, new_name: str):
                           f"into [yellow]{new_name}[reset]"))
 
 
-def sync_projects(file: str = None, is_remote: bool = False):
+def sync_projects(file: str = None):
     global project_dict
     if file is None:
         sync_file = os.path.join(get_base_path(), "sync.txt")
@@ -479,9 +479,9 @@ def sync_projects(file: str = None, is_remote: bool = False):
             files = f.readlines()
 
         for file in files:
-            project_dict.sync(file, is_remote)
+            project_dict.sync(file)
     else:
-        project_dict.sync(file, is_remote)
+        project_dict.sync(file)
 
 
 def export(projects: list, filename: str):
