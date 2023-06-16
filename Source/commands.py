@@ -376,6 +376,14 @@ def rename_project(name: str, new_name: str):
     if name not in project_dict.get_keys():
         print(format_text(f"'[bright red]{name}[reset]' does not exist."))
         return
+    elif new_name in project_dict.get_keys():
+        print(format_text(f"A project called '[bright red]{new_name}[reset]' already exists. Merging instead..."))
+        # call merge_projects
+        merge_projects(name, new_name, new_name)
+
+        # then delete the old project
+        project_dict.delete_project(name)
+        return
     elif name == "":
         return
 

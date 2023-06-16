@@ -113,7 +113,12 @@ class Projects:
             return
 
         # rename 'Sub Projects' keys
-        self.__dict[name]['Sub Projects'][new_sub_name] = self.__dict[name]['Sub Projects'].pop(sub_name)
+        if new_sub_name in self.__dict[name]['Sub Projects']:
+            print(f"Subproject name '{new_sub_name}' already exists, merging subprojects...")
+            # merge the subprojects
+            self.__dict[name]['Sub Projects'][new_sub_name] += self.__dict[name]['Sub Projects'].pop(sub_name)
+        else:
+            self.__dict[name]['Sub Projects'][new_sub_name] = self.__dict[name]['Sub Projects'].pop(sub_name)
 
         # rename all the subproject entries in the session history
         for index in range(len(self.__dict[name]['Session History'])):
@@ -158,7 +163,6 @@ class Projects:
         # update and save dict
         self.__dict[name] = project
         self.__save()
-
 
     def print_json_project(self, name: str):
         project = self.get_project(name)
