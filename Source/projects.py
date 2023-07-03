@@ -316,6 +316,10 @@ class Projects:
                 if x not in ["Y", "y"]:
                     return
 
+        if duration < 0:
+            print(format_text(f"Invalid session time. End time cannot be before start time."))
+            return
+
         self.update_project((duration, session_note, start_time, end_time), project, sub_projects, update_date)
 
         sub_projects = [f"[_text256_26_]{sub_proj}[reset]" for sub_proj in sub_projects]
@@ -371,28 +375,7 @@ class Projects:
                 ),
             }
 
-            # remove redundant session histories
-            seen = set()  # use a set to keep track of unique sessions
-            new_session_history = []  # create a new session history
-
-            for session in merged_project['Session History']:
-                # create a tuple with the values of the keys used to determine uniqueness
-                key = (session['Date'], session['Start Time'], session['End Time'], tuple(session['Sub-Projects']))
-                if key not in seen:  # if the tuple is not in the set, add it and add the session to the new session history
-                    seen.add(key)
-                    new_session_history.append(session)
-
-            merged_project['Session History'] = new_session_history  # set the new session history
-
-            # sum up total time from session histories
-            for session in merged_project['Session History']:
-                merged_project['Total Time'] += float(session['Duration'])
-                # do the same for subprojects
-                for sub in merged_project['Sub Projects']:
-                    if sub in session['Sub-Projects']:
-                        merged_project['Sub Projects'][sub] += round(float(session['Duration']), 2)
-
-            merged_project['Total Time'] = round(merged_project['Total Time'], 2)
+            merged_project = self.__remove_duplicate_sessions(merged_project)
 
             self.__dict[new_name] = merged_project
             self.__save()
@@ -432,19 +415,15 @@ class Projects:
             return False
 
         # load the backup file
-        try:
-            with open(backup_path, 'r') as f:
-                backup = json.load(f)
-                # check if the backup is compressed and decompress it if it is
-                if ZIPJSON_KEY in backup:
-                    backup = json_unzip(backup)
+        with open(backup_path, 'r') as f:
+            backup = json.load(f)
+            # check if the backup is compressed and decompress it if it is
+            if ZIPJSON_KEY in backup:
+                backup = json_unzip(backup)
 
-                self.__dict = backup
-                self.__save()
-                return True
-        except Exception as e:
-            print(f"An error occurred when trying to restore the backup: {e}")
-            return False
+            self.__dict = backup  # overwrite the current projects file with the backup
+            self.__save()
+            return True
 
     # method to sync projects with a remote server or local file
     def sync(self, filepath):
@@ -522,6 +501,42 @@ class Projects:
 
         print(f"Sync successful!")
         return True
+
+    @staticmethod
+    def __remove_duplicate_sessions(project: dict):
+        """
+        Private method that removes duplicate sessions from a project.
+        Duplicate sessions are sessions with the same name, date,  start time and end time, and duration.
+        :param project: name of the project to remove duplicates from
+        """
+        if not project:
+            return
+
+        project['Total Time'] = 0
+        for sub in project['Sub Projects']:
+            project['Sub Projects'][sub] = 0
+
+        seen = set()  # use a set to keep track of unique sessions
+        new_session_history = []  # create a new session history
+
+        for session in project['Session History']:
+            # create a tuple with the values of the keys used to determine uniqueness
+            key = (session['Date'], session['Start Time'], session['End Time'], tuple(session['Sub-Projects']))
+            if key not in seen:  # if the tuple is not in the set, add it and add the session to the new session history
+                seen.add(key)
+                new_session_history.append(session)
+
+        project['Session History'] = new_session_history  # set the new session history
+
+        # sum up total time from session histories
+        for session in project['Session History']:
+            project['Total Time'] += float(session['Duration'])
+            for sub in project['Sub Projects']:
+                if sub in session['Sub-Projects']:
+                    project['Sub Projects'][sub] += round(float(session['Duration']))
+
+        project['Total Time'] = round(project['Total Time'], 2)
+        return project  # update the project in the projects dict
 
     def log(self, projects="all", fromDate=None, toDate=None, status=None, sessionNotes=True, noteLength=300):
         """
@@ -724,16 +739,23 @@ class Projects:
         self.__save()
 
     def __sort_dict(self):
+        """
+        Sort the dictionary by key (project name) in alphabetical order.
+        Also call __remove_duplicate_sessions() to remove duplicate sessions when sorting.
+        :return:
+        """
         sorted_keys = sorted(self.get_keys(), key=lambda x: x.lower())
         sorted_dict = {}
 
         for key in sorted_keys:
-            sorted_dict[key] = self.__dict[key]
+            # also remove duplicate sessions when sorting
+            sorted_dict[key] = self.__remove_duplicate_sessions(self.__dict[key])
 
         self.__dict = sorted_dict
 
     def __save(self):
         self.__sort_dict()
+
         # compress and dump json data
         prjct_json = json.dumps(json_zip(self.__dict))
         with open(self.path, "w") as json_writer:

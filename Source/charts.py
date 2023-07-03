@@ -136,8 +136,6 @@ def main():
     import random
 
     projects = Projects()
-    print(len(projects))
-    print(projects)
     num = random.randint(1, 3)
     names = list(random.choices(projects.get_keys(), k=num))
     data = []

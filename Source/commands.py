@@ -331,6 +331,48 @@ def backup_projects():
         print("Failed to create backup!")
 
 
+def restore_projects(backup_path=None, backup_date=None):
+    global project_dict
+
+    if not backup_path and not backup_date:
+        # get the most recent backup from the backup folder
+        backup_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Backups")
+        backup_path = max([os.path.join(backup_dir, f) for f in os.listdir(backup_dir)], key=os.path.getctime)
+    elif backup_date:
+        for f in os.listdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), "Backups")):
+            if backup_date in f:
+                backup_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Backups", f)
+                break
+
+    if not backup_path or not os.path.exists(backup_path):
+        if backup_path:
+            print(format_text(f"Backup: [yellow]{backup_path}[reset] not found. Saved backups:"))
+        elif not backup_path and backup_date:
+            print(format_text(f"Backup for date: [yellow]{backup_date}[reset] not found.\nSaved backups:"))
+
+        basepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Backups")
+        for index, f in enumerate(os.listdir(basepath)):
+            if index == 0:
+                print(format_text(f"Base Directory: [cyan]{basepath}[reset]"))
+            print(format_text(
+                f"[yellow]{index + 1}. {os.path.basename(f)}[reset]"
+            ))
+        return
+
+    print(format_text(f"Restoring backup: [underline][cyan]{backup_path}[reset]"))
+
+    x = input(format_text("[yellow]Restoring a backup will overwrite all current project data. "
+                          "Are you sure you want to continue?[reset]\n[Y/N]: "))
+    if x.lower() != "y":
+        return
+
+    result = project_dict.restore_backup(backup_path)
+    if result:
+        print("Backup restored successfully.")
+    else:
+        print("Failed to restore backup!")
+
+
 def quit_autumn():
     save_pickles()
     exit(0)
@@ -427,8 +469,9 @@ def rename_subproject(project: str, subproject: str, new_sub_name: str):
 
         # check if the old subproject is still in project and remove it if it is
         if subproject in project_dict.get_project(project)['Sub Projects']:
-            print(format_text(f"Subproject [_text256_26_]{subproject}[reset] was still in project [birght]{project}[reset]. "
-                              f"Removing it."))
+            print(format_text(
+                f"Subproject [_text256_26_]{subproject}[reset] was still in project [birght]{project}[reset]. "
+                f"Removing it."))
             project_dict.remove_subproject(project, subproject)
 
         print(
@@ -633,4 +676,3 @@ def chart(projects="all", chart_type="pie", status=None, annotate=False, accurac
             chart_funcs['calendar'](data, annotate=annotate)
         else:
             chart_funcs['heatmap'](data, annotate=annotate, accuracy=accuracy)
-
