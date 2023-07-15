@@ -288,8 +288,8 @@ class Projects:
                     time = time.replace(year=datetime.today().year)
             return time
 
-        start_time = check_year(start_time)
-        end_time = check_year(end_time)
+        start_time = check_year(start_time.strip())
+        end_time = check_year(end_time.strip())
 
         update_date = end_time.strftime("%m-%d-%Y")
         duration = end_time - start_time
