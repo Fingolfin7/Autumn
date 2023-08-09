@@ -311,6 +311,7 @@ def help_info():
         "[bold][green]sync[reset]: sync project data with a different file. " \
         "You can specify a file with the -f flag or add a list of them (each location on a new line) " \
         "in a sync.txt file\n" \
+        "[bold][green]backup[reset]: backup the project.py file to the 'Backups' folder\n"\
         "[bold][green]WatsonExport[reset]: export a project to Watson\n" \
         "[bold][green]help[reset]: show this help message"
     print(format_text(help_str))
