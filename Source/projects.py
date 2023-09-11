@@ -22,11 +22,14 @@ class Projects:
 
         self.__load()
 
+        # run a backup at the end of every month
+
         # if the year is not the same as the year from the last save date,
         # save all the projects of the last year to an archives file
-        if self.__last_save_date().year != datetime.today().year:
+        last_save_date = self.__last_save_date()
+        if last_save_date.year != datetime.today().year:
             archive_dir = os.path.join(get_base_path(), "Archives")
-            archive_file = os.path.join(archive_dir, f"Projects-{self.__last_save_date().year}.json")
+            archive_file = os.path.join(archive_dir, f"Projects-{last_save_date.year}.json")
 
             if not os.path.isdir(archive_dir):
                 os.mkdir(archive_dir)
@@ -40,8 +43,8 @@ class Projects:
                 self.__dict.clear()
                 self.__save()
 
-            print(f"Archived {self.__last_save_date().year} projects to "
-                  f"'Projects-{self.__last_save_date().year}.json' in the Archives directory ({archive_dir}).  ")
+            print(f"Archived {last_save_date.year} projects to "
+                  f"'Projects-{last_save_date.year}.json' in the Archives directory ({archive_dir}).")
 
     def __str__(self):
         return str(self.__dict)
@@ -68,7 +71,7 @@ class Projects:
         return self.__dict[name]
 
     def __last_save_date(self):
-        dates = [datetime.strptime(self.__dict[date]['Last Updated'], "%m-%d-%Y") for date in self.__dict]
+        dates = [datetime.strptime(self.__dict[project]['Last Updated'], "%m-%d-%Y") for project in self.__dict]
         dates.sort()
 
         if len(dates) == 0:
@@ -506,7 +509,7 @@ class Projects:
     def __remove_duplicate_sessions(project: dict):
         """
         Private method that removes duplicate sessions from a project.
-        Duplicate sessions are sessions with the same name, date,  start time and end time, and duration.
+        Duplicate sessions are sessions with the same name, date, start-time, end-time, and duration.
         :param project: name of the project to remove duplicates from
         """
         if not project:
