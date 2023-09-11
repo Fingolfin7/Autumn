@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import seaborn as sns
@@ -44,7 +46,7 @@ def showScatterGraph(name_and_hist):
 
 def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annotate=False, accuracy: int = 0):
     data = []
-    for session in project_histories:
+    for session in project_histories[-7:]:
         day = datetime.strptime(session["Date"], "%m-%d-%Y").strftime("%A")
         start_time = datetime.strptime(session["Start Time"], "%H:%M:%S")
 
@@ -52,9 +54,10 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
         if duration < 1:
             data.append((day, start_time.strftime("%H:%M"), duration))
         else:
-            for i in range(int(duration)):
+            range_val = range(math.ceil(duration))
+            for i in range_val:
                 time = (start_time + timedelta(hours=i)).strftime("%H:%M")
-                if i == int(duration) - 1 and (duration % 1 != 0):  # if this is the last hour and there is a remainder
+                if i == math.ceil(duration) - 1 and (duration % 1 != 0):  # if this is the last hour and there is a remainder
                     data.append((day, time, duration % 1))  # add the remainder of the last hour
                 else:
                     data.append((day, time, 1))
@@ -137,12 +140,13 @@ def main():
 
     projects = Projects()
     num = random.randint(1, 3)
-    names = list(random.choices(projects.get_keys(), k=num))
+    # names = list(random.choices(projects.get_keys(), k=num))
+    names=['Gym']
     data = []
 
     for name in names:
         data += projects.get_project(name)['Session History']
-    showCalendar(data, title=f"Random Projects Heatmap ({', '.join(names)})")
+    showHeatMap(data, title=f"Random Projects Heatmap ({', '.join(names)})")
 
 
 if __name__ == "__main__":
