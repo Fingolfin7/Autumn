@@ -44,23 +44,50 @@ def showScatterGraph(name_and_hist):
     plt.show()
 
 
+
+
+
+
 def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annotate=False, accuracy: int = 0):
     data = []
-    for session in project_histories[-7:]:
+    for session in project_histories:
         day = datetime.strptime(session["Date"], "%m-%d-%Y").strftime("%A")
         start_time = datetime.strptime(session["Start Time"], "%H:%M:%S")
+        start_bucket = start_time.replace(minute=0, second=0)
+        end_time = datetime.strptime(session['End Time'], "%H:%M:%S")
+        end_bucket = end_time.replace(minute=0, second=0)
 
         duration = float(session["Duration"]) / 60
-        if duration < 1:
-            data.append((day, start_time.strftime("%H:%M"), duration))
-        else:
-            range_val = range(math.ceil(duration))
-            for i in range_val:
-                time = (start_time + timedelta(hours=i)).strftime("%H:%M")
-                if i == math.ceil(duration) - 1 and (duration % 1 != 0):  # if this is the last hour and there is a remainder
-                    data.append((day, time, duration % 1))  # add the remainder of the last hour
+
+        def split_duration_into_buckets():
+            buckets = []
+            for i in range(math.ceil(duration)):
+                if i == 0:  # first bucket (partial)
+                    partial_time = 1 - ((start_time - start_bucket).total_seconds() / 3600)
+                    buckets.append([start_bucket, partial_time])
                 else:
-                    data.append((day, time, 1))
+                    buckets.append([start_bucket + timedelta(hours=i), 1])
+
+            partial_time = (end_time - end_bucket).total_seconds() / 3600
+
+            # check if this fraction plus the sum of all bucket fractions in buckets exceeds duration
+            if partial_time + sum([bucket[1] for bucket in buckets]) > duration:
+                # if it does, remove the last bucket from buckets
+                buckets = buckets[:-1]
+
+            buckets.append([end_bucket, partial_time])
+
+            # filter out any buckets with zero duration using a lambda function
+            buckets = list(filter(lambda x: x[1] != 0, buckets))
+
+            # return the list of buckets
+            return buckets
+
+        split_buckets = split_duration_into_buckets()
+
+        # append each bucket with the day to the data list
+        for bucket in split_buckets:
+            data.append([day] + bucket)
 
     df = pd.DataFrame(columns=['Day', 'End Time', 'Duration'], data=data)
 
@@ -141,7 +168,7 @@ def main():
     projects = Projects()
     num = random.randint(1, 3)
     # names = list(random.choices(projects.get_keys(), k=num))
-    names=['Gym']
+    names=['Adaski']
     data = []
 
     for name in names:
