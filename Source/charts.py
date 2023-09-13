@@ -61,24 +61,28 @@ def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annota
 
         def split_duration_into_buckets():
             buckets = []
+            running_total = 0
             for i in range(math.ceil(duration)):
                 if i == 0:  # first bucket (partial)
                     partial_time = 1 - ((start_time - start_bucket).total_seconds() / 3600)
                     buckets.append([start_bucket, partial_time])
+                    running_total += partial_time
                 else:
                     buckets.append([start_bucket + timedelta(hours=i), 1])
+                    running_total += 1
 
             partial_time = (end_time - end_bucket).total_seconds() / 3600
 
             # check if this fraction plus the sum of all bucket fractions in buckets exceeds duration
-            if partial_time + sum([bucket[1] for bucket in buckets]) > duration:
+            if partial_time + running_total > duration:
                 # if it does, remove the last bucket from buckets
                 buckets = buckets[:-1]
 
-            buckets.append([end_bucket, partial_time])
+            if partial_time != 0:
+                buckets.append([end_bucket, partial_time])
 
-            # filter out any buckets with zero duration using a lambda function
-            buckets = list(filter(lambda x: x[1] != 0, buckets))
+            # # filter out any buckets with zero duration using a lambda function
+            # buckets = list(filter(lambda x: x[1] != 0, buckets))
 
             # return the list of buckets
             return buckets
