@@ -44,10 +44,6 @@ def showScatterGraph(name_and_hist):
     plt.show()
 
 
-
-
-
-
 def showHeatMap(project_histories: list, title: str = "Projects Heatmap", annotate=False, accuracy: int = 0):
     data = []
     for session in project_histories:
