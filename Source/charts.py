@@ -167,8 +167,7 @@ def main():
 
     projects = Projects()
     num = random.randint(1, 3)
-    # names = list(random.choices(projects.get_keys(), k=num))
-    names=['Adaski']
+    names = list(random.choices(projects.get_keys(), k=num))
     data = []
 
     for name in names:
