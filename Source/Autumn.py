@@ -35,6 +35,10 @@ track = subparser.add_parser("track")
 track.add_argument('start', type=str, help="Session start time. Format of month-day-year-Hour:Minute")
 track.add_argument('end', type=str, help="Session end time. Format of month-day-year-Hour:Minute")
 track.add_argument("project", type=str, help="name of project to be tracked for the session")
+track.add_argument('-d', '--date', type=str, default=None, help="date of session. Format of month-day-year. Will be "
+                                                                "applied to start and end times. "
+                                                                "'Yesterday/yesterday' can be used as a keyword to "
+                                                                "set the date to yesterday's date.")
 track.add_argument("-s", "--subs", type=str, nargs="+", default=[], help="list of subprojects that are tracked")
 track.add_argument("-sn", '--note', type=str, default="", help="Session note.")
 
@@ -151,7 +155,18 @@ elif args.command == 'stop':
 elif args.command == 'status':
     status_command(args.index) if args.index is not None else status_command()
 elif args.command == 'track':
-    track_project(args.start, args.end, args.project, args.subs, args.note)
+    if args.date and args.date.lower() != "yesterday":  # if date is there and is not yesterday, add that date
+        start = args.date + " " + args.start
+        end = args.date + " " + args.end
+    elif args.date and args.date.lower() == "yesterday": # if date is there and is yesterday, add yesterday's date
+        yesterday = (datetime.today() - timedelta(days=1)).strftime("%m-%d-%Y")
+        start = yesterday + " " + args.start
+        end = yesterday + " " + args.end
+    else:
+        start = args.start
+        end = args.end
+
+    track_project(start, end, args.project, args.subs, args.note)
 elif args.command == 'remove':
     remove_timer(args.index)
 elif args.command == 'restart':
