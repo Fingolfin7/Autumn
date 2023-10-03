@@ -158,7 +158,7 @@ elif args.command == 'track':
     if args.date and args.date.lower() != "yesterday":  # if date is there and is not yesterday, add that date
         start = args.date + " " + args.start
         end = args.date + " " + args.end
-    elif args.date and args.date.lower() == "yesterday": # if date is there and is yesterday, add yesterday's date
+    elif args.date and args.date.lower() == "yesterday":  # if date is there and is yesterday, add yesterday's date
         yesterday = (datetime.today() - timedelta(days=1)).strftime("%m-%d-%Y")
         start = yesterday + " " + args.start
         end = yesterday + " " + args.end
