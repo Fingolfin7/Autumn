@@ -36,7 +36,7 @@ class Timer:
         Restart tracking an existing session timer
         """
         self._start_time = time.time()
-        print(format_text(f"Restated [bright red]{self.proj_name}[reset]"
+        print(format_text(f"Restarted [bright red]{self.proj_name}[reset]"
                           f" {self._formatted_subs} at"
                           f" [_text256_34_]{datetime.today().strftime('%X')}[reset]"))
 
