@@ -85,7 +85,10 @@ def _wrap_note(note: str, *, width: int = 90) -> List[str]:
     note = _normalize_ws(note)
     if not note:
         return []
-    return wrap(note, width=width, break_long_words=False)
+    # Avoid surprising breaks when the note is short; wrap only when necessary.
+    if len(note) <= width:
+        return [note]
+    return wrap(note, width=width, break_long_words=False, break_on_hyphens=False)
 
 
 def _format_subs_bracketed(subs: List[str]) -> str:
@@ -212,11 +215,8 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
                 lines.append(base)
                 continue
 
-            wrapped = _wrap_note(note, width=90)
-            # First line keeps the arrow; subsequent lines indent under the note.
-            lines.append(base + f" -> [autumn.note]{wrapped[0]}[/]")
-            for extra in wrapped[1:]:
-                lines.append(f"{' ' * 6}[autumn.note]{extra}[/]")
+            # Notes are sanitized to single-line text; keep them on one line for stable output.
+            lines.append(base + f" -> [autumn.note]{note}[/]")
 
     return "\n".join(lines)
 

@@ -228,12 +228,12 @@ def log_search(
 @click.option(
     "--start",
     required=True,
-    help="Start time (ISO format: YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM:SS)",
+    help="Start time (e.g. 2026-01-11T22:18:11-05:00, 2026-01-11T22:18:11Z, or 2026-01-11 22:18:11)",
 )
 @click.option(
     "--end",
     required=True,
-    help="End time (ISO format: YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM:SS)",
+    help="End time (e.g. 2026-01-12T02:56:13-05:00, 2026-01-12T02:56:13Z, or 2026-01-12 02:56:13)",
 )
 @click.option("--note", "-n", help="Note for the session")
 def track(project: str, subprojects: tuple, start: str, end: str, note: Optional[str]):
@@ -264,21 +264,99 @@ def track(project: str, subprojects: tuple, start: str, end: str, note: Optional
 
 
 def _normalize_datetime(dt_str: str) -> str:
-    """Normalize datetime string to ISO format."""
-    formats = [
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d",
-    ]
+    """Normalize a user-provided datetime to the server-accepted format.
 
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(dt_str, fmt)
-            return dt.isoformat()
-        except ValueError:
-            continue
+    The current server-side `parse_date_or_datetime()` only accepts:
+      - %m-%d-%Y
+      - %m-%d-%Y %H:%M:%S
+      - %Y-%m-%d
+      - %Y-%m-%d %H:%M:%S
 
-    if "T" in dt_str or ":" in dt_str:
-        return dt_str
+    It does NOT accept ISO-8601 forms like `...T...` or timezone suffixes like `Z`.
 
-    raise ValueError(f"Could not parse datetime: {dt_str}")
+    This function accepts common ISO/space-separated inputs (optionally with timezone)
+    and converts them into `%Y-%m-%d %H:%M:%S`.
+
+    Special keyword:
+      - `now` (case-insensitive) resolves to the current local time.
+      - optional relative offsets: `now-5m`, `now+2h`, `now-1d`.
+
+    Important: if the input includes a timezone (e.g. `Z` or `-05:00`), we convert
+    it to *local time* and then drop the timezone info to match what the server
+    expects.
+    """
+
+    raw = (dt_str or "").strip()
+    if not raw:
+        raise ValueError("Empty datetime")
+
+    # Support `now` keyword (case-insensitive), with optional relative offsets.
+    # Examples: now, NOW, now-5m, now+2h, now-1d
+    lower = raw.lower()
+    if lower == "now" or lower.startswith("now+") or lower.startswith("now-"):
+        base = datetime.now().astimezone().replace(tzinfo=None)
+        if lower == "now":
+            return base.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Parse relative suffix: now(+|-)<int><unit>
+        # units: s, m, h, d
+        import re
+
+        m = re.fullmatch(r"now([+-])(\d+)([smhd])", lower)
+        if not m:
+            raise ValueError(
+                "Invalid now-offset format. Use now, now-5m, now+2h, now-1d, now+30s."
+            )
+
+        sign, amount_s, unit = m.group(1), m.group(2), m.group(3)
+        amount = int(amount_s)
+        seconds = {
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+        }[unit] * amount
+
+        delta = timedelta(seconds=seconds)
+        dt = base + delta if sign == "+" else base - delta
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Normalize common UTC marker for Python parsing.
+    candidate = raw
+    if candidate.endswith("Z"):
+        candidate = candidate[:-1] + "+00:00"
+
+    dt: Optional[datetime]
+
+    # Prefer ISO parsing (handles offsets / fractional seconds)
+    try:
+        dt = datetime.fromisoformat(candidate)
+    except ValueError:
+        dt = None
+
+    if dt is None:
+        formats = [
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+
+    if dt is None:
+        raise ValueError(f"Could not parse datetime: {dt_str}")
+
+    # If timezone-aware, convert to local time then drop tzinfo.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+
+
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
