@@ -27,6 +27,18 @@ class APIClient:
         except Exception:
             self._verify = True
 
+        # If we're explicitly running insecure, hide urllib3's noisy warning.
+        # We'll surface a single, friendlier message in `autumn auth` commands instead.
+        if self._verify is False:
+            try:
+                import warnings
+
+                from urllib3.exceptions import InsecureRequestWarning
+
+                warnings.simplefilter("ignore", InsecureRequestWarning)
+            except Exception:
+                pass
+
         if not self.api_key:
             raise APIError("API key not configured. Run 'autumn auth setup' first.")
     

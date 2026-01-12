@@ -149,7 +149,8 @@ def get_insecure() -> bool:
 
     Controlled by either:
       - env var AUTUMN_INSECURE=1/true/yes/on
-      - config.yaml key `insecure: true`
+      - config.yaml key `tls.insecure: true` (preferred)
+      - config.yaml key `insecure: true` (legacy)
 
     Default: False
     """
@@ -158,6 +159,16 @@ def get_insecure() -> bool:
         return str(env_val).strip().lower() in ("1", "true", "yes", "y", "on")
 
     config = load_config() or {}
+
+    # Preferred nested key: tls.insecure
+    try:
+        tls = config.get("tls")
+        if isinstance(tls, dict) and "insecure" in tls:
+            return bool(tls.get("insecure", False))
+    except Exception:
+        pass
+
+    # Back-compat: top-level insecure
     try:
         return bool(config.get("insecure", False))
     except Exception:

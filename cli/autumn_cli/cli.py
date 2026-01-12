@@ -97,21 +97,37 @@ def setup(api_key: str, base_url: str):
         click.echo("\nWarning: Could not verify API key. Please check your credentials.")
 
 
+def _warn_if_insecure_tls() -> None:
+    """Print a single warning if TLS verification is disabled."""
+    try:
+        from .config import get_insecure
+
+        if get_insecure():
+            click.echo(
+                "Warning: TLS certificate verification is disabled (tls.insecure=true). "
+                "This is insecure; prefer enabling verification when possible.",
+                err=True,
+            )
+    except Exception:
+        pass
+
+
 @auth.command()
 def verify():
     """Verify API key and connection."""
     try:
+        _warn_if_insecure_tls()
         api_key = get_api_key()
         base_url = get_base_url()
-        
+
         if not api_key:
             click.echo("Error: API key not configured. Run 'autumn auth setup' first.", err=True)
             raise click.Abort()
-        
+
         # Try to verify by making a simple API call
         client = APIClient()
         result = client.get_timer_status()
-        
+
         click.echo("✓ Authentication successful!")
         click.echo(f"  Base URL: {base_url}")
         click.echo(f"  API key: {api_key[:8]}...")
@@ -155,6 +171,8 @@ def login(username: str, password: str, base_url: str):
     """Login with username/email + password and store the API token."""
     from .utils.meta_cache import clear_cached_snapshot
     from .utils.user_cache import clear_cached_user
+
+    _warn_if_insecure_tls()
 
     if not username:
         username = click.prompt("Username or email", hide_input=False)
