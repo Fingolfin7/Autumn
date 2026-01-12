@@ -8,9 +8,6 @@ def listOfDates(fromDate: str, toDate: str):
     toDate = datetime.strptime(toDate, "%m-%d-%Y") \
         if toDate else datetime.today()
 
-    # TODO:  if the toDate is earlier than fromDate, and no fromDate is provided,
-    #  set fromDate to the beginning of the current month
-
     # if fromDate > toDate and fromDate and not toDate
 
     if fromDate > toDate:
