@@ -1,5 +1,8 @@
-from autumn_cli.utils.console import console
 from autumn_cli.utils.log_render import render_sessions_list, render_active_timers_list
+from rich.console import Console
+
+# Use a non-color console for stable capture assertions.
+_plain_console = Console(color_system=None, width=200)
 
 
 def test_logs_match_old_style_and_include_notes():
@@ -24,8 +27,8 @@ def test_logs_match_old_style_and_include_notes():
         },
     ]
 
-    with console.capture() as capture:
-        console.print(render_sessions_list(sessions))
+    with _plain_console.capture() as capture:
+        _plain_console.print(render_sessions_list(sessions))
     rendered = capture.get()
 
     # Date header is plain and underlined; ensure it appears.
@@ -57,8 +60,8 @@ def test_status_matches_old_style_without_end_and_with_duration():
         }
     ]
 
-    with console.capture() as capture:
-        console.print(render_active_timers_list(active_sessions))
+    with _plain_console.capture() as capture:
+        _plain_console.print(render_active_timers_list(active_sessions))
     rendered = capture.get()
 
     assert "Started" in rendered

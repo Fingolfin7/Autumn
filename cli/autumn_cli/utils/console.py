@@ -42,11 +42,9 @@ THEME = Theme(
 
 
 # Use a wide default width to avoid hard-wrapping captured output in tests.
-# Also disable ANSI colors to keep captured output stable for assertions.
 console = Console(
     theme=THEME,
     width=200,
-    color_system=None,
 )
 
 

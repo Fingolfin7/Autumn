@@ -2,7 +2,7 @@
 
 import click
 from typing import Optional
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import datetime as _dt
 
 import pytest
 
@@ -45,3 +46,27 @@ def test_normalize_datetime_accepts_timezone_inputs(raw: str):
 def test_normalize_datetime_rejects_gibberish():
     with pytest.raises(ValueError):
         _normalize_datetime("not a date")
+
+
+def test_normalize_datetime_now_keyword_case_insensitive():
+    before = _dt.datetime.now()
+    normalized = _normalize_datetime("NoW")
+    after = _dt.datetime.now()
+
+    # Parse the produced server-format string.
+    produced = _dt.datetime.strptime(normalized, "%Y-%m-%d %H:%M:%S")
+    assert before - _dt.timedelta(seconds=2) <= produced <= after + _dt.timedelta(seconds=2)
+
+
+def test_normalize_datetime_now_offset_minutes():
+    base = _dt.datetime.strptime(_normalize_datetime("now"), "%Y-%m-%d %H:%M:%S")
+    shifted = _dt.datetime.strptime(_normalize_datetime("now-5m"), "%Y-%m-%d %H:%M:%S")
+    diff = base - shifted
+
+    # allow a small amount of drift
+    assert _dt.timedelta(minutes=4, seconds=55) <= diff <= _dt.timedelta(minutes=5, seconds=5)
+
+
+def test_normalize_datetime_now_offset_rejects_bad_format():
+    with pytest.raises(ValueError):
+        _normalize_datetime("now-5x")
