@@ -142,3 +142,24 @@ def set_config_value(key: str, value: Any) -> None:
         cur = cur[part]
     cur[parts[-1]] = value
     save_config(cfg)
+
+
+def get_insecure() -> bool:
+    """Whether to disable TLS certificate verification for API calls.
+
+    Controlled by either:
+      - env var AUTUMN_INSECURE=1/true/yes/on
+      - config.yaml key `insecure: true`
+
+    Default: False
+    """
+    env_val = os.getenv("AUTUMN_INSECURE")
+    if env_val is not None and str(env_val).strip() != "":
+        return str(env_val).strip().lower() in ("1", "true", "yes", "y", "on")
+
+    config = load_config() or {}
+    try:
+        return bool(config.get("insecure", False))
+    except Exception:
+        return False
+

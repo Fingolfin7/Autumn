@@ -16,7 +16,17 @@ class APIClient:
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.api_key = api_key or get_api_key()
         self.base_url = (base_url or get_base_url()).rstrip("/")
-        
+
+        # Only support a simple TLS verify toggle.
+        # Safe-by-default: verify=True unless explicitly configured insecure.
+        self._verify: bool = True
+        try:
+            from .config import get_insecure
+
+            self._verify = not bool(get_insecure())
+        except Exception:
+            self._verify = True
+
         if not self.api_key:
             raise APIError("API key not configured. Run 'autumn auth setup' first.")
     
@@ -47,6 +57,7 @@ class APIClient:
                 params=params,
                 json=json,
                 timeout=30,
+                verify=self._verify,
             )
             response.raise_for_status()
             return response.json()
@@ -94,6 +105,7 @@ class APIClient:
             json={"username": username_or_email, "password": password},
             headers={"Accept": "application/json"},
             timeout=30,
+            verify=self._verify,
         )
         if resp.status_code >= 400:
             try:
