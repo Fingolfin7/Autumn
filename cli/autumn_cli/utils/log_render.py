@@ -229,6 +229,9 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
 
     lines: List[str] = []
     for s in sessions_list:
+        sid = s.get("id")
+        sid_str = f"#{sid} " if sid is not None else ""
+
         project = _session_project(s)
         subs = _session_subs(s)
         dur_str = format_duration_minutes(_duration_minutes(s))
@@ -236,7 +239,7 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
         subs_bracket = _format_subs_bracketed(subs)
 
         lines.append(
-            f"Started [autumn.project]{project}[/] {subs_bracket}, "
+            f"{sid_str}Started [autumn.project]{project}[/] {subs_bracket}, "
             f"[autumn.time]{dur_str}[/] ago"
         )
 
