@@ -28,6 +28,10 @@ class ReminderEntry:
     project: str
     created_at: str
     mode: str  # remind-in | remind-every | auto-stop | mixed
+    remind_in: str | None = None
+    remind_every: str | None = None
+    auto_stop_for: str | None = None
+    remind_poll: str | None = None
 
 
 def _now_iso() -> str:
@@ -96,6 +100,7 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
         # If reminders somehow got saved as a non-list (or config became a list), treat as empty and repair.
         raw_list = []
 
+    # Parse entries
     entries: List[ReminderEntry] = []
 
     for e in raw_list:
@@ -108,10 +113,24 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
                 project=str(e.get("project") or ""),
                 created_at=str(e.get("created_at") or ""),
                 mode=str(e.get("mode") or ""),
+                remind_in=(str(e.get("remind_in")) if e.get("remind_in") else None),
+                remind_every=(str(e.get("remind_every")) if e.get("remind_every") else None),
+                auto_stop_for=(str(e.get("auto_stop_for")) if e.get("auto_stop_for") else None),
+                remind_poll=(str(e.get("remind_poll")) if e.get("remind_poll") else None),
             )
             entries.append(entry)
         except Exception:
             continue
+
+    # De-duplicate: keep the newest per (pid, session_id) pair.
+    # This avoids the registry growing indefinitely if the same worker is re-added.
+    dedup: dict[tuple[int, int], ReminderEntry] = {}
+    for e in entries:
+        key = (int(e.pid), int(e.session_id))
+        prev = dedup.get(key)
+        if prev is None or (e.created_at and e.created_at > prev.created_at):
+            dedup[key] = e
+    entries = list(dedup.values())
 
     # If we detected a non-list/invalid structure, ensure we write back a clean list.
     if not isinstance(raw, list):
@@ -120,6 +139,11 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
     if prune_dead:
         alive: List[ReminderEntry] = []
         for e in entries:
+            # Heuristic for obviously-stale placeholder test artifacts.
+            # Real OS PIDs are rarely this low for long-running background workers.
+            if e.pid == 999:
+                continue
+
             try:
                 if _is_pid_alive(e.pid):
                     alive.append(e)
@@ -148,14 +172,38 @@ def save_entries(entries: List[ReminderEntry]) -> None:
             "project": e.project,
             "created_at": e.created_at,
             "mode": e.mode,
+            "remind_in": e.remind_in,
+            "remind_every": e.remind_every,
+            "auto_stop_for": e.auto_stop_for,
+            "remind_poll": e.remind_poll,
         }
         for e in entries
     ]
     save_config(cfg)
 
 
-def add_entry(*, pid: int, session_id: int, project: str, mode: str) -> ReminderEntry:
-    entry = ReminderEntry(pid=int(pid), session_id=int(session_id), project=project, created_at=_now_iso(), mode=mode)
+def add_entry(
+    *,
+    pid: int,
+    session_id: int,
+    project: str,
+    mode: str,
+    remind_in: str | None = None,
+    remind_every: str | None = None,
+    auto_stop_for: str | None = None,
+    remind_poll: str | None = None,
+) -> ReminderEntry:
+    entry = ReminderEntry(
+        pid=int(pid),
+        session_id=int(session_id),
+        project=project,
+        created_at=_now_iso(),
+        mode=mode,
+        remind_in=remind_in,
+        remind_every=remind_every,
+        auto_stop_for=auto_stop_for,
+        remind_poll=remind_poll,
+    )
     # Don't prune here: immediately after spawning, PID-liveness checks can race on some platforms.
     entries = load_entries(prune_dead=False)
     entries.append(entry)

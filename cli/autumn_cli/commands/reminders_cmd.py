@@ -26,6 +26,21 @@ def list_cmd(as_json: bool) -> None:
     """List active reminder workers."""
     entries = load_entries(prune_dead=True)
 
+    def _details(e) -> str:
+        parts = []
+
+        # Prefer a human-friendly label format.
+        if getattr(e, "remind_every", None):
+            parts.append(f"Every: {e.remind_every}")
+        if getattr(e, "remind_in", None):
+            parts.append(f"In: {e.remind_in}")
+        if getattr(e, "auto_stop_for", None):
+            parts.append(f"For: {e.auto_stop_for}")
+        if getattr(e, "remind_poll", None):
+            parts.append(f"Poll: {e.remind_poll}")
+
+        return " | ".join(parts)
+
     if as_json:
         import json
 
@@ -38,6 +53,10 @@ def list_cmd(as_json: bool) -> None:
                         "project": e.project,
                         "created_at": e.created_at,
                         "mode": e.mode,
+                        "remind_in": getattr(e, "remind_in", None),
+                        "remind_every": getattr(e, "remind_every", None),
+                        "auto_stop_for": getattr(e, "auto_stop_for", None),
+                        "remind_poll": getattr(e, "remind_poll", None),
                     }
                     for e in entries
                 ],
@@ -52,9 +71,12 @@ def list_cmd(as_json: bool) -> None:
 
     console.print("[autumn.title]Active reminders[/]")
     for e in entries:
+        details = _details(e)
+        suffix = f"  [autumn.label]Details:[/] {details}" if details else ""
         console.print(
             f"[autumn.label]PID:[/] {e.pid}  [autumn.label]Session:[/] {e.session_id}  "
             f"[autumn.label]Project:[/] [autumn.project]{e.project}[/]  [autumn.label]Mode:[/] {e.mode}"
+            f"{suffix}"
         )
 
 
@@ -93,4 +115,3 @@ def stop_cmd(pid: int | None, session_id: int | None, stop_all: bool) -> None:
         clear_entries()
 
     console.print(f"[autumn.ok]Stopped {stopped} reminder worker(s).[/]")
-

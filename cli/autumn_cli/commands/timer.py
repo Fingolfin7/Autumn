@@ -152,7 +152,16 @@ def start(
 
             proc = spawn_detached_python_module("autumn_cli.commands.reminder_daemon", args)
             try:
-                add_entry(pid=int(proc.pid), session_id=int(session_id), project=str(project), mode=mode)
+                add_entry(
+                    pid=int(proc.pid),
+                    session_id=int(session_id),
+                    project=str(project),
+                    mode=mode,
+                    remind_in=(str(remind_in) if remind_in else None),
+                    remind_every=(str(remind_every) if remind_every else None),
+                    auto_stop_for=(str(for_) if for_ else None),
+                    remind_poll=str(remind_poll),
+                )
             except Exception:
                 pass
 
