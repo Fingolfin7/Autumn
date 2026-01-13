@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import click
 
 from ..api_client import APIClient
+from ..api_client import APIError
 from ..utils.duration_parse import parse_duration_to_seconds
 from ..utils.notify import send_notification
 from ..utils.formatters import format_duration_minutes
@@ -35,33 +36,69 @@ class Plan:
 
 
 def _is_session_active(client: APIClient, session_id: int) -> bool:
+    """Return True only when we can confidently tell the session is active.
+
+    The reminders worker should self-terminate when:
+    - the session is stopped (inactive/end set)
+    - the session is deleted / not found
+
+    If the status check fails due to a transient error, we default to *inactive*
+    after an "ok: false" response, but still treat exceptions conservatively.
+    """
     try:
         st = client.get_timer_status(session_id=session_id)
+        if not isinstance(st, dict):
+            return False
+
+        # If the server responded but indicates failure, assume the session isn't active.
         if not st.get("ok"):
             return False
 
         one = st.get("session")
         if isinstance(one, dict):
-            active_flag = one.get("active")
-            if active_flag is not None:
-                return bool(active_flag)
+            # If an id is present and doesn't match, assume the session isn't active.
+            try:
+                if one.get("id") is not None and int(one.get("id")) != int(session_id):
+                    return False
+            except Exception:
+                pass
+
+            if "active" in one:
+                return bool(one.get("active"))
+
+            # Fallback: consider active only if end is null/empty.
             return one.get("end") in (None, "")
 
         sessions = st.get("sessions")
         if isinstance(sessions, list):
             for s in sessions:
-                sid = s.get("id") if isinstance(s, dict) else None
+                if not isinstance(s, dict):
+                    continue
+                sid = s.get("id")
                 try:
                     if sid is not None and int(sid) == int(session_id):
                         if "active" in s:
                             return bool(s.get("active"))
+                        # If it's returned in the active list, treat as active.
                         return True
                 except Exception:
                     continue
             return False
 
+        # Last-resort: treat any non-zero active count as active only when filtering isn't supported.
         return bool(st.get("active", 0))
+
+    except APIError as e:
+        # If the server tells us the session doesn't exist anymore, exit.
+        msg = str(e).lower()
+        if "not found" in msg or "session" in msg and "not" in msg and "found" in msg:
+            return False
+        # Otherwise, be conservative.
+        return True
     except Exception:
+        # Network errors shouldn't keep stale reminders running forever.
+        # But we also don't want to kill reminders on a single blip.
+        # Conservative choice here: assume active.
         return True
 
 
@@ -178,14 +215,33 @@ def main(
             send_notification(title=plan.notify_title, message=msg)
             next_remind = None
 
+            # If this daemon was started only for a one-shot reminder, we're done.
+            # (If auto-stop is configured, keep running to potentially stop later.)
+            if plan.remind_every_seconds is None and stop_at is None:
+                log("[autumn] remind-in fired; exiting")
+                return
+
         # Periodic remind
         if next_every is not None and t0 >= next_every:
             msg = (plan.remind_message or "").format(project=plan.project, elapsed=_elapsed_str(client, plan.session_id))
             send_notification(title=plan.notify_title, message=msg)
             next_every += plan.remind_every_seconds or 0
 
-        sleep_seconds(plan.poll_seconds)
-        t0 += plan.poll_seconds
+        # Sleep until the next due event, but cap by poll_seconds.
+        waits: list[int] = []
+        if next_remind is not None and next_remind > t0:
+            waits.append(int(next_remind - t0))
+        if next_every is not None and next_every > t0:
+            waits.append(int(next_every - t0))
+        if stop_at is not None and stop_at > t0:
+            waits.append(int(stop_at - t0))
+
+        wake = min(waits) if waits else int(plan.poll_seconds)
+        # Ensure forward progress and don't sleep longer than poll interval.
+        wake = max(1, min(int(wake), int(plan.poll_seconds)))
+
+        sleep_seconds(wake)
+        t0 += wake
 
 
 if __name__ == "__main__":

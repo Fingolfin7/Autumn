@@ -138,18 +138,82 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
     if prune_dead:
         alive: List[ReminderEntry] = []
+
+        # Optional extra pruning: drop entries whose sessions are no longer active.
+        # This covers cases where a background worker didn't exit for any reason.
+        try:
+            from ..api_client import APIClient, APIError
+
+            client = APIClient()
+        except Exception:
+            client = None
+            APIError = None  # type: ignore[assignment]
+
+        def _session_active(session_id: int) -> bool:
+            if client is None:
+                return True
+            try:
+                st = client.get_timer_status(session_id=session_id)
+                if not isinstance(st, dict) or not st.get("ok"):
+                    return False
+
+                one = st.get("session")
+                if isinstance(one, dict):
+                    if "active" in one:
+                        return bool(one.get("active"))
+                    return one.get("end") in (None, "")
+
+                sessions = st.get("sessions")
+                if isinstance(sessions, list):
+                    for s in sessions:
+                        if not isinstance(s, dict):
+                            continue
+                        sid = s.get("id")
+                        try:
+                            if sid is not None and int(sid) == int(session_id):
+                                if "active" in s:
+                                    return bool(s.get("active"))
+                                return True
+                        except Exception:
+                            continue
+                    return False
+
+                return bool(st.get("active", 0))
+            except Exception as e:
+                # If the backend raises for "session not found", prune.
+                if APIError is not None and isinstance(e, APIError):
+                    msg = str(e).lower()
+                    if "not found" in msg:
+                        return False
+
+                # Otherwise, if we can't check, don't prune.
+                return True
+
         for e in entries:
             # Heuristic for obviously-stale placeholder test artifacts.
             # Real OS PIDs are rarely this low for long-running background workers.
             if e.pid == 999:
                 continue
 
+            # If the process is gone, prune.
+            pid_check_uncertain = False
             try:
-                if _is_pid_alive(e.pid):
-                    alive.append(e)
+                if not _is_pid_alive(e.pid):
+                    continue
             except Exception:
-                # Be conservative: if we cannot check, keep the entry.
+                # Can't check; keep and do not attempt session pruning.
+                pid_check_uncertain = True
+
+            # If PID check is uncertain, keep the entry (best-effort, conservative).
+            if pid_check_uncertain:
                 alive.append(e)
+                continue
+
+            # If the session is no longer active, prune.
+            if not _session_active(e.session_id):
+                continue
+
+            alive.append(e)
 
         if len(alive) != len(entries):
             save_entries(alive)
