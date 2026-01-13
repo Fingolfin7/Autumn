@@ -47,7 +47,7 @@ Documentation = "https://github.com/yourusername/AutumnWeb/blob/main/cli/README.
 Repository = "https://github.com/yourusername/AutumnWeb"
 
 [tool.setuptools]
-packages = ["autumn_cli", "autumn_cli.commands", "autumn_cli.utils"]
+packages = ["autumn_cli", "autumn_cli.commands", "autumn_cli.utils", "autumn_cli.assets"]
 
 [tool.setuptools.package-data]
-autumn_cli = ["py.typed"]
+autumn_cli = ["py.typed", "assets/*.png", "assets/*.ico"]
