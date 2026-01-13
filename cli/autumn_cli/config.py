@@ -22,13 +22,17 @@ def ensure_config_dir():
 def load_config() -> dict:
     """Load configuration from file."""
     ensure_config_dir()
-    
+
     if not CONFIG_FILE.exists():
         return {}
-    
+
     try:
         with open(CONFIG_FILE, "r") as f:
-            return yaml.safe_load(f) or {}
+            data = yaml.safe_load(f) or {}
+            # If config is corrupted (e.g. YAML root is a list), repair by resetting.
+            if not isinstance(data, dict):
+                return {}
+            return data
     except Exception:
         return {}
 
