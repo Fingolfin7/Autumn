@@ -100,6 +100,7 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
     """
     today_proj = activity.get("today_project")
     last_proj = activity.get("last_project")
+    last_session_min = activity.get("last_session_minutes")
     longest_proj = activity.get("longest_project")
     longest_min = activity.get("longest_minutes")
     most_frequent = activity.get("most_frequent_project")
@@ -144,13 +145,35 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
                 f"[autumn.project]{current_proj}[/] was your focus.",
             ])
 
-    # --- Longest session suffixes (if significant) ---
-    if longest_proj and longest_min and float(longest_min) >= 90:
-        hours = float(longest_min) / 60.0
-        possible_suffixes.extend([
-            f"You spent [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Deep work!",
-            f"That [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/] was impressive.",
-        ])
+    # --- Last session suffixes (if recent and significant) ---
+    if last_proj and last_session_min and float(last_session_min) >= 60:
+        hours = float(last_session_min) / 60.0
+        if hours >= 2.0:
+            possible_suffixes.extend([
+                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Nice focus!",
+                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time. Solid work!",
+            ])
+        else:
+            # For sessions between 1-2 hours, just acknowledge
+            possible_suffixes.append(
+                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]."
+            )
+
+    # --- Longest session suffixes (if impressive and different from last) ---
+    if longest_proj and longest_min and float(longest_min) >= 120:
+        # Only show longest if it's significantly different from last session
+        show_longest = True
+        if last_session_min:
+            # Don't show if longest and last are very close (within 10%)
+            if abs(float(longest_min) - float(last_session_min)) / float(longest_min) < 0.1:
+                show_longest = False
+        
+        if show_longest:
+            hours = float(longest_min) / 60.0
+            possible_suffixes.extend([
+                f"Your longest session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Deep work!",
+                f"That [autumn.time]{hours:.1f}h[/] session on [autumn.project]{longest_proj}[/] was impressive.",
+            ])
 
     # --- Streak suffixes ---
     if streak >= 3:
