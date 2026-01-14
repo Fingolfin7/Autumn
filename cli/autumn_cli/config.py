@@ -10,8 +10,9 @@ CONFIG_DIR = Path.home() / ".autumn"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 
-DEFAULT_GREETING_ACTIVITY_WEIGHT = 0.35
-DEFAULT_GREETING_MOON_CAMEO_WEIGHT = 0.15
+DEFAULT_GREETING_GENERAL_WEIGHT = 0.4
+DEFAULT_GREETING_ACTIVITY_WEIGHT = 0.4
+DEFAULT_GREETING_MOON_CAMEO_WEIGHT = 0.2
 
 
 def ensure_config_dir():
@@ -87,6 +88,134 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _normalize_greeting_weights(
+    *,
+    general: float,
+    activity: float,
+    moon_cameo: float,
+) -> tuple[float, float, float, bool]:
+    """Clamp weights to keep the total ≤ 1.0.
+
+    Clamps each weight to 0..1 first, then if the total exceeds 1, reduces the other
+    weights (not the one you just set) proportionally.
+
+    Returns (general, activity, moon_cameo, changed).
+    """
+
+    g = _clamp01(general)
+    a = _clamp01(activity)
+    m = _clamp01(moon_cameo)
+
+    total = g + a + m
+    if total <= 1.0:
+        return g, a, m, (g != general or a != activity or m != moon_cameo)
+
+    return g, a, m, True
+
+
+def set_greeting_weights(
+    *,
+    general: float | None = None,
+    activity: float | None = None,
+    moon_cameo: float | None = None,
+) -> dict:
+    """Set greeting weights, clamping to keep total ≤ 1.0.
+
+    The most recently provided value is kept as-is (after 0..1 clamp). The other
+    weights are proportionally reduced if needed.
+
+    Returns the final weights written to config.
+    """
+
+    config = load_config()
+
+    g = float(config.get("greeting_general_weight", DEFAULT_GREETING_GENERAL_WEIGHT))
+    a = float(config.get("greeting_activity_weight", DEFAULT_GREETING_ACTIVITY_WEIGHT))
+    m = float(config.get("greeting_moon_cameo_weight", DEFAULT_GREETING_MOON_CAMEO_WEIGHT))
+
+    last_key: str | None = None
+    if general is not None:
+        g = general
+        last_key = "general"
+    if activity is not None:
+        a = activity
+        last_key = "activity"
+    if moon_cameo is not None:
+        m = moon_cameo
+        last_key = "moon"
+
+    # Clamp individual inputs
+    g = _clamp01(g)
+    a = _clamp01(a)
+    m = _clamp01(m)
+
+    total = g + a + m
+    if total > 1.0 and last_key is not None:
+        if last_key == "general":
+            fixed = g
+            other_a, other_m = a, m
+            other_total = other_a + other_m
+            remaining = max(0.0, 1.0 - fixed)
+            if other_total > 0:
+                scale = remaining / other_total
+                a = other_a * scale
+                m = other_m * scale
+            else:
+                a = 0.0
+                m = 0.0
+        elif last_key == "activity":
+            fixed = a
+            other_g, other_m = g, m
+            other_total = other_g + other_m
+            remaining = max(0.0, 1.0 - fixed)
+            if other_total > 0:
+                scale = remaining / other_total
+                g = other_g * scale
+                m = other_m * scale
+            else:
+                g = 0.0
+                m = 0.0
+        else:  # moon
+            fixed = m
+            other_g, other_a = g, a
+            other_total = other_g + other_a
+            remaining = max(0.0, 1.0 - fixed)
+            if other_total > 0:
+                scale = remaining / other_total
+                g = other_g * scale
+                a = other_a * scale
+            else:
+                g = 0.0
+                a = 0.0
+
+    # Final safety clamp (float ops may drift)
+    g, a, m, _ = _normalize_greeting_weights(general=g, activity=a, moon_cameo=m)
+
+    config["greeting_general_weight"] = g
+    config["greeting_activity_weight"] = a
+    config["greeting_moon_cameo_weight"] = m
+    save_config(config)
+
+    return {
+        "greeting_general_weight": g,
+        "greeting_activity_weight": a,
+        "greeting_moon_cameo_weight": m,
+    }
+
+
+def get_greeting_general_weight() -> float:
+    """How often greetings prefer general (non-activity, non-moon) lines (0.0-1.0)."""
+    config = load_config()
+    try:
+        return _clamp01(config.get("greeting_general_weight", DEFAULT_GREETING_GENERAL_WEIGHT))
+    except Exception:
+        return DEFAULT_GREETING_GENERAL_WEIGHT
+
+
+def set_greeting_general_weight(value: float) -> float:
+    return float(set_greeting_weights(general=value)["greeting_general_weight"])
+
+
 def get_greeting_activity_weight() -> float:
     """How often greetings prefer activity-based lines (0.0-1.0)."""
     config = load_config()
@@ -97,11 +226,7 @@ def get_greeting_activity_weight() -> float:
 
 
 def set_greeting_activity_weight(value: float) -> float:
-    config = load_config()
-    v = _clamp01(value)
-    config["greeting_activity_weight"] = v
-    save_config(config)
-    return v
+    return float(set_greeting_weights(activity=value)["greeting_activity_weight"])
 
 
 def get_greeting_moon_cameo_weight() -> float:
@@ -114,11 +239,7 @@ def get_greeting_moon_cameo_weight() -> float:
 
 
 def set_greeting_moon_cameo_weight(value: float) -> float:
-    config = load_config()
-    v = _clamp01(value)
-    config["greeting_moon_cameo_weight"] = v
-    save_config(config)
-    return v
+    return float(set_greeting_weights(moon_cameo=value)["greeting_moon_cameo_weight"])
 
 
 def get_config_value(key: str, default: Any = None) -> Any:

@@ -80,14 +80,14 @@ def _moon_phase_name(now: datetime) -> str:
     # 8-phase buckets
     phase_index = int((age / synodic) * 8 + 0.5) % 8
     phases = [
-        "🌑 New Moon",
-        "🌒 Waxing Crescent",
-        "🌓 First Quarter",
-        "🌔 Waxing Gibbous",
-        "🌕 Full Moon",
-        "🌖 Waning Gibbous",
-        "🌗 Last Quarter",
-        "🌘 Waning Crescent",
+        "New Moon",
+        "Waxing Crescent",
+        "First Quarter",
+        "Waxing Gibbous",
+        "Full Moon",
+        "Waning Gibbous",
+        "Last Quarter",
+        "Waning Crescent",
     ]
     return phases[phase_index]
 
@@ -249,13 +249,47 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
     return None
 
 
+def _build_moon_suffix(now: datetime, *, rng: random.Random, moon_cameo_weight: float) -> Optional[str]:
+    """Build a moon-only suffix."""
+
+    moon = _moon_phase_name(now)
+    pool: list[str] = []
+
+    if "Full Moon" in moon or "New Moon" in moon:
+        pool.extend(
+            [
+                f"Enjoying the {moon}?",
+                f"{moon} night energy.",
+                f"{moon} vibes tonight.",
+                f"Perfect {moon} for shipping code.",
+                f"{moon} out there!",
+                f"Coding under the {moon}.",
+            ]
+        )
+    else:
+        if float(moon_cameo_weight) >= 1.0 or rng.random() < float(moon_cameo_weight):
+            pool.extend(
+                [
+                    f"{moon} overhead.",
+                    f"{moon} kind of day.",
+                    f"{moon} aesthetic.",
+                    f"Nice {moon} tonight.",
+                    f"{moon} energy.",
+                    f"Building under the {moon}.",
+                ]
+            )
+
+    return rng.choice(pool) if pool else None
+
+
 def _build_non_activity_suffix(
     now: datetime,
     *,
     rng: random.Random,
     moon_cameo_weight: float = 0.15,
 ) -> Optional[str]:
-    """Build a fun non-activity suffix (moon/season/holiday/time vibe)."""
+    """Build a fun non-activity suffix (season/holiday/time vibe + optional moon)."""
+
     bucket = _time_bucket(now)
     moon = _moon_phase_name(now)
     holiday = _holiday_hint(now)
@@ -275,22 +309,9 @@ def _build_non_activity_suffix(
             f"{season} Take it slow and steady.",
         ])
 
-    # Moon mentions
-    if "Full Moon" in moon or "New Moon" in moon:
-        pool.extend([
-            f"Enjoying the {moon}?",
-            f"{moon} night energy.",
-            f"{moon} vibes tonight.",
-            f"Perfect {moon} for shipping code.",
-        ])
-    else:
-        # occasional non-extreme moon phases
-        if rng.random() < float(moon_cameo_weight):
-            pool.extend([
-                f"{moon} overhead.",
-                f"{moon} kind of day.",
-                f"{moon} aesthetic.",
-            ])
+    moon_suffix = _build_moon_suffix(now, rng=rng, moon_cameo_weight=moon_cameo_weight)
+    if moon_suffix:
+        pool.append(moon_suffix)
 
     # Time-of-day vibe fillers
     if bucket == "morning":
@@ -392,13 +413,36 @@ def _build_non_activity_suffix(
     return rng.choice(pool) if pool else None
 
 
+def _weighted_choice(*, rng: random.Random, items: list[str], weights: list[float]) -> str:
+    if len(items) != len(weights):
+        raise ValueError("items and weights must have same length")
+
+    total = sum(float(w) for w in weights)
+    if total <= 0:
+        raise ValueError("total weight must be > 0")
+
+    r = rng.random() * total
+    upto = 0.0
+    for item, weight in zip(items, weights):
+        w = float(weight)
+        if w <= 0:
+            continue
+        upto += w
+        if upto >= r:
+            return item
+
+    return items[-1]
+
+
 def build_greeting(
     now: datetime,
     activity: Optional[Dict[str, Any]] = None,
     *,
-    activity_weight: float = 0.35,
-    moon_cameo_weight: float = 0.15,
+    general_weight: float = 0.4,
+    activity_weight: float = 0.4,
+    moon_weight: float = 0.2,
 ) -> Greeting:
+
     bucket = _time_bucket(now)
 
     # Per-call RNG for base greeting rotation
@@ -415,13 +459,38 @@ def build_greeting(
 
     base = rng.choice(base_choices)
 
-    # Choose a suffix. We *don't* want activity to dominate.
-    suffix: Optional[str] = None
-    if activity and rng.random() < float(activity_weight):
-        suffix = _build_activity_suffix(activity, now)
+    # Choose which pool we want, then choose inside it.
+    pools: list[str] = []
+    weights: list[float] = []
 
-    if not suffix:
-        suffix = _build_non_activity_suffix(now, rng=rng, moon_cameo_weight=moon_cameo_weight)
+    # General pool (always available)
+    pools.append("general")
+    weights.append(float(general_weight))
+
+    # Activity pool (only if we have activity to talk about)
+    if activity:
+        pools.append("activity")
+        weights.append(float(activity_weight))
+
+    # Moon pool (always available)
+    pools.append("moon")
+    weights.append(float(moon_weight))
+
+    # If the configured weights don't sum to 1, leftover probability becomes general.
+    missing = 1.0 - sum(weights)
+    if missing > 0:
+        weights[0] += missing
+
+    choice = _weighted_choice(rng=rng, items=pools, weights=weights)
+
+    suffix: Optional[str] = None
+    if choice == "activity" and activity:
+        suffix = _build_activity_suffix(activity, now)
+    elif choice == "moon":
+        suffix = _build_moon_suffix(now, rng=rng, moon_cameo_weight=moon_weight)
+    else:
+        suffix = _build_non_activity_suffix(now, rng=rng, moon_cameo_weight=0.0)
+
 
     if suffix:
         line = f"{base} {{username}}! {suffix}"

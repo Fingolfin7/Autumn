@@ -12,6 +12,7 @@ from .config import (
     set_base_url,
     load_config,
     save_config,
+    get_greeting_general_weight,
     get_greeting_activity_weight,
     get_greeting_moon_cameo_weight,
 )
@@ -53,8 +54,9 @@ def cli(ctx: click.Context):
             g = build_greeting(
                 datetime.now(),
                 activity=activity,
+                general_weight=get_greeting_general_weight(),
                 activity_weight=get_greeting_activity_weight(),
-                moon_cameo_weight=get_greeting_moon_cameo_weight(),
+                moon_weight=get_greeting_moon_cameo_weight(),
             )
 
             # Print greeting with username inserted (styled)

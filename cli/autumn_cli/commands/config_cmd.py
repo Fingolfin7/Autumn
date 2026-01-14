@@ -16,10 +16,10 @@ from ..config import (
     load_config,
     get_config_value,
     set_config_value,
+    get_greeting_general_weight,
     get_greeting_activity_weight,
-    set_greeting_activity_weight,
     get_greeting_moon_cameo_weight,
-    set_greeting_moon_cameo_weight,
+    set_greeting_weights,
 )
 from ..utils.console import console
 
@@ -104,6 +104,7 @@ def greeting_show() -> None:
     """Show greeting-related settings."""
     console.print_json(
         data={
+            "greeting_general_weight": get_greeting_general_weight(),
             "greeting_activity_weight": get_greeting_activity_weight(),
             "greeting_moon_cameo_weight": get_greeting_moon_cameo_weight(),
         }
@@ -111,15 +112,42 @@ def greeting_show() -> None:
 
 
 @config_greeting.command("set")
+@click.option("--general-weight", type=float, default=None, help="0..1 (how often general lines are used)")
 @click.option("--activity-weight", type=float, default=None, help="0..1 (how often activity is referenced)")
-@click.option("--moon-cameo-weight", type=float, default=None, help="0..1 (how often non-full/new moon appears)")
-def greeting_set(activity_weight: float | None, moon_cameo_weight: float | None) -> None:
+@click.option("--moon-cameo-weight", type=float, default=None, help="0..1 (how often moon lines appear)")
+def greeting_set(
+    general_weight: float | None,
+    activity_weight: float | None,
+    moon_cameo_weight: float | None,
+) -> None:
     """Set greeting knobs."""
-    updated = {}
-    if activity_weight is not None:
-        updated["greeting_activity_weight"] = set_greeting_activity_weight(activity_weight)
-    if moon_cameo_weight is not None:
-        updated["greeting_moon_cameo_weight"] = set_greeting_moon_cameo_weight(moon_cameo_weight)
+    old_vals = {
+        "greeting_general_weight": get_greeting_general_weight(),
+        "greeting_activity_weight": get_greeting_activity_weight(),
+        "greeting_moon_cameo_weight": get_greeting_moon_cameo_weight(),
+    }
+
+    updated = set_greeting_weights(
+        general=general_weight,
+        activity=activity_weight,
+        moon_cameo=moon_cameo_weight,
+    )
+
+    # Warn if we had to clamp (either per-key or total-sum adjustment)
+    requested = {
+        k: v
+        for k, v in (
+            ("greeting_general_weight", general_weight),
+            ("greeting_activity_weight", activity_weight),
+            ("greeting_moon_cameo_weight", moon_cameo_weight),
+        )
+        if v is not None
+    }
+    clamped_any = any(abs(float(updated[k]) - float(requested[k])) > 1e-9 for k in requested)
+    if clamped_any:
+        console.print(
+            "[autumn.warn]Weights were clamped to keep total ≤ 1.0.[/]"
+        )
 
     if not updated:
         console.print("[autumn.warn]No values provided.[/]")
