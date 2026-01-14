@@ -187,14 +187,22 @@ def _notify_macos(*, title: str, message: str, subtitle: Optional[str]) -> Notif
     if subtitle:
         cmd.extend(["-subtitle", str(subtitle)])
 
-    # Icons on macOS are tricky: some setups ignore -appIcon for Notification Center.
-    # We try both -appIcon (app badge/icon) and -contentImage (thumbnail in the notification)
-    # when we have a usable image.
+    # Important note about icons on macOS (Notification Center):
+    #   - The "app icon" shown next to a notification is typically determined by the *sender* app
+    #     (bundle id) and macOS notification settings.
+    #   - terminal-notifier's -appIcon is best-effort and is ignored on some macOS versions.
+    #   - The most reliable way for Autumn to show its own branding without shipping a signed .app
+    #     bundle is to attach an image via -contentImage (shows as a thumbnail).
     try:
         icon_path = _get_asset_path("autumn_icon.png")
         if icon_path.exists():
-            cmd.extend(["-appIcon", str(icon_path)])
-            cmd.extend(["-contentImage", str(icon_path)])
+            # Best-effort: some versions respect this.
+            if str(get_config_value("notify.macos_use_app_icon", True)).lower() not in ("0", "false", "no", "off"):
+                cmd.extend(["-appIcon", str(icon_path)])
+
+            # Most reliable: shows an Autumn image thumbnail in the notification.
+            if str(get_config_value("notify.macos_use_content_image", True)).lower() not in ("0", "false", "no", "off"):
+                cmd.extend(["-contentImage", str(icon_path)])
     except Exception:
         pass
 
