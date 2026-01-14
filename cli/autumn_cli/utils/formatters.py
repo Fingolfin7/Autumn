@@ -1,11 +1,34 @@
 """Text formatting utilities for CLI output."""
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from rich.table import Table
 
 from .console import console
+
+
+def parse_utc_to_local(iso_string: str) -> Optional[datetime]:
+    """Parse UTC ISO string and convert to local timezone.
+    
+    The server returns dates/times in UTC (with 'Z' suffix).
+    This function converts them to the user's local timezone for display.
+    
+    Args:
+        iso_string: ISO 8601 datetime string, typically with 'Z' suffix
+        
+    Returns:
+        datetime object in local timezone, or None if parsing fails
+    """
+    if not iso_string:
+        return None
+    try:
+        # Parse the ISO string, converting 'Z' to '+00:00' for Python's parser
+        dt_utc = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+        # Convert to local timezone
+        return dt_utc.astimezone()
+    except Exception:
+        return None
 
 
 def format_duration_minutes(minutes: float) -> str:
@@ -38,37 +61,39 @@ def format_duration_hours(hours: float) -> str:
 
 
 def format_datetime(iso_string: str) -> str:
-    """Format ISO datetime string to readable format.
+    """Format ISO datetime string to readable format in local timezone.
 
     Old-CLI-inspired: shorter and easier to scan.
+    Server times are in UTC, this converts to local time for display.
     """
-    try:
-        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+    dt = parse_utc_to_local(iso_string)
+    if dt:
         return dt.strftime("%d %b %Y %H:%M")
-    except Exception:
-        return iso_string
+    return iso_string
 
 
 def format_date(iso_string: str) -> str:
-    """Format ISO date/datetime string to date only."""
-    try:
-        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+    """Format ISO date/datetime string to date only in local timezone."""
+    dt = parse_utc_to_local(iso_string)
+    if dt:
         return dt.strftime("%Y-%m-%d")
-    except Exception:
-        return iso_string
+    return iso_string
 
 
 def format_time_hms(iso_string: str) -> str:
-    """Format an ISO datetime string to time-only (HH:MM:SS)."""
-    try:
-        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+    """Format an ISO datetime string to time-only (HH:MM:SS) in local timezone."""
+    dt = parse_utc_to_local(iso_string)
+    if dt:
         return dt.strftime("%H:%M:%S")
-    except Exception:
-        return iso_string
+    return iso_string
 
 
 def format_log_date_header(iso_date_or_datetime: str) -> str:
-    """Format a date key (YYYY-MM-DD) to 'Weekday DD Month YYYY'."""
+    """Format a date key (YYYY-MM-DD) to 'Weekday DD Month YYYY' in local timezone.
+    
+    Note: This handles both simple date strings (YYYY-MM-DD) and full datetimes.
+    For date-only strings, they're assumed to be in local timezone already.
+    """
     try:
         # Accept either YYYY-MM-DD or a full ISO datetime
         part = iso_date_or_datetime.split("T", 1)[0]

@@ -22,6 +22,7 @@ from .formatters import (
     format_time_hms,
     format_day_total_minutes,
     format_datetime,
+    parse_utc_to_local,
 )
 
 
@@ -38,19 +39,16 @@ def _session_end_iso(session: Dict[str, Any]) -> str:
 
 
 def _parse_iso(dt: str) -> Optional[datetime]:
-    if not dt:
-        return None
-    try:
-        return datetime.fromisoformat(dt.replace("Z", "+00:00"))
-    except Exception:
-        return None
+    """Parse ISO datetime string from server (UTC) to local timezone."""
+    return parse_utc_to_local(dt)
 
 
 def _session_date_key(session: Dict[str, Any]) -> str:
-    """Date key for grouping. Falls back to 'Unknown date'."""
+    """Date key for grouping in local timezone. Falls back to 'Unknown date'."""
     iso = _session_start_iso(session)
     parsed = _parse_iso(iso)
     if parsed:
+        # Use local date for grouping
         return parsed.date().isoformat()
     # If the API sends a non-ISO string, try a cheap split.
     if iso and "T" in iso:

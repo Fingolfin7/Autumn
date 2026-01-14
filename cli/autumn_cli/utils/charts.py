@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import seaborn as sns
 
+# Import our timezone-aware parser
+from .formatters import parse_utc_to_local
+
 # Set style
 sns.set_style("whitegrid")
 try:
@@ -129,8 +132,12 @@ def render_scatter_chart(sessions: List[Dict], title: Optional[str] = None, save
             continue  # Skip sessions without end time
         
         try:
-            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-            end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+            # Convert UTC times to local timezone
+            start_time = parse_utc_to_local(start_time_str)
+            end_time = parse_utc_to_local(end_time_str)
+            
+            if not start_time or not end_time:
+                continue
             
             # Calculate duration - prefer provided duration if available, otherwise compute
             duration_minutes = s.get("duration_minutes") or s.get("duration") or s.get("dur")
@@ -214,10 +221,14 @@ def render_calendar_chart(sessions: List[Dict], title: Optional[str] = None, sav
             continue
         
         try:
-            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-            end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+            # Convert UTC times to local timezone
+            start_time = parse_utc_to_local(start_time_str)
+            end_time = parse_utc_to_local(end_time_str)
             
-            # Get date as YYYY-MM-DD string
+            if not start_time or not end_time:
+                continue
+            
+            # Get date as YYYY-MM-DD string in local timezone
             date_key = start_time.date().isoformat()
             
             # Calculate duration in hours
@@ -349,7 +360,11 @@ def render_heatmap(sessions: List[Dict], title: Optional[str] = None, save_path:
             continue
         
         try:
-            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+            # Convert UTC time to local timezone
+            start_time = parse_utc_to_local(start_time_str)
+            if not start_time:
+                continue
+                
             day_of_week = start_time.weekday()  # 0 = Monday, 6 = Sunday
             hour = start_time.hour
             
