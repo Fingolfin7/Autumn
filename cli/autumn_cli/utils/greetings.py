@@ -80,14 +80,14 @@ def _moon_phase_name(now: datetime) -> str:
     # 8-phase buckets
     phase_index = int((age / synodic) * 8 + 0.5) % 8
     phases = [
-        "New Moon",
-        "Waxing Crescent",
-        "First Quarter",
-        "Waxing Gibbous",
-        "Full Moon",
-        "Waning Gibbous",
-        "Last Quarter",
-        "Waning Crescent",
+        "🌑 New Moon",
+        "🌒 Waxing Crescent",
+        "🌓 First Quarter",
+        "🌔 Waxing Gibbous",
+        "🌕 Full Moon",
+        "🌖 Waning Gibbous",
+        "🌗 Last Quarter",
+        "🌘 Waning Crescent",
     ]
     return phases[phase_index]
 
@@ -231,7 +231,7 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
 
     # --- Moon phase suffixes ---
     moon = _moon_phase_name(now)
-    if moon in ("Full Moon", "New Moon"):
+    if "Full Moon" in moon or "New Moon" in moon:
         possible_suffixes.append(f"Enjoying the {moon}?")
 
     # --- Season/holiday suffixes ---
@@ -276,7 +276,7 @@ def _build_non_activity_suffix(
         ])
 
     # Moon mentions
-    if moon in ("Full Moon", "New Moon"):
+    if "Full Moon" in moon or "New Moon" in moon:
         pool.extend([
             f"Enjoying the {moon}?",
             f"{moon} night energy.",
