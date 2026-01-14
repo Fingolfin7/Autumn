@@ -138,26 +138,42 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
                 f"Still chipping away at [autumn.project]{current_proj}[/]?",
                 f"Back to [autumn.project]{current_proj}[/].",
                 f"[autumn.project]{current_proj}[/] keeping you busy?",
+                f"Another round with [autumn.project]{current_proj}[/]?",
+                f"[autumn.project]{current_proj}[/] time. Let's go!",
+                f"Ready to ship some [autumn.project]{current_proj}[/]?",
             ])
         else:
             possible_suffixes.extend([
                 f"Last worked on [autumn.project]{current_proj}[/].",
                 f"[autumn.project]{current_proj}[/] was your focus.",
+                f"You were cooking on [autumn.project]{current_proj}[/].",
+                f"[autumn.project]{current_proj}[/] had your attention last.",
             ])
 
     # --- Last session suffixes (if recent and significant) ---
     if last_proj and last_session_min and float(last_session_min) >= 60:
         hours = float(last_session_min) / 60.0
-        if hours >= 2.0:
+        if hours >= 3.0:
             possible_suffixes.extend([
-                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Nice focus!",
-                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time. Solid work!",
+                f"Last time: [autumn.time]{hours:.1f}h[/] straight on [autumn.project]{last_proj}[/]. Beast mode!",
+                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last session. You're cooking!",
+                f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{last_proj}[/] session? Chef's kiss.",
+                f"[autumn.time]{hours:.1f}h[/] deep in [autumn.project]{last_proj}[/] last time. Respect.",
+            ])
+        elif hours >= 2.0:
+            possible_suffixes.extend([
+                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Solid focus time!",
+                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. That's the spirit!",
+                f"Crushed [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time.",
+                f"[autumn.project]{last_proj}[/] got [autumn.time]{hours:.1f}h[/] of your energy last session.",
             ])
         else:
-            # For sessions between 1-2 hours, just acknowledge
-            possible_suffixes.append(
-                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]."
-            )
+            # For sessions between 1-2 hours
+            possible_suffixes.extend([
+                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Nice warmup!",
+                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time. Building momentum!",
+                f"Put in [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] recently.",
+            ])
 
     # --- Longest session suffixes (if impressive and different from last) ---
     if longest_proj and longest_min and float(longest_min) >= 120:
@@ -170,19 +186,48 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
         
         if show_longest:
             hours = float(longest_min) / 60.0
-            possible_suffixes.extend([
-                f"Your longest session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Deep work!",
-                f"That [autumn.time]{hours:.1f}h[/] session on [autumn.project]{longest_proj}[/] was impressive.",
-            ])
+            if hours >= 4.0:
+                possible_suffixes.extend([
+                    f"Peak session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Legendary!",
+                    f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] marathon was insane.",
+                    f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]? Absolute unit.",
+                    f"Your [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] session lives rent-free in my head.",
+                ])
+            else:
+                possible_suffixes.extend([
+                    f"Longest session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Deep work mode!",
+                    f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] session hit different.",
+                    f"Peak performance: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/].",
+                    f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/] remains undefeated.",
+                ])
 
     # --- Streak suffixes ---
-    if streak >= 3:
+    if streak >= 7:
+        possible_suffixes.extend([
+            f"[autumn.time]{streak} days[/] straight! You're unstoppable!",
+            f"[autumn.time]{streak}-day streak[/]! Absolutely killing it!",
+            f"Week {streak // 7}+ complete. Legend status!",
+            f"[autumn.time]{streak} days[/] and counting. This is the way.",
+        ])
+    elif streak >= 5:
+        possible_suffixes.extend([
+            f"[autumn.time]{streak} days[/] in a row! Keep the fire burning!",
+            f"[autumn.time]{streak}-day streak[/]! Don't break the chain!",
+            f"[autumn.time]{streak} consecutive days[/]. Momentum is real!",
+        ])
+    elif streak >= 3:
         possible_suffixes.extend([
             f"[autumn.time]{streak} days[/] in a row!",
             f"[autumn.time]{streak}-day streak[/]. Keep it up!",
+            f"Three days strong. Habit forming!",
+            f"[autumn.time]{streak} days[/] straight. You're on a roll!",
         ])
     elif streak == 2:
-        possible_suffixes.append(f"Two days in a row. Building a habit?")
+        possible_suffixes.extend([
+            f"Two days in a row. Building a habit?",
+            f"Back-to-back days. Consistency unlocked!",
+            f"Day two! The hardest part is starting.",
+        ])
 
     # --- Moon phase suffixes ---
     moon = _moon_phase_name(now)
@@ -235,6 +280,8 @@ def _build_non_activity_suffix(
         pool.extend([
             f"Enjoying the {moon}?",
             f"{moon} night energy.",
+            f"{moon} vibes tonight.",
+            f"Perfect {moon} for shipping code.",
         ])
     else:
         # occasional non-extreme moon phases
@@ -242,6 +289,7 @@ def _build_non_activity_suffix(
             pool.extend([
                 f"{moon} overhead.",
                 f"{moon} kind of day.",
+                f"{moon} aesthetic.",
             ])
 
     # Time-of-day vibe fillers
@@ -255,6 +303,12 @@ def _build_non_activity_suffix(
             "Tiny steps, big momentum.",
             "Good day to write clean code.",
             "Start small. Finish strong.",
+            "Morning energy is undefeated.",
+            "Ready to cook?",
+            "Time to build something cool.",
+            "New day, new commits.",
+            "The early bird ships features.",
+            "Sunrise and code — name a better duo.",
         ])
     elif bucket == "afternoon":
         pool.extend([
@@ -265,6 +319,11 @@ def _build_non_activity_suffix(
             "A quick win would be nice.",
             "One good session can change the whole day.",
             "Hydrate. Stretch. Then crush it.",
+            "Afternoon grind hits different.",
+            "Post-lunch flow state incoming?",
+            "Second wind energy.",
+            "The zone is calling.",
+            "Perfect time for a PR.",
         ])
     elif bucket == "evening":
         pool.extend([
@@ -275,6 +334,11 @@ def _build_non_activity_suffix(
             "Evening focus hits different.",
             "Last push, then rest.",
             "Ship it, then chill.",
+            "Golden hour coding.",
+            "Finish strong!",
+            "End the day with a win.",
+            "One more commit before bed?",
+            "Prime deep-work hours.",
         ])
     else:
         pool.extend([
@@ -285,6 +349,12 @@ def _build_non_activity_suffix(
             "Just you and the keyboard.",
             "Tiny commit energy.",
             "Soft music, sharp thinking.",
+            "Night owl mode: activated.",
+            "3am code hits different.",
+            "The world's asleep. Time to build.",
+            "Burning the midnight oil?",
+            "Late-night genius hours.",
+            "Dark mode and deep thoughts.",
         ])
 
     # General autumn-y / cozy / productive lines
@@ -300,6 +370,23 @@ def _build_non_activity_suffix(
         "Less doomscroll, more deep work.",
         "Your future self will thank you.",
         "Trust the process.",
+        "You got this.",
+        "Ship something today.",
+        "Make it work, then make it better.",
+        "Commit early, commit often.",
+        "Progress over perfection.",
+        "The code won't write itself.",
+        "One line at a time.",
+        "Debug mode: ON.",
+        "Build in public, build with purpose.",
+        "Flow state awaits.",
+        "Every expert was once a beginner.",
+        "Coffee in, code out.",
+        "Refactor your way to glory.",
+        "Make those tests green.",
+        "Document as you go.",
+        "Clean code, clear mind.",
+        "Solve problems. Ship value.",
     ])
 
     return rng.choice(pool) if pool else None
