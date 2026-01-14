@@ -27,6 +27,7 @@ except ImportError:
     import importlib_resources
 
 from .notify_debug import log_notify_event
+from ..config import get_config_value
 
 
 @dataclass(frozen=True)
@@ -108,63 +109,106 @@ def _get_asset_path(asset_name: str) -> Path:
         return asset_path
 
 
+def _ensure_terminal_notifier_available(*, auto_install: bool = True) -> tuple[str | None, str | None]:
+    """Return path to `terminal-notifier` if available.
+
+    If it's missing and we're on macOS, optionally try to install it via Homebrew.
+
+    Returns:
+      (path, error_message)
+    """
+
+    terminal_notifier = shutil.which("terminal-notifier")
+    if terminal_notifier:
+        return terminal_notifier, None
+
+    if not auto_install:
+        return None, "terminal-notifier not found. Install it with: brew install terminal-notifier"
+
+    brew = shutil.which("brew")
+    if not brew:
+        return (
+            None,
+            "terminal-notifier not found and Homebrew (brew) isn't installed. "
+            "Install Homebrew from https://brew.sh then run: brew install terminal-notifier",
+        )
+
+    try:
+        subprocess.run(
+            [brew, "install", "terminal-notifier"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=300,
+        )
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
+        return (
+            None,
+            "Failed to install terminal-notifier via Homebrew. "
+            "Try running manually: brew install terminal-notifier\n" + err.strip(),
+        )
+    except Exception as e:
+        return (
+            None,
+            "Failed to install terminal-notifier via Homebrew. "
+            "Try running manually: brew install terminal-notifier\n" + str(e),
+        )
+
+    terminal_notifier = shutil.which("terminal-notifier")
+    if not terminal_notifier:
+        return (
+            None,
+            "Homebrew finished but terminal-notifier still wasn't found on PATH. "
+            "Try opening a new terminal, or run: brew install terminal-notifier",
+        )
+
+    log_notify_event("macos notify: installed terminal-notifier via brew")
+    return terminal_notifier, None
+
+
 def _notify_macos(*, title: str, message: str, subtitle: Optional[str]) -> NotifyResult:
     # Use terminal-notifier for reliable macOS notifications
 
-    # 1) Check if terminal-notifier is installed
-    terminal_notifier = shutil.which("terminal-notifier")
-
-    # 2) If not installed, try to install via Homebrew
+    terminal_notifier, err = _ensure_terminal_notifier_available(auto_install=True)
     if terminal_notifier is None:
-        brew = shutil.which("brew")
-        if brew:
-            try:
-                proc = subprocess.run(
-                    [brew, "install", "terminal-notifier"],
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=300,
-                )
-                terminal_notifier = shutil.which("terminal-notifier")
-                log_notify_event("macos notify: installed terminal-notifier via brew")
-            except Exception as e:
-                err_bytes = e.stderr if hasattr(e, 'stderr') else b""
-                err = err_bytes.decode("utf-8", errors="replace") if err_bytes else str(e)
-                log_notify_event(f"macos notify: brew install failed: {err}")
-                return NotifyResult(
-                    ok=False,
-                    supported=False,
-                    method="terminal-notifier",
-                    error=f"Failed to install terminal-notifier. Please run: brew install terminal-notifier"
-                )
-        else:
-            log_notify_event("macos notify: brew not found")
-            return NotifyResult(
-                ok=False,
-                supported=False,
-                method="terminal-notifier",
-                error="Homebrew not found. Install terminal-notifier manually: https://github.com/julienXX/terminal-notifier"
-            )
+        log_notify_event(f"macos notify: terminal-notifier unavailable: {err}")
+        return NotifyResult(ok=False, supported=False, method="terminal-notifier", error=err)
 
-    # 3) Get the icon path from assets
-    icon_path = _get_asset_path("autumn_icon.png")
-
-    # 4) Build the command
-    cmd = [
+    # Build the *minimal* command first (this mirrors the manual invocation that works).
+    cmd: list[str] = [
         str(terminal_notifier),
-        "-title", str(title),
-        "-message", str(message),
-        "-appIcon", str(icon_path),
-        "-sender", "com.apple.terminal",
+        "-title",
+        str(title),
+        "-message",
+        str(message),
     ]
 
     if subtitle:
         cmd.extend(["-subtitle", str(subtitle)])
 
-    # 5) Run the command
+    # Icons on macOS are tricky: some setups ignore -appIcon for Notification Center.
+    # We try both -appIcon (app badge/icon) and -contentImage (thumbnail in the notification)
+    # when we have a usable image.
     try:
-        proc = subprocess.run(
+        icon_path = _get_asset_path("autumn_icon.png")
+        if icon_path.exists():
+            cmd.extend(["-appIcon", str(icon_path)])
+            cmd.extend(["-contentImage", str(icon_path)])
+    except Exception:
+        pass
+
+    # Sender is optional because forcing it can cause macOS to suppress notifications.
+    # For Apple Terminal specifically, the bundle id is typically: com.apple.Terminal
+    sender = os.getenv("AUTUMN_NOTIFY_SENDER") or get_config_value("notify.macos_sender")
+    if sender:
+        cmd.extend(["-sender", str(sender)])
+
+    log_notify_event(f"macos notify: cmd={' '.join(cmd)}")
+
+    # Run the command
+    try:
+        subprocess.run(
             cmd,
             check=True,
             stdout=subprocess.DEVNULL,
