@@ -15,7 +15,7 @@ from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
 @click.pass_context
 @click.option(
     "--period",
-    "-p",
+    "-P",
     type=click.Choice(
         ["day", "week", "fortnight", "month", "lunar cycle", "quarter", "year", "all"],
         case_sensitive=False,
@@ -23,7 +23,8 @@ from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
     default="week",
     help="Time period (default: week)",
 )
-@click.option("--project", help="Filter by project name")
+@click.option("--project", "-p", help="Filter by project name")
+
 @click.option("--context", "-c", help="Filter by context (name or id)")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
@@ -140,8 +141,9 @@ def log(
 
 
 @log.command("search")
-@click.option("--project", help="Filter by project name")
+@click.option("--project", "-p", help="Filter by project name")
 @click.option("--context", "-c", help="Filter by context (name or id)")
+
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
@@ -251,9 +253,10 @@ def track(project: str, subprojects: tuple, start: str, end: str, note: Optional
             session = result.get("session", {})
             duration = session.get("elapsed") or session.get("duration_minutes", 0)
             console.print("[autumn.ok]Session tracked.[/]")
-            console.print(f"[autumn.label]ID:[/] {session.get('id')}")
-            console.print(f"[autumn.label]Project:[/] {project}")
-            console.print(f"[autumn.label]Duration:[/] {duration} minutes")
+            console.print(f"[autumn.label]ID:[/] [autumn.id]{session.get('id')}[/]")
+            console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
+            console.print(f"[autumn.label]Duration:[/] [autumn.duration]{duration} minutes[/]")
+
         else:
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
     except APIError as e:

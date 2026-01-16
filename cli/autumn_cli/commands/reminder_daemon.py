@@ -25,7 +25,7 @@ from ..utils.scheduler import sleep_seconds
 
 @dataclass(frozen=True)
 class Plan:
-    session_id: int
+    session_id: int | None
     project: str
     notify_title: str
     remind_in_seconds: int | None
@@ -35,7 +35,7 @@ class Plan:
     poll_seconds: int
 
 
-def _is_session_active(client: APIClient, session_id: int) -> bool:
+def _is_session_active(client: APIClient, session_id: int | None) -> bool:
     """Return True only when we can confidently tell the session is active.
 
     The reminders worker should self-terminate when:
@@ -45,8 +45,16 @@ def _is_session_active(client: APIClient, session_id: int) -> bool:
     If the status check fails due to a transient error, we default to *inactive*
     after an "ok: false" response, but still treat exceptions conservatively.
     """
+    # Standalone reminder (no session) -> always "active" until task done.
+    if session_id is None:
+        return True
+
     try:
-        st = client.get_timer_status(session_id=session_id)
+
+        # Fetch all active sessions. This avoids ambiguity where querying by ID
+        # might raise an APIError (e.g. 404) if the session is stopped, which
+        # we might mistakenly swallow as a network error.
+        st = client.get_timer_status(session_id=None)
         if not isinstance(st, dict):
             return False
 
@@ -54,21 +62,7 @@ def _is_session_active(client: APIClient, session_id: int) -> bool:
         if not st.get("ok"):
             return False
 
-        one = st.get("session")
-        if isinstance(one, dict):
-            # If an id is present and doesn't match, assume the session isn't active.
-            try:
-                if one.get("id") is not None and int(one.get("id")) != int(session_id):
-                    return False
-            except Exception:
-                pass
-
-            if "active" in one:
-                return bool(one.get("active"))
-
-            # Fallback: consider active only if end is null/empty.
-            return one.get("end") in (None, "")
-
+        # Look for our session in the active list
         sessions = st.get("sessions")
         if isinstance(sessions, list):
             for s in sessions:
@@ -83,9 +77,21 @@ def _is_session_active(client: APIClient, session_id: int) -> bool:
                         return True
                 except Exception:
                     continue
+            # If we successfully parsed the list and didn't find it, it's not active.
             return False
 
-        # Last-resort: treat any non-zero active count as active only when filtering isn't supported.
+        # Fallback: check legacy single-session shape or active count
+        one = st.get("session")
+        if isinstance(one, dict):
+             try:
+                if one.get("id") is not None and int(one.get("id")) != int(session_id):
+                    return False
+             except Exception:
+                 pass
+             if "active" in one:
+                 return bool(one.get("active"))
+             return one.get("end") in (None, "")
+
         return bool(st.get("active", 0))
 
     except APIError as e:
@@ -102,9 +108,13 @@ def _is_session_active(client: APIClient, session_id: int) -> bool:
         return True
 
 
-def _elapsed_str(client: APIClient, session_id: int) -> str:
+
+def _elapsed_str(client: APIClient, session_id: int | None) -> str:
+    if session_id is None:
+        return "?"
     try:
         st = client.get_timer_status(session_id=session_id)
+
         if not st.get("ok"):
             return "?"
 
@@ -133,7 +143,7 @@ def _elapsed_str(client: APIClient, session_id: int) -> str:
 
 
 @click.command("reminder-daemon")
-@click.option("--session-id", type=int, required=True)
+@click.option("--session-id", type=int, required=False)
 @click.option("--project", required=True)
 @click.option("--notify-title", default="Autumn")
 @click.option("--remind-in")
@@ -146,7 +156,7 @@ def _elapsed_str(client: APIClient, session_id: int) -> str:
 @click.option("--remind-poll", default="30s")
 @click.option("--quiet", is_flag=True, help="Don't print worker logs")
 def main(
-    session_id: int,
+    session_id: int | None,
     project: str,
     notify_title: str,
     remind_in: str | None,
@@ -157,6 +167,7 @@ def main(
     quiet: bool,
 ) -> None:
     """Worker entrypoint."""
+
 
     def parse_opt(raw: str | None) -> int | None:
         if not raw:

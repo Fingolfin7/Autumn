@@ -19,8 +19,9 @@ from .config import (
 from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
 from .commands.sessions import log, track
-from .commands.projects import projects_list, new_project
+from .commands.projects import projects_list, new_project, subprojects
 from .commands.charts import chart
+
 from .commands.meta import context, tag
 from .commands.meta import meta
 from .commands.config_cmd import config
@@ -239,7 +240,10 @@ cli.add_command(track, name="track")
 # Project commands
 cli.add_command(projects_list, name="projects")
 cli.add_command(projects_list, name="p")
+cli.add_command(subprojects, name="subprojects")
+cli.add_command(subprojects, name="subs")
 cli.add_command(new_project, name="new")
+
 
 # Chart command
 cli.add_command(chart, name="chart")

@@ -18,17 +18,18 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 @click.command()
 @click.option(
     "--type",
-    "-t",
+    "-T",
     type=click.Choice(["pie", "bar", "scatter", "calendar", "wordcloud", "heatmap"], case_sensitive=False),
     default="pie",
     help="Chart type (default: pie)",
 )
 @click.option("--project", "-p", help="Project name (shows subprojects if specified for pie/bar)")
+
 @click.option("--context", "-c", help="Filter by context (name or id)")
-@click.option("--tag", "-g", multiple=True, help="Filter by tag (repeatable)")
+@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option(
     "--period",
-    "-pd",
+    "-P",
     type=click.Choice(
         ["day", "week", "fortnight", "month", "lunar cycle", "quarter", "year", "all"],
         case_sensitive=False,
@@ -36,6 +37,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
     default=None,
     help="Time period (same options as 'log')",
 )
+
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--save", type=click.Path(), help="Save chart to file instead of displaying")

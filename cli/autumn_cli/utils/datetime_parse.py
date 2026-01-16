@@ -66,15 +66,17 @@ def format_server_datetime(dt: datetime) -> str:
 def _split_offset(s: str) -> tuple[str, Optional[timedelta]]:
     """Return (base, offset) where offset is a timedelta or None.
 
-    Recognizes a trailing `(+|-)<int><unit>` where unit is one of s/m/h/d/w.
+    Recognizes a trailing `(+|-)<int><unit>` where unit is one of s/m/h/d/w (or verbose).
     """
 
     import re
+    
+    unit_pat = r"(?:weeks?|wks?|w|days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)"
 
-    m = re.fullmatch(r"(.+?)([+-])(\d+)([smhdw])", s.strip(), flags=re.IGNORECASE)
+    m = re.fullmatch(r"(.+?)([+-])(\d+)(" + unit_pat + r")", s.strip(), flags=re.IGNORECASE)
     if not m:
         # Also support pure offset like `-5m` or `+2h`.
-        m2 = re.fullmatch(r"([+-])(\d+)([smhdw])", s.strip(), flags=re.IGNORECASE)
+        m2 = re.fullmatch(r"([+-])(\d+)(" + unit_pat + r")", s.strip(), flags=re.IGNORECASE)
         if not m2:
             return s, None
         sign, amount_s, unit = m2.group(1), m2.group(2), m2.group(3)
@@ -89,15 +91,23 @@ def _split_offset(s: str) -> tuple[str, Optional[timedelta]]:
 def _offset_to_delta(sign: str, amount_s: str, unit: str) -> timedelta:
     amount = int(amount_s)
     unit = unit.lower()
-    seconds = {
-        "s": 1,
-        "m": 60,
-        "h": 3600,
-        "d": 86400,
-        "w": 7 * 86400,
-    }[unit] * amount
+    
+    mult = 0
+    if unit.startswith("w"):
+        mult = 7 * 86400
+    elif unit.startswith("d"):
+        mult = 86400
+    elif unit.startswith("h"):
+        mult = 3600
+    elif unit.startswith("m"):
+        mult = 60
+    elif unit.startswith("s"):
+        mult = 1
+
+    seconds = mult * amount
     delta = timedelta(seconds=seconds)
     return delta if sign == "+" else -delta
+
 
 
 def _parse_base(base_str: str, *, now: datetime) -> datetime:
@@ -124,9 +134,29 @@ def _parse_base(base_str: str, *, now: datetime) -> datetime:
     except ValueError:
         dt = None
 
+    # Try time-only formats (implies today or tomorrow)
+    time_only_formats = [
+        "%H:%M:%S",
+        "%H:%M",
+        "%I:%M%p",  # 5:30PM
+        "%I%p",     # 5PM
+    ]
+    for fmt in time_only_formats:
+        try:
+            t = datetime.strptime(base_str, fmt).time()
+            # Combine with today
+            dt = now.replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
+            # If in the past, move to tomorrow
+            if dt < now:
+                dt += timedelta(days=1)
+            return dt
+        except ValueError:
+            continue
+
     if dt is None:
         formats = [
             "%Y-%m-%dT%H:%M:%S.%f",
+
             "%Y-%m-%dT%H:%M:%S",
             "%Y-%m-%dT%H:%M",
             "%Y-%m-%d %H:%M:%S.%f",

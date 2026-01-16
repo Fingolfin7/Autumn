@@ -24,7 +24,7 @@ from ..config import load_config, save_config
 @dataclass(frozen=True)
 class ReminderEntry:
     pid: int
-    session_id: int
+    session_id: int | None
     project: str
     created_at: str
     mode: str  # remind-in | remind-every | auto-stop | mixed
@@ -32,6 +32,7 @@ class ReminderEntry:
     remind_every: str | None = None
     auto_stop_for: str | None = None
     remind_poll: str | None = None
+
 
 
 def _now_iso() -> str:
@@ -107,9 +108,10 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
         if not isinstance(e, dict):
             continue
         try:
+            sid_raw = e.get("session_id")
             entry = ReminderEntry(
                 pid=int(e.get("pid")),
-                session_id=int(e.get("session_id")),
+                session_id=int(sid_raw) if sid_raw is not None else None,
                 project=str(e.get("project") or ""),
                 created_at=str(e.get("created_at") or ""),
                 mode=str(e.get("mode") or ""),
@@ -124,13 +126,14 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
     # De-duplicate: keep the newest per (pid, session_id) pair.
     # This avoids the registry growing indefinitely if the same worker is re-added.
-    dedup: dict[tuple[int, int], ReminderEntry] = {}
+    dedup: dict[tuple[int, int | None], ReminderEntry] = {}
     for e in entries:
-        key = (int(e.pid), int(e.session_id))
+        key = (int(e.pid), e.session_id)
         prev = dedup.get(key)
         if prev is None or (e.created_at and e.created_at > prev.created_at):
             dedup[key] = e
     entries = list(dedup.values())
+
 
     # If we detected a non-list/invalid structure, ensure we write back a clean list.
     if not isinstance(raw, list):
@@ -149,19 +152,19 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
             client = None
             APIError = None  # type: ignore[assignment]
 
-        def _session_active(session_id: int) -> bool:
+        def _session_active(session_id: int | None) -> bool:
+            if session_id is None:
+                # Standalone reminder (not attached to a session) -> always "active"
+                # (The daemon itself will exit if it finishes its task)
+                return True
+
             if client is None:
                 return True
             try:
-                st = client.get_timer_status(session_id=session_id)
+                # Use unfiltered status check (list all active) to handle stopped sessions robustly.
+                st = client.get_timer_status(session_id=None)
                 if not isinstance(st, dict) or not st.get("ok"):
                     return False
-
-                one = st.get("session")
-                if isinstance(one, dict):
-                    if "active" in one:
-                        return bool(one.get("active"))
-                    return one.get("end") in (None, "")
 
                 sessions = st.get("sessions")
                 if isinstance(sessions, list):
@@ -176,10 +179,18 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
                                 return True
                         except Exception:
                             continue
+                    # Not found in active list -> Inactive
                     return False
+
+                one = st.get("session")
+                if isinstance(one, dict):
+                    if "active" in one:
+                        return bool(one.get("active"))
+                    return one.get("end") in (None, "")
 
                 return bool(st.get("active", 0))
             except Exception as e:
+
                 # If the backend raises for "session not found", prune.
                 if APIError is not None and isinstance(e, APIError):
                     msg = str(e).lower()
@@ -249,7 +260,7 @@ def save_entries(entries: List[ReminderEntry]) -> None:
 def add_entry(
     *,
     pid: int,
-    session_id: int,
+    session_id: int | None,
     project: str,
     mode: str,
     remind_in: str | None = None,
@@ -259,8 +270,9 @@ def add_entry(
 ) -> ReminderEntry:
     entry = ReminderEntry(
         pid=int(pid),
-        session_id=int(session_id),
+        session_id=int(session_id) if session_id is not None else None,
         project=project,
+
         created_at=_now_iso(),
         mode=mode,
         remind_in=remind_in,

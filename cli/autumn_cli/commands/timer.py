@@ -8,10 +8,12 @@ from ..utils.console import console
 from ..utils.formatters import format_duration_minutes
 from ..utils.log_render import render_active_timers_list
 from ..utils.duration_parse import parse_duration_to_seconds
+from ..utils.datetime_parse import parse_user_datetime
 from ..utils.notify import send_notification
 from ..utils.scheduler import schedule_in, schedule_every, sleep_seconds
-from ..utils.background import spawn_detached_python_module
+from ..utils.reminder_spawner import spawn_reminder
 from ..utils.reminders_registry import add_entry
+
 
 
 @click.command()
@@ -20,9 +22,11 @@ from ..utils.reminders_registry import add_entry
 @click.option("--note", "-n", help="Note for the session")
 @click.option("--for", "for_", help="Auto-stop after a duration (e.g. 25m, 1h30m)")
 @click.option("--remind-in", help="Send a reminder after a duration (e.g. 30m)")
+@click.option("--remind-at", help="Send a reminder at a specific time (e.g. 14:30, 5pm)")
 @click.option("--remind-every", help="Send periodic reminders every duration (e.g. 15m)")
 @click.option(
     "--remind-message",
+
     default="Timer running: {project} ({elapsed})",
     show_default=True,
     help="Reminder message template. Available: {project}, {elapsed}",
@@ -51,6 +55,7 @@ def start(
     note: Optional[str],
     for_: Optional[str],
     remind_in: Optional[str],
+    remind_at: Optional[str],
     remind_every: Optional[str],
     remind_message: str,
     notify_title: str,
@@ -62,6 +67,7 @@ def start(
     Optional timing features (cross-platform, in-process):
       - Auto-stop after a duration: `--for 25m`
       - One-shot reminder: `--remind-in 30m`
+      - Specific time reminder: `--remind-at 14:30`
       - Periodic reminders: `--remind-every 15m`
 
     Reminder threads are tied to the timer's lifetime: if the session stops or is
@@ -81,10 +87,51 @@ def start(
     remind_in_seconds = _parse_opt("--remind-in", remind_in)
     remind_every_seconds = _parse_opt("--remind-every", remind_every)
 
+    if remind_in and remind_at:
+         raise click.BadParameter("Use either --remind-in or --remind-at (not both)")
+    
+    # Calculate remind_in_seconds from remind_at
+    if remind_at:
+        try:
+            from datetime import datetime
+            now = datetime.now()
+            target_dt = parse_user_datetime(remind_at).dt
+            # parse_user_datetime returns a naive datetime in local time (if configured correctly).
+            # But wait, datetime_parse.py:25 uses .astimezone().replace(tzinfo=None) which is local naive.
+            # So `now` should also be local naive.
+            
+            diff = (target_dt - now).total_seconds()
+            if diff <= 0:
+                 raise click.BadParameter("Time must be in the future", param_hint="--remind-at")
+            
+            remind_in_seconds = int(diff)
+            # Normalize remind_in string for the daemon
+            remind_in = f"{remind_in_seconds}s"
+            
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="--remind-at")
+
     if remind_in_seconds is not None and remind_every_seconds is not None:
-        raise click.BadParameter("Use either --remind-in or --remind-every (not both)")
+        pass # removed check that prevented both, actually they are usually mutually exclusive in daemon Plan logic?
+        # Daemon plan says: 
+        # if plan.remind_in_seconds is not None and plan.remind_every_seconds is not None:
+        #     raise click.ClickException("Use either --remind-in or --remind-every")
+        # Ah, the daemon currently enforces exclusivity.
+        # But `remind-every` logic in daemon is:
+        # if next_every is not None ...
+        # if next_remind is not None ...
+        # They run independently.
+        # But the daemon *constructor* raises exception if both are set!
+        # I should probably relax that check in the daemon if I want to allow both.
+        # But for now, let's stick to the existing behavior: user chooses ONE mode.
+        pass
+
+    # Re-verify exclusivity if the daemon demands it.
+    if remind_in_seconds is not None and remind_every_seconds is not None:
+         raise click.BadParameter("Use either --remind-in/--remind-at or --remind-every (daemon limitation)")
 
     try:
+
         poll_seconds = parse_duration_to_seconds(remind_poll)
     except ValueError as e:
         raise click.BadParameter(str(e), param_hint="--remind-poll")
@@ -109,10 +156,11 @@ def start(
         console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
         subs = session.get("subs") or session.get("subprojects") or []
         if subs:
-            console.print(f"[autumn.label]Subprojects:[/] {', '.join(subs)}")
+            console.print(f"[autumn.label]Subprojects:[/] [autumn.subproject]{', '.join(subs)}[/]")
         if session.get("note"):
-            console.print(f"[autumn.label]Note:[/] {session.get('note')}")
-        console.print(f"[autumn.label]Session ID:[/] {session_id}")
+            console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
+        console.print(f"[autumn.label]Session ID:[/] [autumn.id]{session_id}[/]")
+
 
         # Nothing time-based requested.
         if for_seconds is None and remind_in_seconds is None and remind_every_seconds is None:
@@ -120,55 +168,20 @@ def start(
 
         # If background mode is enabled, spawn a worker and return immediately.
         if background:
-            # Determine mode label for listing.
-            mode_parts = []
-            if remind_in:
-                mode_parts.append("remind-in")
-            if remind_every:
-                mode_parts.append("remind-every")
-            if for_:
-                mode_parts.append("auto-stop")
-            mode = "+".join(mode_parts) if mode_parts else "unknown"
-
-            args = [
-                "--session-id",
-                str(session_id),
-                "--project",
-                str(project),
-                "--notify-title",
-                str(notify_title),
-                "--remind-message",
-                str(remind_message),
-                "--remind-poll",
-                str(remind_poll),
-                "--quiet",
-            ]
-            if remind_in:
-                args += ["--remind-in", str(remind_in)]
-            if remind_every:
-                args += ["--remind-every", str(remind_every)]
-            if for_:
-                args += ["--for", str(for_)]
-
-            proc = spawn_detached_python_module("autumn_cli.commands.reminder_daemon", args)
-            try:
-                add_entry(
-                    pid=int(proc.pid),
-                    session_id=int(session_id),
-                    project=str(project),
-                    mode=mode,
-                    remind_in=(str(remind_in) if remind_in else None),
-                    remind_every=(str(remind_every) if remind_every else None),
-                    auto_stop_for=(str(for_) if for_ else None),
-                    remind_poll=str(remind_poll),
-                )
-            except Exception:
-                pass
-
-            console.print("[autumn.muted]Scheduled reminders in background.[/]")
+            spawn_reminder(
+                project=project,
+                session_id=session_id,
+                remind_in=remind_in,
+                remind_every=remind_every,
+                auto_stop_for=for_,
+                remind_message=remind_message,
+                notify_title=notify_title,
+                remind_poll=remind_poll,
+            )
             return
 
         tasks = []
+
 
         # Reuse one client for polling. This also makes tests deterministic.
         poll_client = APIClient()
@@ -345,12 +358,13 @@ def stop(session_id: Optional[int], project: Optional[str], note: Optional[str])
             session = result.get("session", {})
             duration = result.get("duration", session.get("elapsed", 0))
             console.print("[autumn.ok]Timer stopped.[/]", highlight=True)
-            console.print(f"[autumn.label]Duration:[/] {format_duration_minutes(duration)}")
+            console.print(f"[autumn.label]Duration:[/] [autumn.duration]{format_duration_minutes(duration)}[/]")
             console.print(
-                f"[autumn.label]Project:[/] {session.get('p') or session.get('project') or project or ''}"
+                f"[autumn.label]Project:[/] [autumn.project]{session.get('p') or session.get('project') or project or ''}[/]"
             )
             if session.get("note"):
-                console.print(f"[autumn.label]Note:[/] {session.get('note')}")
+                console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
+
         else:
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
     except APIError as e:
@@ -399,10 +413,11 @@ def restart(session_id: Optional[int], project: Optional[str]):
         if result.get("ok"):
             session = result.get("session", {})
             console.print("[autumn.ok]Timer restarted.[/]", highlight=True)
-            console.print(f"[autumn.label]Session ID:[/] {session.get('id')}")
+            console.print(f"[autumn.label]Session ID:[/] [autumn.id]{session.get('id')}[/]")
             console.print(
-                f"[autumn.label]Project:[/] {session.get('p') or session.get('project') or project or ''}"
+                f"[autumn.label]Project:[/] [autumn.project]{session.get('p') or session.get('project') or project or ''}[/]"
             )
+
         else:
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
     except APIError as e:

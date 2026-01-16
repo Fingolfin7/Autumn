@@ -97,9 +97,13 @@ def stop_cmd(pid: int | None, session_id: int | None, stop_all: bool) -> None:
     elif pid is not None:
         targets = [e for e in entries if int(e.pid) == int(pid)]
     elif session_id is not None:
-        targets = [e for e in entries if int(e.session_id) == int(session_id)]
+        targets = [
+            e for e in entries 
+            if e.session_id is not None and int(e.session_id) == int(session_id)
+        ]
 
     if not targets:
+
         console.print("[autumn.muted]No matching reminder workers found.[/]")
         return
 

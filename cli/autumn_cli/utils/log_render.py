@@ -115,11 +115,13 @@ def render_session_block(session: Dict[str, Any]) -> str:
     active = end_raw in (None, "", 0)
     header_style = "autumn.ok" if active else "autumn.title"
 
+    # Use autumn.duration for duration in single block view
     lines = [
-        f"[{header_style}]• #{sid}[/]  [autumn.project]{project}[/]  [autumn.muted]({dur_str})[/]",
+        f"[{header_style}]• #{sid}[/]  [autumn.project]{project}[/]  [autumn.duration]({dur_str})[/]",
         f"  [autumn.label]Start:[/] [autumn.time]{start}[/]",
         f"  [autumn.label]End:[/]   [autumn.time]{end}[/]",
     ]
+
 
     if subs:
         lines.append(f"  [autumn.label]Subs:[/]  [autumn.subproject]{', '.join(subs)}[/]")
@@ -146,9 +148,10 @@ def render_active_timer_block(session: Dict[str, Any]) -> str:
     dur_str = format_duration_minutes(_duration_minutes(session))
 
     lines = [
-        f"[autumn.ok]▶ #{sid}[/]  [autumn.project]{project}[/]  [autumn.ok]{dur_str}[/]",
+        f"[autumn.ok]▶ #{sid}[/]  [autumn.project]{project}[/]  [autumn.duration]{dur_str}[/]",
         f"  [autumn.label]Started:[/] [autumn.time]{start}[/]",
     ]
+
 
     if subs:
         lines.append(f"  [autumn.label]Subs:[/]    [autumn.subproject]{', '.join(subs)}[/]")
@@ -186,9 +189,10 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
         first_header = False
 
         # Date header should be plain (uncolored) text, but underlined. Day total stays blue.
-        lines.append(f"[underline]{header}[/] [autumn.time]({total_str})[/]")
+        lines.append(f"[underline]{header}[/] [autumn.duration]({total_str})[/]")
 
         def _sort_key(sess: Dict[str, Any]):
+
             end_iso = _session_end_iso(sess)
             start_iso = _session_start_iso(sess)
             return end_iso or start_iso
@@ -208,6 +212,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
                 f"{dur_str}  [autumn.project]{project}[/] "
                 f"{subs_bracket}"
             )
+
 
             if not note:
                 lines.append(base)

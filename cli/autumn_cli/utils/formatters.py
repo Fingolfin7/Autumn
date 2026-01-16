@@ -33,23 +33,43 @@ def parse_utc_to_local(iso_string: str) -> Optional[datetime]:
 
 def format_duration_minutes(minutes: float) -> str:
     """Format duration in minutes to human-readable string.
-
-    Uses second-level accuracy (Mm Ss / Hh Mm Ss).
+    
+    If duration is long enough, formats as "X day(s) Y hour(s)..."
+    Otherwise uses "Hh Mm" or "Mm Ss".
     """
     if minutes is None:
         return "N/A"
 
     try:
-        total_seconds = int(round(float(minutes) * 60))
+        td = timedelta(minutes=float(minutes or 0))
     except Exception:
-        total_seconds = 0
+        td = timedelta(minutes=0)
 
-    hours, rem = divmod(total_seconds, 3600)
+    days = td.days
+    seconds = td.seconds
+    hours, rem = divmod(seconds, 3600)
     mins, secs = divmod(rem, 60)
 
+    # If we have days, use the verbose day format (matching legacy td_str)
+    if days > 0:
+        plural_form = lambda counter: 's'[:counter ^ 1]
+        
+        parts = []
+        parts.append(f"{days} day{plural_form(days)}")
+        if hours > 0:
+            parts.append(f"{hours} hour{plural_form(hours)}")
+        if mins > 0:
+            parts.append(f"{mins} minute{plural_form(mins)}")
+        if secs > 0:
+            parts.append(f"{secs} second{plural_form(secs)}")
+            
+        return " ".join(parts)
+
+    # Otherwise use compact format
     if hours > 0:
-        return f"{hours}h {mins:02d}m {secs:02d}s"
-    return f"{mins}m {secs:02d}s"
+        return f"{hours:02d}h {mins:02d}m"
+    return f"{mins:02d}m {secs:02d}s"
+
 
 
 def format_duration_hours(hours: float) -> str:

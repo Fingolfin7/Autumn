@@ -56,20 +56,16 @@ def test_start_reminders_background_spawns_and_returns(monkeypatch):
 
     monkeypatch.setattr("autumn_cli.commands.timer.APIClient", _FakeClient)
 
-    def fake_spawn(module: str, args):
+    def fake_spawn(**kwargs):
         calls["spawn"] += 1
 
-        class P:
-            pid = 999
-
-        return P()
-
-    monkeypatch.setattr("autumn_cli.commands.timer.spawn_detached_python_module", fake_spawn)
+    monkeypatch.setattr("autumn_cli.commands.timer.spawn_reminder", fake_spawn)
 
     runner = CliRunner()
     result = runner.invoke(start, ["MyProj", "--remind-in", "5s"])
     assert result.exit_code == 0
     assert calls["spawn"] == 1
+
 
 
 def test_start_reminders_stop_when_session_stops_foreground(monkeypatch):

@@ -9,7 +9,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 
 
 @click.command()
-@click.option("--status", type=click.Choice(["active", "paused", "complete", "archived"]), help="Filter by status")
+@click.option("--status", "-S", type=click.Choice(["active", "paused", "complete", "archived"]), help="Filter by status")
 @click.option("--context", "-c", help="Filter by context name")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
@@ -78,6 +78,41 @@ def projects_list(
             for table in tables:
                 console.print(table)
                 console.print()
+    except APIError as e:
+        console.print(f"[autumn.err]Error:[/] {e}")
+        raise click.Abort()
+
+
+@click.command()
+@click.argument("project")
+def subprojects(project: str):
+    """List subprojects for a given project."""
+    try:
+        client = APIClient()
+        # Use list_subprojects endpoint
+        result = client.list_subprojects(project)
+        
+        if not result.get("ok"):
+             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+             return
+
+        subs = result.get("subprojects") or result.get("subs") or []
+        
+        console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
+        if not subs:
+            console.print("[autumn.muted]No subprojects found.[/]")
+            return
+
+        console.print(f"[autumn.label]Subprojects ({len(subs)}):[/]")
+        # Check if subs is a dict (legacy style might imply values) or list
+        if isinstance(subs, dict):
+            subs_list = list(subs.keys())
+        else:
+            subs_list = list(subs)
+            
+        for sub in sorted(subs_list):
+            console.print(f"  [autumn.subproject]{sub}[/]")
+
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
