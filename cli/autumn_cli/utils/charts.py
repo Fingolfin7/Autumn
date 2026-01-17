@@ -446,7 +446,7 @@ def render_calendar_chart(
                             alpha = 0.2 + (0.8 * intensity)
                             rgba_grid[d, w] = (r / 255.0, g / 255.0, b / 255.0, alpha)
                         else:
-                            rgba_grid[d, w] = (1.0, 1.0, 1.0, 1.0)
+                            rgba_grid[d, w] = (0.92, 0.93, 0.94, 1.0)
         else:
             for w in range(n_weeks):
                 for d in range(7):
@@ -461,7 +461,7 @@ def render_calendar_chart(
                             alpha = 0.2 + (0.8 * intensity)
                             rgba_grid[w, d] = (r / 255.0, g / 255.0, b / 255.0, alpha)
                         else:
-                            rgba_grid[w, d] = (1.0, 1.0, 1.0, 1.0)
+                            rgba_grid[w, d] = (0.92, 0.93, 0.94, 1.0)
 
         # Render using imshow (most reliable for pixel grids)
         # We set grid lines at integer boundaries to avoid crosshair artifacts
