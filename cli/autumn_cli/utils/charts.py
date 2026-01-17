@@ -531,47 +531,20 @@ def render_calendar_chart(
         # Invert Y axis to match matrix coordinates (row 0 at top)
         ax.invert_yaxis()
 
-        # Add white grid lines
+        # Add white grid lines at INTEGER boundaries
+        # This fixes the "crosshair" issue by placing lines between pixels, not through them
         grid_linewidth = 1 if horizontal_layout else 2
 
         if horizontal_layout:
-            ax.set_xticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
-            ax.set_yticks(np.arange(0.5, 7.5, 1), minor=True)
+            ax.set_xticks(np.arange(0, n_weeks + 1, 1), minor=True)
+            ax.set_yticks(np.arange(0, 8, 1), minor=True)
         else:
-            ax.set_xticks(np.arange(0.5, 7.5, 1), minor=True)
-            ax.set_yticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
+            ax.set_xticks(np.arange(0, 8, 1), minor=True)
+            ax.set_yticks(np.arange(0, n_weeks + 1, 1), minor=True)
 
         ax.grid(which="minor", color="white", linestyle="-", linewidth=grid_linewidth)
         ax.tick_params(which="minor", bottom=False, left=False)
         ax.grid(which="major", visible=False)
-
-        # Create legend
-        import matplotlib.patches as mpatches
-
-        for proj, color_tuple in proj_to_color.items():
-            r, g, b = color_tuple
-            patch = mpatches.Patch(
-                color=(r / 255.0, g / 255.0, b / 255.0, 1.0), label=proj
-            )
-            legend_patches.append(patch)
-
-        # Dynamic legend positioning
-        if horizontal_layout and len(legend_patches) > 5:
-            # Place at bottom if chart is wide and legend is long
-            ax.legend(
-                handles=legend_patches,
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.15),
-                ncol=min(6, len(legend_patches)),  # Multi-column
-                title="Dominant Project",
-            )
-        else:
-            ax.legend(
-                handles=legend_patches,
-                bbox_to_anchor=(1.05, 1),
-                loc="upper left",
-                title="Dominant Project",
-            )
 
     else:
         # --- Standard Green Scale Rendering ---
