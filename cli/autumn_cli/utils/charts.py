@@ -342,8 +342,13 @@ def render_calendar_chart(
     total_days = (last_sunday - first_monday).days + 1
     n_weeks = total_days // 7
 
+    # Decide orientation based on duration
+    # > 13 weeks (1 quarter): Horizontal (Weeks on X-axis)
+    # <= 13 weeks: Vertical (Weeks on Y-axis)
+    horizontal_layout = n_weeks > 13
+
     # Create the grid
-    # TRANSPOSED: (n_weeks, 7)
+    # Logic is easier if we build (n_weeks, 7) first then transpose if needed
     heatmap_data = np.full(
         (n_weeks, 7), np.nan
     )  # Fill with NaN initially to distinguish outside range if needed
@@ -359,7 +364,6 @@ def render_calendar_chart(
         day_idx = delta_days % 7  # 0=Mon, 6=Sun
 
         if 0 <= week_idx < n_weeks:
-            # TRANSPOSED: [week_idx, day_idx]
             heatmap_data[week_idx, day_idx] = duration
 
             if color_by_project and not dominant_projects.empty:
@@ -368,27 +372,44 @@ def render_calendar_chart(
                     project_grid[week_idx, day_idx] = proj
 
     # --- 4. Plotting ---
-    # Aspect ratio adjustment: Tall if many weeks, wide if few
-    # We want roughly square cells.
-    # Height = n_weeks * scale, Width = 7 * scale
-    fig, ax = plt.subplots(figsize=(8, max(4, n_weeks * 0.4)))
+    if horizontal_layout:
+        # Transpose data for horizontal layout: (7, n_weeks)
+        heatmap_data = heatmap_data.T
+        project_grid = project_grid.T
+
+        # Wide figure: scaling height slightly up to ensure square cells fit
+        # Width: ~0.2 inches per week
+        # Height: ~4 inches constant (7 rows isn't much)
+        fig_width = max(12, n_weeks * 0.25)
+        fig_height = 4  # Increased from 3 to give room
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+        # Mask logic for horizontal
+        mask = np.zeros_like(heatmap_data, dtype=bool)
+        for w in range(n_weeks):
+            for d in range(7):
+                current_date = first_monday + pd.Timedelta(days=w * 7 + d)
+                if current_date < start_ts or current_date > end_ts:
+                    mask[d, w] = True
+                elif np.isnan(heatmap_data[d, w]):
+                    heatmap_data[d, w] = 0
+    else:
+        # Vertical layout: (n_weeks, 7)
+        # Tall figure
+        fig, ax = plt.subplots(figsize=(8, max(4, n_weeks * 0.4)))
+
+        # Mask logic for vertical
+        mask = np.zeros_like(heatmap_data, dtype=bool)
+        for w in range(n_weeks):
+            for d in range(7):
+                current_date = first_monday + pd.Timedelta(days=w * 7 + d)
+                if current_date < start_ts or current_date > end_ts:
+                    mask[w, d] = True
+                elif np.isnan(heatmap_data[w, d]):
+                    heatmap_data[w, d] = 0
 
     # Store legend handles if using multiple colors
     legend_patches = []
-
-    # Let's make a mask for out-of-range days
-    mask = np.zeros_like(heatmap_data, dtype=bool)
-
-    # Iterate through the grid coordinates to set mask for dates outside [start_ts, end_ts]
-    for w in range(n_weeks):
-        for d in range(7):
-            current_date = first_monday + pd.Timedelta(days=w * 7 + d)
-            if current_date < start_ts or current_date > end_ts:
-                # TRANSPOSED
-                mask[w, d] = True
-            elif np.isnan(heatmap_data[w, d]):
-                # Should not happen given reindex fill_value=0, but just in case
-                heatmap_data[w, d] = 0
 
     if color_by_project and not df.empty:
         # --- Multi-color Rendering ---
@@ -400,58 +421,128 @@ def render_calendar_chart(
             for i, p in enumerate(unique_projects)
         }
 
-        # 2. Create an RGBA image array (n_weeks, 7, 4)
-        # Initialize with transparent/grey for empty cells
-        rgba_grid = np.zeros((n_weeks, 7, 4))
+        # 2. Create an RGBA image array
+        if horizontal_layout:
+            rgba_grid = np.zeros((7, n_weeks, 4))
+        else:
+            rgba_grid = np.zeros((n_weeks, 7, 4))
 
         # Find max duration for normalization of alpha/intensity
         max_dur = np.nanmax(heatmap_data)
         if max_dur == 0:
             max_dur = 1.0
 
-        for w in range(n_weeks):
+        if horizontal_layout:
             for d in range(7):
-                if mask[w, d]:
-                    # Out of range: Standard Grey
-                    rgba_grid[w, d] = (0.94, 0.94, 0.94, 1.0)  # #f0f0f0
-                else:
-                    duration = heatmap_data[w, d]
-                    proj = project_grid[w, d]
-
-                    if duration > 0 and proj:
-                        # Get base color (RGB 0-255)
-                        r, g, b = proj_to_color.get(proj, (0, 128, 0))
-
-                        # Normalize duration to 0.2 - 1.0 range
-                        intensity = min(duration / max_dur, 1.0)
-                        alpha = 0.2 + (0.8 * intensity)
-
-                        # Assign color with alpha
-                        rgba_grid[w, d] = (r / 255.0, g / 255.0, b / 255.0, alpha)
+                for w in range(n_weeks):
+                    if mask[d, w]:
+                        rgba_grid[d, w] = (0.92, 0.93, 0.94, 1.0)
                     else:
-                        # No activity: Light Grey (GitHub style empty cell)
-                        # #ebedf0 is roughly (0.92, 0.93, 0.94)
+                        duration = heatmap_data[d, w]
+                        proj = project_grid[d, w]
+                        if duration > 0 and proj:
+                            r, g, b = proj_to_color.get(proj, (0, 128, 0))
+                            intensity = min(duration / max_dur, 1.0)
+                            alpha = 0.2 + (0.8 * intensity)
+                            rgba_grid[d, w] = (r / 255.0, g / 255.0, b / 255.0, alpha)
+                        else:
+                            rgba_grid[d, w] = (1.0, 1.0, 1.0, 1.0)
+        else:
+            for w in range(n_weeks):
+                for d in range(7):
+                    if mask[w, d]:
                         rgba_grid[w, d] = (0.92, 0.93, 0.94, 1.0)
+                    else:
+                        duration = heatmap_data[w, d]
+                        proj = project_grid[w, d]
+                        if duration > 0 and proj:
+                            r, g, b = proj_to_color.get(proj, (0, 128, 0))
+                            intensity = min(duration / max_dur, 1.0)
+                            alpha = 0.2 + (0.8 * intensity)
+                            rgba_grid[w, d] = (r / 255.0, g / 255.0, b / 255.0, alpha)
+                        else:
+                            rgba_grid[w, d] = (1.0, 1.0, 1.0, 1.0)
 
-        # Render using imshow (it handles direct RGBA grids)
-        # We set extent to align perfectly with the integer grid (0..7, 0..n_weeks)
-        # Origin="upper" aligns (0,0) to top-left, matching our iteration logic
+        # Render using imshow (most reliable for pixel grids)
+        # We set grid lines at integer boundaries to avoid crosshair artifacts
+
+        if horizontal_layout:
+            extent = [0, n_weeks, 7, 0]  # Left, Right, Bottom, Top
+        else:
+            extent = [0, 7, n_weeks, 0]
+
         mesh = ax.imshow(
             rgba_grid,
             aspect="equal",
             interpolation="nearest",
             origin="upper",
-            extent=[0, 7, n_weeks, 0],
+            extent=extent,
         )
 
-        # Add white grid lines manually to separate cells
-        # This replicates the "gap" between cells seen in GitHub/Calendar charts
-        ax.set_xticks(np.arange(0.5, 7.5, 1), minor=True)
-        ax.set_yticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
-        ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
-        ax.tick_params(which="minor", bottom=False, left=False)
+        # Add white grid lines at INTEGER boundaries
+        # This fixes the "crosshair" issue by placing lines between pixels, not through them
+        grid_linewidth = 1 if horizontal_layout else 2
 
-        # Disable major grid
+        if horizontal_layout:
+            ax.set_xticks(np.arange(0, n_weeks + 1, 1), minor=True)
+            ax.set_yticks(np.arange(0, 8, 1), minor=True)
+        else:
+            ax.set_xticks(np.arange(0, 8, 1), minor=True)
+            ax.set_yticks(np.arange(0, n_weeks + 1, 1), minor=True)
+
+        ax.grid(which="minor", color="white", linestyle="-", linewidth=grid_linewidth)
+        ax.tick_params(which="minor", bottom=False, left=False)
+        ax.grid(which="major", visible=False)
+
+        # Create legend
+        import matplotlib.patches as mpatches
+
+        # Use a list to track added labels to avoid duplicates
+        added_labels = set()
+        legend_patches = []
+
+        for proj, color_tuple in proj_to_color.items():
+            if proj not in added_labels:
+                r, g, b = color_tuple
+                patch = mpatches.Patch(
+                    color=(r / 255.0, g / 255.0, b / 255.0, 1.0), label=proj
+                )
+                legend_patches.append(patch)
+                added_labels.add(proj)
+
+        # Dynamic legend positioning
+        if horizontal_layout and len(legend_patches) > 5:
+            # Place at bottom if chart is wide and legend is long
+            ax.legend(
+                handles=legend_patches,
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.15),
+                ncol=min(6, len(legend_patches)),  # Multi-column
+                title="Dominant Project",
+            )
+        else:
+            ax.legend(
+                handles=legend_patches,
+                bbox_to_anchor=(1.05, 1),
+                loc="upper left",
+                title="Dominant Project",
+            )
+
+        # Invert Y axis to match matrix coordinates (row 0 at top)
+        ax.invert_yaxis()
+
+        # Add white grid lines
+        grid_linewidth = 1 if horizontal_layout else 2
+
+        if horizontal_layout:
+            ax.set_xticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
+            ax.set_yticks(np.arange(0.5, 7.5, 1), minor=True)
+        else:
+            ax.set_xticks(np.arange(0.5, 7.5, 1), minor=True)
+            ax.set_yticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
+
+        ax.grid(which="minor", color="white", linestyle="-", linewidth=grid_linewidth)
+        ax.tick_params(which="minor", bottom=False, left=False)
         ax.grid(which="major", visible=False)
 
         # Create legend
@@ -464,28 +555,30 @@ def render_calendar_chart(
             )
             legend_patches.append(patch)
 
-        # Add legend outside plot
-        ax.legend(
-            handles=legend_patches,
-            bbox_to_anchor=(1.05, 1),
-            loc="upper left",
-            title="Dominant Project",
-        )
+        # Dynamic legend positioning
+        if horizontal_layout and len(legend_patches) > 5:
+            # Place at bottom if chart is wide and legend is long
+            ax.legend(
+                handles=legend_patches,
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.15),
+                ncol=min(6, len(legend_patches)),  # Multi-column
+                title="Dominant Project",
+            )
+        else:
+            ax.legend(
+                handles=legend_patches,
+                bbox_to_anchor=(1.05, 1),
+                loc="upper left",
+                title="Dominant Project",
+            )
 
     else:
         # --- Standard Green Scale Rendering ---
-
-        # Ensure grid is on for standard plot
-        ax.grid(False)  # Turn off main grid, we use edgecolors for cell borders
-
-        # Create a custom colormap (white to green)
+        ax.grid(False)
         cmap = sns.light_palette("green", as_cmap=True)
-
-        # Plot
-        # We need to invert Y axis so 1st Week is top
         mesh = ax.pcolormesh(heatmap_data, cmap=cmap, edgecolors="white", linewidth=1)
 
-        # Masked areas (outside range) - plot as grey/transparent
         if mask.any():
             masked_data = np.ma.masked_where(~mask, mask)
             ax.pcolormesh(
@@ -499,54 +592,70 @@ def render_calendar_chart(
 
     # --- 5. Formatting ---
     ax.set_aspect("equal")
-
-    # Remove all spines
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    # X-axis labels (Days) - Mon to Sun
-    ax.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
-    ax.set_xticklabels(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
-    ax.tick_params(axis="x", length=0)
-    # Move x-axis labels to top if preferred? Standard is bottom. Let's keep bottom for now.
-    ax.xaxis.tick_top()  # Actually top is better for calendar headers
+    if horizontal_layout:
+        # Horizontal Labels
+        # Y-axis: Days
+        ax.set_yticks([0.5, 2.5, 4.5, 6.5])
+        ax.set_yticklabels(["Mon", "Wed", "Fri", "Sun"])
+        ax.tick_params(axis="y", length=0)
 
-    # Y-axis labels (Dates)
-    # We want to label the weeks.
-    # Label the Monday of each week on the left.
-    week_labels = []
-    week_ticks = []
+        # X-axis: Months
+        month_labels = []
+        month_ticks = []
+        current = first_monday
+        while current <= last_sunday:
+            if current.day == 1 or current == first_monday:
+                delta = (current - first_monday).days
+                col = delta // 7
+                month_name = current.strftime("%b")
+                if not month_labels or (
+                    month_labels[-1] != month_name and col > month_ticks[-1] + 2
+                    if month_ticks
+                    else True
+                ):
+                    month_ticks.append(col + 0.5)
+                    month_labels.append(month_name)
+            current += pd.Timedelta(days=1)
 
-    # Decide label granularity
-    # If range is small (< 12 weeks), show date of each Monday
-    show_dates = n_weeks < 20
+        ax.set_xticks(month_ticks)
+        ax.set_xticklabels(month_labels)
+        ax.tick_params(axis="x", length=0)
 
-    if show_dates:
-        # Show date for every week
-        step = 1
-        for i in range(0, n_weeks, step):
-            # Date of the Monday for this row
-            monday_date = first_monday + pd.Timedelta(days=i * 7)
-            # Use concise date format "Jan 1"
-            label = monday_date.strftime("%b %d")
-            week_ticks.append(i + 0.5)
-            week_labels.append(label)
     else:
-        # Show Month labels at start of each month
-        # We iterate rows (weeks)
-        for w in range(n_weeks):
-            monday_date = first_monday + pd.Timedelta(days=w * 7)
-            # Check if this week starts a new month or is first week
-            if w == 0 or monday_date.day <= 7:  # Approximate "start of month" logic
-                # Better: check if month changed from previous week
-                prev_monday = monday_date - pd.Timedelta(days=7)
-                if w == 0 or monday_date.month != prev_monday.month:
-                    week_ticks.append(w + 0.5)
-                    week_labels.append(monday_date.strftime("%b"))
+        # Vertical Labels (Schedule View)
+        # X-axis: Days
+        ax.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
+        ax.set_xticklabels(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        ax.tick_params(axis="x", length=0)
+        ax.xaxis.tick_top()
 
-    ax.set_yticks(week_ticks)
-    ax.set_yticklabels(week_labels)
-    ax.tick_params(axis="y", length=0)
+        # Y-axis: Weeks/Dates
+        week_labels = []
+        week_ticks = []
+        show_dates = n_weeks < 20
+
+        if show_dates:
+            step = 1
+            for i in range(0, n_weeks, step):
+                monday_date = first_monday + pd.Timedelta(days=i * 7)
+                label = monday_date.strftime("%b %d")
+                week_ticks.append(i + 0.5)
+                week_labels.append(label)
+        else:
+            for w in range(n_weeks):
+                monday_date = first_monday + pd.Timedelta(days=w * 7)
+                if w == 0 or monday_date.day <= 7:
+                    prev_monday = monday_date - pd.Timedelta(days=7)
+                    if w == 0 or monday_date.month != prev_monday.month:
+                        week_ticks.append(w + 0.5)
+                        week_labels.append(monday_date.strftime("%b"))
+
+        ax.set_yticks(week_ticks)
+        ax.set_yticklabels(week_labels)
+        ax.tick_params(axis="y", length=0)
 
     # Title
     ax.set_title(
@@ -566,36 +675,52 @@ def render_calendar_chart(
 
     def hover(event):
         if event.inaxes == ax:
-            # Get integer coordinates (column, row)
-            # pcolormesh coordinates: x=[0..7], y=[0..n_weeks] (inverted)
             if event.xdata is None or event.ydata is None:
                 return
 
-            x_idx = int(event.xdata)  # Day (0-6)
-            y_idx = int(event.ydata)  # Week (0-N)
+            x_idx = int(event.xdata)
+            y_idx = int(event.ydata)
 
-            # Check bounds
-            if 0 <= x_idx < 7 and 0 <= y_idx < n_weeks:
-                # Calculate date
-                # TRANSPOSED: x=Day, y=Week
-                target_date = first_monday + pd.Timedelta(days=y_idx * 7 + x_idx)
+            # Check bounds and Map coords to (week, day)
+            if horizontal_layout:
+                # X = Week, Y = Day
+                if 0 <= x_idx < n_weeks and 0 <= y_idx < 7:
+                    w_idx, d_idx = x_idx, y_idx
+                else:
+                    return
+            else:
+                # X = Day, Y = Week
+                if 0 <= x_idx < 7 and 0 <= y_idx < n_weeks:
+                    w_idx, d_idx = y_idx, x_idx
+                else:
+                    return
 
-                # Check if we have data for this date
-                val = heatmap_data[y_idx, x_idx]
+            # Calculate date
+            target_date = first_monday + pd.Timedelta(days=w_idx * 7 + d_idx)
 
-                # Get project if applicable
+            # Get data (heatmap_data is already transposed if needed)
+            val = heatmap_data[y_idx, x_idx]
+
+            # Mask logic
+            is_masked = False
+            if target_date < start_ts or target_date > end_ts:
+                is_masked = True
+
+            if not is_masked and not np.isnan(val):
+                # Get project label
                 proj_label = ""
+                # project_grid is also transposed if horizontal
                 if color_by_project and project_grid[y_idx, x_idx]:
                     proj_label = f"\nMain: {project_grid[y_idx, x_idx]}"
 
-                # Check if it's a valid date (not masked out)
-                if not mask[y_idx, x_idx] and not np.isnan(val):
-                    annot.xy = (x_idx + 0.5, y_idx + 0.5)
-                    text = f"{target_date.strftime('%Y-%m-%d')}\n{val:.2f} hours{proj_label}"
-                    annot.set_text(text)
-                    annot.set_visible(True)
-                    fig.canvas.draw_idle()
-                    return
+                annot.xy = (x_idx + 0.5, y_idx + 0.5)
+                text = (
+                    f"{target_date.strftime('%Y-%m-%d')}\n{val:.2f} hours{proj_label}"
+                )
+                annot.set_text(text)
+                annot.set_visible(True)
+                fig.canvas.draw_idle()
+                return
 
         if annot.get_visible():
             annot.set_visible(False)
