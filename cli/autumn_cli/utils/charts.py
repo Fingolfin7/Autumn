@@ -178,14 +178,24 @@ def render_scatter_chart(
             project = s.get("project") or s.get("p", "Unknown")
 
             # Determine display group (Project or Subproject)
+            # If subprojects are used, we split the session into multiple points with partial duration
+            # so that 'biceps, back' (1h) becomes 'biceps' (0.5h) and 'back' (0.5h).
             if use_subproject:
                 subs = s.get("subprojects")
                 if subs and isinstance(subs, list) and len(subs) > 0:
-                    display_group = ", ".join(subs)
+                    split_duration = duration_hours / len(subs)
+                    for sub in subs:
+                        session_points.append(
+                            {
+                                "date": end_time,
+                                "duration": split_duration,
+                                "project": sub,
+                            }
+                        )
+                    continue  # Skip the default append
                 elif subs and isinstance(subs, str):
                     display_group = subs
                 else:
-                    # Strict: Do NOT use note as fallback
                     display_group = "No Subproject"
             else:
                 display_group = project
@@ -341,10 +351,41 @@ def render_calendar_chart(
 
         # If coloring by project/subproject
         if color_by_project:
-            # Group by date and display_group (project or subproject)
-            project_daily = (
-                df.groupby(["date", "display_group"])["duration"].sum().reset_index()
-            )
+            # Find row with max duration for each date
+            # We need to handle subprojects carefully (explode lists) to avoid "a, b" categories
+            if use_subproject:
+                # Create a copy to explode
+                df_exploded = df.copy()
+                # Ensure subprojects is a list for all rows
+                df_exploded["subprojects"] = df_exploded["subprojects"].apply(
+                    lambda x: x
+                    if isinstance(x, list) and len(x) > 0
+                    else ["No Subproject"]
+                )
+
+                # Split duration among subprojects so total duration for the day remains correct
+                # Example: 60 min session with [biceps, back] -> 30 min biceps, 30 min back
+                df_exploded["split_factor"] = df_exploded["subprojects"].apply(len)
+                df_exploded["duration"] = (
+                    df_exploded["duration"] / df_exploded["split_factor"]
+                )
+
+                # Explode the list
+                df_exploded = df_exploded.explode("subprojects")
+                df_exploded["display_group"] = df_exploded["subprojects"]
+
+                project_daily = (
+                    df_exploded.groupby(["date", "display_group"])["duration"]
+                    .sum()
+                    .reset_index()
+                )
+            else:
+                project_daily = (
+                    df.groupby(["date", "display_group"])["duration"]
+                    .sum()
+                    .reset_index()
+                )
+
             # Find row with max duration for each date
             dominant_projects = project_daily.loc[
                 project_daily.groupby("date")["duration"].idxmax()
