@@ -7,12 +7,13 @@ from .config import get_api_key, get_base_url
 
 class APIError(Exception):
     """Exception raised for API errors."""
+
     pass
 
 
 class APIClient:
     """Client for AutumnWeb API."""
-    
+
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.api_key = api_key or get_api_key()
         self.base_url = (base_url or get_base_url()).rstrip("/")
@@ -41,7 +42,7 @@ class APIClient:
 
         if not self.api_key:
             raise APIError("API key not configured. Run 'autumn auth setup' first.")
-    
+
     def _headers(self) -> Dict[str, str]:
         """Get request headers with authentication."""
         return {
@@ -49,7 +50,7 @@ class APIClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-    
+
     def _request(
         self,
         method: str,
@@ -137,7 +138,9 @@ class APIClient:
         """Get the authenticated user's identity."""
         return self._request("GET", "/api/me/")
 
-    def get_cached_me(self, *, ttl_seconds: int = 3600, refresh: bool = False) -> Dict[str, Any]:
+    def get_cached_me(
+        self, *, ttl_seconds: int = 3600, refresh: bool = False
+    ) -> Dict[str, Any]:
         """Get cached /api/me response for greetings."""
         from .utils.user_cache import load_cached_user, save_cached_user
 
@@ -182,7 +185,10 @@ class APIClient:
 
         Cached to avoid frequent API calls.
         """
-        from .utils.recent_activity_cache import load_cached_activity, save_cached_activity
+        from .utils.recent_activity_cache import (
+            load_cached_activity,
+            save_cached_activity,
+        )
 
         if not refresh:
             snap = load_cached_activity(ttl_seconds=ttl_seconds)
@@ -242,9 +248,10 @@ class APIClient:
             if today_project is None and end and end.startswith(today_str):
                 today_project = p
 
-
         # Most frequent project
-        most_frequent_project = project_counts.most_common(1)[0][0] if project_counts else None
+        most_frequent_project = (
+            project_counts.most_common(1)[0][0] if project_counts else None
+        )
 
         # Calculate streak (consecutive days up to today)
         streak_days = 0
@@ -274,8 +281,13 @@ class APIClient:
         return {**info, "cached": False}
 
     # Timer endpoints
-    
-    def start_timer(self, project: str, subprojects: Optional[List[str]] = None, note: Optional[str] = None) -> Dict:
+
+    def start_timer(
+        self,
+        project: str,
+        subprojects: Optional[List[str]] = None,
+        note: Optional[str] = None,
+    ) -> Dict:
         """Start a new timer."""
         data = {"project": project}
         if subprojects:
@@ -283,8 +295,13 @@ class APIClient:
         if note:
             data["note"] = note
         return self._request("POST", "/api/timer/start/", json=data)
-    
-    def stop_timer(self, session_id: Optional[int] = None, project: Optional[str] = None, note: Optional[str] = None) -> Dict:
+
+    def stop_timer(
+        self,
+        session_id: Optional[int] = None,
+        project: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> Dict:
         """Stop the current timer."""
         data = {}
         if session_id:
@@ -294,8 +311,10 @@ class APIClient:
         if note is not None:
             data["note"] = note
         return self._request("POST", "/api/timer/stop/", json=data)
-    
-    def get_timer_status(self, session_id: Optional[int] = None, project: Optional[str] = None) -> Dict:
+
+    def get_timer_status(
+        self, session_id: Optional[int] = None, project: Optional[str] = None
+    ) -> Dict:
         """Get status of active timer(s)."""
         params = {}
         if session_id:
@@ -303,8 +322,10 @@ class APIClient:
         if project:
             params["project"] = project
         return self._request("GET", "/api/timer/status/", params=params)
-    
-    def restart_timer(self, session_id: Optional[int] = None, project: Optional[str] = None) -> Dict:
+
+    def restart_timer(
+        self, session_id: Optional[int] = None, project: Optional[str] = None
+    ) -> Dict:
         """Restart a timer."""
         data = {}
         if session_id:
@@ -312,16 +333,16 @@ class APIClient:
         if project:
             data["project"] = project
         return self._request("POST", "/api/timer/restart/", json=data)
-    
+
     def delete_timer(self, session_id: Optional[int] = None) -> Dict:
         """Delete a timer."""
         params = {}
         if session_id:
             params["session_id"] = session_id
         return self._request("DELETE", "/api/timer/delete/", params=params)
-    
+
     # Session endpoints
-    
+
     def log_activity(
         self,
         period: Optional[str] = None,
@@ -346,7 +367,7 @@ class APIClient:
         if tags:
             params["tags"] = ",".join(tags)
         return self._request("GET", "/api/log/", params=params)
-    
+
     def search_sessions(
         self,
         project: Optional[str] = None,
@@ -380,7 +401,7 @@ class APIClient:
         if tags:
             params["tags"] = ",".join(tags)
         return self._request("GET", "/api/sessions/search/", params=params)
-    
+
     def track_session(
         self,
         project: str,
@@ -400,9 +421,9 @@ class APIClient:
         if note:
             data["note"] = note
         return self._request("POST", "/api/track/", json=data)
-    
+
     # Project endpoints
-    
+
     def list_projects_grouped(
         self,
         start_date: Optional[str] = None,
@@ -421,21 +442,21 @@ class APIClient:
         if tags:
             params["tags"] = ",".join(tags)
         return self._request("GET", "/api/projects/grouped/", params=params)
-    
+
     def create_project(self, name: str, description: Optional[str] = None) -> Dict:
         """Create a new project."""
         data = {"name": name}
         if description:
             data["description"] = description
         return self._request("POST", "/api/create_project/", json=data)
-    
+
     def list_subprojects(self, project: str) -> Dict:
         """List subprojects for a project."""
         params = {"project": project}
         return self._request("GET", "/api/subprojects/", params=params)
-    
+
     # Chart/analytics endpoints
-    
+
     def tally_by_sessions(
         self,
         project_name: Optional[str] = None,
@@ -456,8 +477,10 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
-        return self._request("GET", "/api/tally_by_sessons/", params=params)  # Note: typo in API endpoint
-    
+        return self._request(
+            "GET", "/api/tally_by_sessons/", params=params
+        )  # Note: typo in API endpoint
+
     def tally_by_subprojects(
         self,
         project_name: str,
@@ -487,7 +510,7 @@ class APIClient:
         tags: Optional[List[str]] = None,
     ) -> List[Dict]:
         """List sessions (for charts)."""
-        params = {}
+        params = {"compact": "false"}
         if project_name:
             params["project_name"] = project_name
         if start_date:
@@ -510,7 +533,9 @@ class APIClient:
         params = {"compact": str(compact).lower()}
         return self._request("GET", "/api/tags/", params=params)
 
-    def get_discovery_meta(self, *, ttl_seconds: int = 300, refresh: bool = False) -> Dict[str, Any]:
+    def get_discovery_meta(
+        self, *, ttl_seconds: int = 300, refresh: bool = False
+    ) -> Dict[str, Any]:
         """Get cached discovery metadata: contexts + tags.
 
         Returns: {"contexts": [...], "tags": [...], "cached": bool}

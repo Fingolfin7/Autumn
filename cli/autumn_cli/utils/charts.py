@@ -141,6 +141,15 @@ def render_scatter_chart(
 
     # Parse session data
     session_points = []
+
+    # Pre-scan to check if we have a single project context
+    unique_projects = set()
+    for s in sessions:
+        p = s.get("project") or s.get("p", "Unknown")
+        unique_projects.add(p)
+
+    use_subproject = len(unique_projects) == 1 or (title and " - " in title)
+
     for s in sessions:
         # Handle both compact and full formats
         start_time_str = s.get("start_time") or s.get("start", "")
@@ -168,11 +177,24 @@ def render_scatter_chart(
 
             project = s.get("project") or s.get("p", "Unknown")
 
+            # Determine display group (Project or Subproject)
+            if use_subproject:
+                subs = s.get("subprojects")
+                if subs and isinstance(subs, list) and len(subs) > 0:
+                    display_group = ", ".join(subs)
+                elif subs and isinstance(subs, str):
+                    display_group = subs
+                else:
+                    # Strict: Do NOT use note as fallback
+                    display_group = "No Subproject"
+            else:
+                display_group = project
+
             session_points.append(
                 {
                     "date": end_time,
                     "duration": duration_hours,
-                    "project": project,
+                    "project": display_group,  # Use display_group as the 'project' key for coloring
                 }
             )
         except (ValueError, AttributeError) as e:
@@ -280,21 +302,49 @@ def render_calendar_chart(
 
     # Create DataFrame
     df = pd.DataFrame(data_list)
+
+    # Check if we should breakdown by subproject
+    use_subproject = False
+    if not df.empty and color_by_project:
+        unique_projs = df["project"].unique()
+        # If user asked for specific project OR only 1 project exists in data
+        if (title and " - " in title) or len(unique_projs) == 1:
+            use_subproject = True
+
+            def get_subproject_label(row):
+                # Priority 1: Use 'subprojects' list if available
+                subs = row.get("subprojects")
+                if subs and isinstance(subs, list) and len(subs) > 0:
+                    return ", ".join(subs)
+                elif subs and isinstance(subs, str):
+                    return subs
+
+                # Strict: Do NOT use note as fallback
+                return "No Subproject"
+
+            df["display_group"] = df.apply(get_subproject_label, axis=1)
+        else:
+            df["display_group"] = df["project"]
+    elif not df.empty:
+        df["display_group"] = df["project"]
+    elif not df.empty:
+        df["display_group"] = df["project"]
+
     if not df.empty:
         # Sum duration by date
         daily_series = df.groupby("date")["duration"].sum()
 
-        # If coloring by project, we also need the dominant project per day
+        # If coloring by project/subproject
         if color_by_project:
-            # Group by date and project, sum duration
+            # Group by date and display_group (project or subproject)
             project_daily = (
-                df.groupby(["date", "project"])["duration"].sum().reset_index()
+                df.groupby(["date", "display_group"])["duration"].sum().reset_index()
             )
             # Find row with max duration for each date
             dominant_projects = project_daily.loc[
                 project_daily.groupby("date")["duration"].idxmax()
             ]
-            dominant_projects = dominant_projects.set_index("date")["project"]
+            dominant_projects = dominant_projects.set_index("date")["display_group"]
         else:
             dominant_projects = pd.Series(dtype=str)
 
@@ -414,8 +464,8 @@ def render_calendar_chart(
     if color_by_project and not df.empty:
         # --- Multi-color Rendering ---
 
-        # 1. Identify all unique projects to assign colors
-        unique_projects = sorted(df["project"].unique())
+        # 1. Identify all unique projects/groups to assign colors
+        unique_projects = sorted(df["display_group"].unique())
         proj_to_color = {
             p: generate_color(i, len(unique_projects))
             for i, p in enumerate(unique_projects)
