@@ -290,7 +290,12 @@ def render_calendar_chart(
             project_name = s.get("project") or s.get("p", "Unknown")
 
             data_list.append(
-                {"date": date_val, "duration": duration_hours, "project": project_name}
+                {
+                    "date": date_val,
+                    "duration": duration_hours,
+                    "project": project_name,
+                    "subprojects": s.get("subprojects"),
+                }
             )
 
         except (ValueError, AttributeError):
