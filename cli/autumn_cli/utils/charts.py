@@ -491,7 +491,8 @@ def render_calendar_chart(
         # --- Multi-color Rendering ---
 
         # 1. Identify all unique projects/groups to assign colors
-        unique_projects = sorted(df["display_group"].unique())
+        # Use the unique from the grouped data (project_daily)
+        unique_projects = sorted(project_daily["display_group"].unique())
         proj_to_color = {
             p: generate_color(i, len(unique_projects))
             for i, p in enumerate(unique_projects)
