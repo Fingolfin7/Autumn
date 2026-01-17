@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autumn-cli"
-version = "0.1.0"
+version = "0.9.0"
 description = "Command-line interface for AutumnWeb - time tracking and project management"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "AutumnWeb Contributors"}
+    {name = "Henry", email = "mushunjek@gmail.com"}
 ]
 keywords = ["time-tracking", "cli", "productivity", "project-management"]
 classifiers = [
@@ -35,6 +35,7 @@ dependencies = [
     "python-dateutil>=2.8.0",
     "wordcloud>=1.9.0",
     "rich>=13.0.0",
+    "astral>=2.2.0",
     "plyer>=2.1.0",
 ]
 
@@ -42,9 +43,9 @@ dependencies = [
 autumn = "autumn_cli.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/AutumnWeb"
-Documentation = "https://github.com/yourusername/AutumnWeb/blob/main/cli/README.md"
-Repository = "https://github.com/yourusername/AutumnWeb"
+Homepage = "https://github.com/Fingolfin7/Autumn"
+Documentation = "https://github.com/Fingolfin7/Autumn/blob/main/cli/README.md"
+Repository = "https://github.com/Fingolfin7/Autumn"
 
 [tool.setuptools]
 packages = ["autumn_cli", "autumn_cli.commands", "autumn_cli.utils", "autumn_cli.assets"]

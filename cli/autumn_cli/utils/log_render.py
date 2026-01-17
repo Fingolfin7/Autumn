@@ -243,7 +243,7 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
 
         lines.append(
             f"Started [autumn.project]{project}[/] {subs_bracket}, "
-            f"[autumn.time]{dur_str}[/] ago{sid_suffix}"
+            f"[autumn.duration]{dur_str}[/] ago{sid_suffix}"
         )
 
     return "\n".join(lines)

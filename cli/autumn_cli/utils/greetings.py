@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
+from astral import moon
 import random
 import time
 
@@ -63,33 +64,13 @@ def _holiday_hint(now: datetime) -> Optional[str]:
 
 
 def _moon_phase_name(now: datetime) -> str:
-    """Approximate moon phase name.
-
-    Uses a simple synodic month approximation (~29.53058867 days).
-    Good enough for a fun greeting line.
-    """
-    # Known new moon reference: 2000-01-06 18:14 UTC
-    ref = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-
-    days = (now.astimezone(timezone.utc) - ref).total_seconds() / 86400.0
-    synodic = 29.53058867
-    age = days % synodic
-
-    # 8-phase buckets
-    phase_index = int((age / synodic) * 8 + 0.5) % 8
-    phases = [
-        "New Moon",
-        "Waxing Crescent",
-        "First Quarter",
-        "Waxing Gibbous",
-        "Full Moon",
-        "Waning Gibbous",
-        "Last Quarter",
-        "Waning Crescent",
+    phase = moon.phase(now)
+    labels = [
+        "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
+        "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent"
     ]
-    return phases[phase_index]
+    index = int((phase / 29.53) * 8) % 8
+    return labels[index]
 
 
 def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[str]:
@@ -101,8 +82,6 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
     today_proj = activity.get("today_project")
     last_proj = activity.get("last_project")
     last_session_min = activity.get("last_session_minutes")
-    longest_proj = activity.get("longest_project")
-    longest_min = activity.get("longest_minutes")
     most_frequent = activity.get("most_frequent_project")
     streak = activity.get("streak_days", 0)
 
@@ -117,7 +96,6 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
         for x in (
             today_proj,
             last_proj,
-            longest_proj,
             most_frequent,
             streak,
             _moon_phase_name(now),
@@ -151,55 +129,40 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
             ])
 
     # --- Last session suffixes (if recent and significant) ---
-    if last_proj and last_session_min and float(last_session_min) >= 60:
+    if last_proj and last_session_min and float(last_session_min) >= 15:
         hours = float(last_session_min) / 60.0
-        if hours >= 3.0:
+        if hours >= 6.0:
             possible_suffixes.extend([
-                f"Last time: [autumn.time]{hours:.1f}h[/] straight on [autumn.project]{last_proj}[/]. Beast mode!",
-                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last session. You're cooking!",
-                f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{last_proj}[/] session? Chef's kiss.",
-                f"[autumn.time]{hours:.1f}h[/] deep in [autumn.project]{last_proj}[/] last time. Respect.",
+                f"Peak session: [autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Legendary!",
+                f"That [autumn.duration]{hours:.1f}h[/] [autumn.project]{last_proj}[/] marathon was insane.",
+                f"[autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]? Absolute unit.",
+                f"Your [autumn.duration]{hours:.1f}h[/] [autumn.project]{last_proj}[/] session lives rent-free in my head.",
             ])
-        elif hours >= 2.0:
+        elif 3.0 <= hours < 6.0:
             possible_suffixes.extend([
-                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Solid focus time!",
-                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. That's the spirit!",
-                f"Crushed [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time.",
-                f"[autumn.project]{last_proj}[/] got [autumn.time]{hours:.1f}h[/] of your energy last session.",
+                f"Last time: [autumn.duration]{hours:.1f}h[/] straight on [autumn.project]{last_proj}[/]. Beast mode!",
+                f"[autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last session. You're cooking!",
+                f"That [autumn.duration]{hours:.1f}h[/] [autumn.project]{last_proj}[/] session? Chef's kiss.",
+                f"[autumn.duration]{hours:.1f}h[/] deep in [autumn.project]{last_proj}[/] last time. Respect.",
+            ])
+        elif 2.0 <= hours < 3.0:
+            possible_suffixes.extend([
+                f"Last session: [autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Solid focus time!",
+                f"[autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. That's the spirit!",
+                f"Crushed [autumn.duration]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time.",
+                f"[autumn.project]{last_proj}[/] got [autumn.duration]{hours:.1f}h[/] of your energy last session.",
             ])
         else:
-            # For sessions between 1-2 hours
-            possible_suffixes.extend([
-                f"Last session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/]. Nice warmup!",
-                f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] last time. Building momentum!",
-                f"Put in [autumn.time]{hours:.1f}h[/] on [autumn.project]{last_proj}[/] recently.",
-            ])
-
-    # --- Longest session suffixes (if impressive and different from last) ---
-    if longest_proj and longest_min and float(longest_min) >= 120:
-        # Only show longest if it's significantly different from last session
-        show_longest = True
-        if last_session_min:
-            # Don't show if longest and last are very close (within 10%)
-            if abs(float(longest_min) - float(last_session_min)) / float(longest_min) < 0.1:
-                show_longest = False
-        
-        if show_longest:
-            hours = float(longest_min) / 60.0
-            if hours >= 4.0:
-                possible_suffixes.extend([
-                    f"Peak session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Legendary!",
-                    f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] marathon was insane.",
-                    f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]? Absolute unit.",
-                    f"Your [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] session lives rent-free in my head.",
-                ])
+            if hours >= 1:
+                min_or_hrs = f"{hours:.1f}h"
             else:
-                possible_suffixes.extend([
-                    f"Longest session: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/]. Deep work mode!",
-                    f"That [autumn.time]{hours:.1f}h[/] [autumn.project]{longest_proj}[/] session hit different.",
-                    f"Peak performance: [autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/].",
-                    f"[autumn.time]{hours:.1f}h[/] on [autumn.project]{longest_proj}[/] remains undefeated.",
-                ])
+                min_or_hrs = f"{int(last_session_min)}m"
+
+            possible_suffixes.extend([
+                f"Last session: [autumn.duration]{min_or_hrs}[/] on [autumn.project]{last_proj}[/]. Nice warmup!",
+                f"[autumn.duration]{min_or_hrs}[/] on [autumn.project]{last_proj}[/] last time. Building momentum!",
+                f"Put in [autumn.duration]{min_or_hrs}[/] on [autumn.project]{last_proj}[/] recently.",
+            ])
 
     # --- Streak suffixes ---
     if streak >= 7:
@@ -215,12 +178,18 @@ def _build_activity_suffix(activity: Dict[str, Any], now: datetime) -> Optional[
             f"[autumn.time]{streak}-day streak[/]! Don't break the chain!",
             f"[autumn.time]{streak} consecutive days[/]. Momentum is real!",
         ])
-    elif streak >= 3:
+    elif streak > 3:
         possible_suffixes.extend([
             f"[autumn.time]{streak} days[/] in a row!",
             f"[autumn.time]{streak}-day streak[/]. Keep it up!",
-            f"Three days strong. Habit forming!",
             f"[autumn.time]{streak} days[/] straight. You're on a roll!",
+        ])
+    elif streak == 3:
+        possible_suffixes.extend([
+            f"Three days strong. Habit forming!",
+            f"Three days running. Nice!",
+            f"Third day in a row. Momentum building!",
+            f"Three-day streak! Keep it going!",
         ])
     elif streak == 2:
         possible_suffixes.extend([

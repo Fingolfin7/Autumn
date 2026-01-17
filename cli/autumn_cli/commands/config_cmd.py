@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 import click
+import subprocess
+import sys
+import shutil
 
 from ..config import (
     load_config,
@@ -20,6 +23,8 @@ from ..config import (
     get_greeting_activity_weight,
     get_greeting_moon_cameo_weight,
     set_greeting_weights,
+    ensure_config_dir,
+    CONFIG_FILE,
 )
 from ..utils.console import console
 
@@ -50,6 +55,50 @@ def config_show(raw: bool, json_out: bool) -> None:
 
     # YAML-ish pretty print via Rich JSON for readability
     console.print_json(data=cfg_out)
+
+
+@config.command("open")
+def config_open() -> None:
+    """Open the config file in the system file explorer (cross-platform).
+
+    On Windows this will open Explorer and select the file. On macOS it will
+    reveal the file in Finder. On Linux it will open the containing folder with
+    the user's default file manager (selection support varies by environment).
+    """
+    # Ensure config directory exists and create the file if missing so the user
+    # can see it in their file manager.
+    ensure_config_dir()
+    cfg_path = CONFIG_FILE
+    try:
+        if not cfg_path.exists():
+            cfg_path.touch()
+
+        if sys.platform.startswith("win"):
+            # explorer /select,<path>
+            subprocess.run(["explorer", f"/select,{str(cfg_path)}"], check=False)
+        elif sys.platform == "darwin":
+            # open -R <path> reveals the file in Finder
+            subprocess.run(["open", "-R", str(cfg_path)], check=False)
+        else:
+            # Linux / other: open the containing folder. Try common launchers.
+            dirpath = str(cfg_path.parent)
+            opener = shutil.which("xdg-open")
+            if not opener:
+                opener = shutil.which("gio")
+            if opener:
+                if opener.endswith("gio"):
+                    subprocess.run([opener, "open", dirpath], check=False)
+                else:
+                    subprocess.run([opener, dirpath], check=False)
+            else:
+                # As a last resort, open the file with the default application
+                import webbrowser
+
+                webbrowser.open(str(cfg_path))
+
+        console.print(f"[autumn.ok]Opened[/] {cfg_path}")
+    except Exception as e:
+        console.print(f"[autumn.err]Failed to open file explorer: {e}[/]")
 
 
 @config.command("get")

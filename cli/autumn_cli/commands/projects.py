@@ -9,7 +9,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 
 
 @click.command()
-@click.option("--status", "-S", type=click.Choice(["active", "paused", "complete", "archived"]), help="Filter by status")
+@click.option("--status", "-S", type=click.Choice(["all", "active", "paused", "complete", "archived"]), default="active", show_default=True, help="Filter by status (use `all` to show every type)")
 @click.option("--context", "-c", help="Filter by context name")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
@@ -57,19 +57,19 @@ def projects_list(
         projects_data = result.get("projects", {})
         summary = result.get("summary", {})
         
-        # Filter by status if requested
-        if status:
+        # Filter by status if requested (use "all" to show every type)
+        if status and status != "all":
             filtered_projects = {status: projects_data.get(status, [])}
             result["projects"] = filtered_projects
-        
+
         # Display colored summary
-        console.print("[bold]Projects Summary[/]")
-        console.print(f"  [autumn.status.active]Active:[/]   {summary.get('active', 0)}")
-        console.print(f"  [autumn.status.paused]Paused:[/]   {summary.get('paused', 0)}")
-        console.print(f"  [autumn.status.complete]Complete:[/] {summary.get('complete', 0)}")
-        console.print(f"  [autumn.status.archived]Archived:[/] {summary.get('archived', 0)}")
-        console.print(f"  [bold]Total:[/]    {summary.get('total', 0)}")
-        console.print()
+        # console.print("[bold]Projects Summary[/]")
+        # console.print(f"  [autumn.status.active]Active:[/]   {summary.get('active', 0)}")
+        # console.print(f"  [autumn.status.paused]Paused:[/]   {summary.get('paused', 0)}")
+        # console.print(f"  [autumn.status.complete]Complete:[/] {summary.get('complete', 0)}")
+        # console.print(f"  [autumn.status.archived]Archived:[/] {summary.get('archived', 0)}")
+        # console.print(f"  [bold]Total:[/]    {summary.get('total', 0)}")
+        # console.print()
 
         tables = projects_tables(result)
         if not tables:

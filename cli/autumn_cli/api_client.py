@@ -176,8 +176,6 @@ class APIClient:
             "last_end": iso str|None,
             "last_session_minutes": float|None,  # duration of last session
             "today_project": str|None,  # last from today if any
-            "longest_project": str|None,
-            "longest_minutes": float|None,  # duration of longest session in lookback
             "most_frequent_project": str|None,  # most sessions in lookback
             "streak_days": int,  # consecutive days with sessions
           }
@@ -209,8 +207,6 @@ class APIClient:
         last_end = None
         last_session_minutes = None
         today_project = None
-        longest_project = None
-        longest_minutes = None
         project_counts = Counter()
         session_dates = set()
 
@@ -246,15 +242,6 @@ class APIClient:
             if today_project is None and end and end.startswith(today_str):
                 today_project = p
 
-            # Longest
-            try:
-                dur_f = float(dur) if dur is not None else None
-            except Exception:
-                dur_f = None
-
-            if dur_f is not None and (longest_minutes is None or dur_f > longest_minutes):
-                longest_minutes = dur_f
-                longest_project = p
 
         # Most frequent project
         most_frequent_project = project_counts.most_common(1)[0][0] if project_counts else None
@@ -275,8 +262,6 @@ class APIClient:
             "last_end": last_end,
             "last_session_minutes": last_session_minutes,
             "today_project": today_project,
-            "longest_project": longest_project,
-            "longest_minutes": longest_minutes,
             "most_frequent_project": most_frequent_project,
             "streak_days": streak_days,
         }

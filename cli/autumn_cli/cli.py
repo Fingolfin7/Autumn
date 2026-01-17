@@ -64,10 +64,6 @@ def cli(ctx: click.Context):
             greeting_line = g.line.format(username=f"[autumn.user]{username}[/]")
             console.print(greeting_line)
 
-            # Print connection info
-            console.print(f"You're connected to [autumn.time]{base_url}[/].")
-
-
         except Exception:
             click.echo("Autumn CLI")
             click.echo("Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started.")

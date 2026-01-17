@@ -99,6 +99,13 @@ def format_date(iso_string: str) -> str:
         return dt.strftime("%Y-%m-%d")
     return iso_string
 
+def format_day_date(iso_string: str) -> str:
+    """Format ISO date/datetime string to 'Weekday DD Month YYYY' in local timezone."""
+    dt = parse_utc_to_local(iso_string)
+    if dt:
+        return dt.strftime("%A %d %B %Y")
+    return iso_string
+
 
 def format_time_hms(iso_string: str) -> str:
     """Format an ISO datetime string to time-only (HH:MM:SS) in local timezone."""
@@ -264,17 +271,17 @@ def projects_tables(projects_data: Dict) -> List[Table]:
             header_style="autumn.title",
             show_lines=False,
             expand=False,
-            title=f"[{status_styles.get(status_key, 'autumn.title')}]{status_key.upper()}[/]",
+            title=f"[{status_styles.get(status_key, 'autumn.title')}]{status_key.upper()} ({len(proj_list)})[/]",
             title_justify="left",
             padding=(0, 1),
         )
 
         table.add_column("Project", style="autumn.project", no_wrap=True)
-        table.add_column("Total", style="autumn.time", justify="right", no_wrap=True)
-        table.add_column("Sessions", style="autumn.muted", justify="right", no_wrap=True)
-        table.add_column("Avg", style="autumn.time", justify="right", no_wrap=True)
-        table.add_column("Started", style="autumn.muted", no_wrap=True)
+        table.add_column("Total", style="autumn.duration", justify="right", no_wrap=True)
+        table.add_column("Started", style="autumn.time", no_wrap=True)
         table.add_column("Last Active", style="autumn.time", no_wrap=True)
+        table.add_column("Sessions", style="autumn.muted", justify="right", no_wrap=True)
+        table.add_column("Avg Duration", style="autumn.duration", justify="right", no_wrap=True)
         table.add_column("Context", style="autumn.subproject", no_wrap=True)
         table.add_column("Tags", style="autumn.note", overflow="fold", max_width=20)
 
@@ -286,10 +293,10 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 # Full format with metadata
                 name = proj.get("name", "")
                 total_time = proj.get("total_time", 0)
-                session_count = proj.get("session_count", 0)
-                avg_session = proj.get("avg_session_duration", 0)
                 start_date = proj.get("start_date", "")
                 last_updated = proj.get("last_updated", "")
+                session_count = proj.get("session_count", 0)
+                avg_session = proj.get("avg_session_duration", 0)
                 context = proj.get("context", "") or ""
                 tags = proj.get("tags", []) or []
 
@@ -303,13 +310,13 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 avg_str = format_duration_minutes(float(avg_session)) if avg_session else "-"
 
                 # Format dates
-                start_str = format_date(start_date) if start_date else "-"
-                last_str = format_date(last_updated) if last_updated else "-"
+                start_str = format_day_date(start_date) if start_date else "-"
+                last_str = format_day_date(last_updated) if last_updated else "-"
 
                 # Format tags
                 tags_str = ", ".join(tags) if tags else "-"
 
-                table.add_row(name, total_str, sessions_str, avg_str, start_str, last_str, context or "-", tags_str)
+                table.add_row(name, total_str, start_str, last_str, sessions_str, avg_str, context or "-", tags_str)
 
         tables.append(table)
 
