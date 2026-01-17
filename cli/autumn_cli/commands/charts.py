@@ -5,9 +5,9 @@ from typing import Optional
 from pathlib import Path
 from ..api_client import APIClient, APIError
 from ..utils.charts import (
-    render_pie_chart, 
-    render_bar_chart, 
-    render_scatter_chart, 
+    render_pie_chart,
+    render_bar_chart,
+    render_scatter_chart,
     render_heatmap,
     render_calendar_chart,
     render_wordcloud_chart,
@@ -19,12 +19,16 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 @click.option(
     "--type",
     "-T",
-    type=click.Choice(["pie", "bar", "scatter", "calendar", "wordcloud", "heatmap"], case_sensitive=False),
+    type=click.Choice(
+        ["pie", "bar", "scatter", "calendar", "wordcloud", "heatmap"],
+        case_sensitive=False,
+    ),
     default="pie",
     help="Chart type (default: pie)",
 )
-@click.option("--project", "-p", help="Project name (shows subprojects if specified for pie/bar)")
-
+@click.option(
+    "--project", "-p", help="Project name (shows subprojects if specified for pie/bar)"
+)
 @click.option("--context", "-c", help="Filter by context (name or id)")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option(
@@ -37,11 +41,16 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
     default=None,
     help="Time period (same options as 'log')",
 )
-
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
-@click.option("--save", type=click.Path(), help="Save chart to file instead of displaying")
-@click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")
+@click.option(
+    "--save", type=click.Path(), help="Save chart to file instead of displaying"
+)
+@click.option(
+    "--pick",
+    is_flag=True,
+    help="Interactively pick project/context/tags if not provided",
+)
 def chart(
     type: str,
     project: Optional[str],
@@ -107,7 +116,9 @@ def chart(
         if ctx_res.warning:
             click.echo(f"Warning: {ctx_res.warning}", err=True)
 
-        tag_resolved, tag_warnings = resolve_tag_params(tags=list(tag) if tag else None, known_tags=tags_payload)
+        tag_resolved, tag_warnings = resolve_tag_params(
+            tags=list(tag) if tag else None, known_tags=tags_payload
+        )
         for w in tag_warnings:
             click.echo(f"Warning: {w}", err=True)
 
@@ -125,7 +136,11 @@ def chart(
                     context=resolved_context,
                     tags=resolved_tags,
                 )
-                title = f"Time Distribution: {project} (Subprojects)" if type == "pie" else f"Time Totals: {project} (Subprojects)"
+                title = (
+                    f"Time Distribution: {project} (Subprojects)"
+                    if type == "pie"
+                    else f"Time Totals: {project} (Subprojects)"
+                )
             else:
                 # Show all projects
                 data = client.tally_by_sessions(
@@ -135,13 +150,17 @@ def chart(
                     context=resolved_context,
                     tags=resolved_tags,
                 )
-                title = "Time Distribution: All Projects" if type == "pie" else "Time Totals: All Projects"
-            
+                title = (
+                    "Time Distribution: All Projects"
+                    if type == "pie"
+                    else "Time Totals: All Projects"
+                )
+
             if type == "pie":
                 render_pie_chart(data, title=title, save_path=save_path)
             else:  # bar
                 render_bar_chart(data, title=title, save_path=save_path)
-        
+
         elif type in ("scatter", "calendar", "heatmap", "wordcloud"):
             # Use list_sessions for scatter/calendar/heatmap/wordcloud
             sessions = client.list_sessions(
@@ -157,19 +176,25 @@ def chart(
                 if project:
                     title += f" - {project}"
                 render_scatter_chart(sessions, title=title, save_path=save_path)
-            
+
             elif type == "calendar":
                 title = "Projects Calendar"
                 if project:
                     title += f" - {project}"
-                render_calendar_chart(sessions, title=title, save_path=save_path)
-            
+                render_calendar_chart(
+                    sessions,
+                    title=title,
+                    start_date=start_date,
+                    end_date=end_date,
+                    save_path=save_path,
+                )
+
             elif type == "heatmap":
                 title = "Activity Heatmap"
                 if project:
                     title += f" - {project}"
                 render_heatmap(sessions, title=title, save_path=save_path)
-            
+
             elif type == "wordcloud":
                 title = "Session Notes Wordcloud"
                 if project:
