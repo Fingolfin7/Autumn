@@ -47,6 +47,11 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
     "--save", type=click.Path(), help="Save chart to file instead of displaying"
 )
 @click.option(
+    "--color-by-project",
+    is_flag=True,
+    help="Color calendar/heatmap by dominant project instead of single color",
+)
+@click.option(
     "--pick",
     is_flag=True,
     help="Interactively pick project/context/tags if not provided",
@@ -60,6 +65,7 @@ def chart(
     start_date: Optional[str],
     end_date: Optional[str],
     save: Optional[str],
+    color_by_project: bool,
     pick: bool,
 ):
     """Render charts. Default type is pie. Also accepts: bar, scatter, calendar, wordcloud, heatmap."""
@@ -187,6 +193,7 @@ def chart(
                     start_date=start_date,
                     end_date=end_date,
                     save_path=save_path,
+                    color_by_project=color_by_project,
                 )
 
             elif type == "heatmap":

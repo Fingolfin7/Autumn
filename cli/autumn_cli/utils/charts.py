@@ -233,6 +233,7 @@ def render_calendar_chart(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     save_path: Optional[str] = None,
+    color_by_project: bool = False,
 ):
     """Render a GitHub-style calendar heatmap using pandas and matplotlib."""
 
@@ -264,7 +265,11 @@ def render_calendar_chart(
                 end_time = parse_utc_to_local(end_time_str)
                 duration_hours = (end_time - start_time).total_seconds() / 3600.0
 
-            data_list.append({"date": date_val, "duration": duration_hours})
+            project_name = s.get("project") or s.get("p", "Unknown")
+
+            data_list.append(
+                {"date": date_val, "duration": duration_hours, "project": project_name}
+            )
 
         except (ValueError, AttributeError):
             continue
@@ -278,8 +283,24 @@ def render_calendar_chart(
     if not df.empty:
         # Sum duration by date
         daily_series = df.groupby("date")["duration"].sum()
+
+        # If coloring by project, we also need the dominant project per day
+        if color_by_project:
+            # Group by date and project, sum duration
+            project_daily = (
+                df.groupby(["date", "project"])["duration"].sum().reset_index()
+            )
+            # Find row with max duration for each date
+            dominant_projects = project_daily.loc[
+                project_daily.groupby("date")["duration"].idxmax()
+            ]
+            dominant_projects = dominant_projects.set_index("date")["project"]
+        else:
+            dominant_projects = pd.Series(dtype=str)
+
     else:
         daily_series = pd.Series(dtype=float)
+        dominant_projects = pd.Series(dtype=str)
 
     # --- 2. Determine Date Range ---
     if start_date:
@@ -305,6 +326,9 @@ def render_calendar_chart(
     full_range = pd.date_range(start=start_ts, end=end_ts, freq="D")
     daily_series = daily_series.reindex(full_range, fill_value=0.0)
 
+    if color_by_project and not dominant_projects.empty:
+        dominant_projects = dominant_projects.reindex(full_range, fill_value=None)
+
     # --- 3. Build Grid for Heatmap ---
     # Transposed grid: Rows = Weeks, Cols = Days (Mon-Sun)
 
@@ -324,6 +348,9 @@ def render_calendar_chart(
         (n_weeks, 7), np.nan
     )  # Fill with NaN initially to distinguish outside range if needed
 
+    # Grid for project names if needed
+    project_grid = np.full((n_weeks, 7), None, dtype=object)
+
     # Fill grid
     for date, duration in daily_series.items():
         # Calculate position relative to first_monday
@@ -335,14 +362,19 @@ def render_calendar_chart(
             # TRANSPOSED: [week_idx, day_idx]
             heatmap_data[week_idx, day_idx] = duration
 
+            if color_by_project and not dominant_projects.empty:
+                proj = dominant_projects.get(date)
+                if proj:
+                    project_grid[week_idx, day_idx] = proj
+
     # --- 4. Plotting ---
     # Aspect ratio adjustment: Tall if many weeks, wide if few
     # We want roughly square cells.
     # Height = n_weeks * scale, Width = 7 * scale
     fig, ax = plt.subplots(figsize=(8, max(4, n_weeks * 0.4)))
 
-    # Create a custom colormap (white to green)
-    cmap = sns.light_palette("green", as_cmap=True)
+    # Store legend handles if using multiple colors
+    legend_patches = []
 
     # Let's make a mask for out-of-range days
     mask = np.zeros_like(heatmap_data, dtype=bool)
@@ -358,21 +390,112 @@ def render_calendar_chart(
                 # Should not happen given reindex fill_value=0, but just in case
                 heatmap_data[w, d] = 0
 
-    # Plot
-    # We need to invert Y axis so 1st Week is top
-    mesh = ax.pcolormesh(heatmap_data, cmap=cmap, edgecolors="white", linewidth=1)
+    if color_by_project and not df.empty:
+        # --- Multi-color Rendering ---
 
-    # Masked areas (outside range) - plot as grey/transparent
-    if mask.any():
-        masked_data = np.ma.masked_where(~mask, mask)
-        ax.pcolormesh(
-            masked_data,
-            cmap=mcolors.ListedColormap(["#f0f0f0"]),
-            edgecolors="white",
-            linewidth=1,
+        # 1. Identify all unique projects to assign colors
+        unique_projects = sorted(df["project"].unique())
+        proj_to_color = {
+            p: generate_color(i, len(unique_projects))
+            for i, p in enumerate(unique_projects)
+        }
+
+        # 2. Create an RGBA image array (n_weeks, 7, 4)
+        # Initialize with transparent/grey for empty cells
+        rgba_grid = np.zeros((n_weeks, 7, 4))
+
+        # Find max duration for normalization of alpha/intensity
+        max_dur = np.nanmax(heatmap_data)
+        if max_dur == 0:
+            max_dur = 1.0
+
+        for w in range(n_weeks):
+            for d in range(7):
+                if mask[w, d]:
+                    # Out of range: Standard Grey
+                    rgba_grid[w, d] = (0.94, 0.94, 0.94, 1.0)  # #f0f0f0
+                else:
+                    duration = heatmap_data[w, d]
+                    proj = project_grid[w, d]
+
+                    if duration > 0 and proj:
+                        # Get base color (RGB 0-255)
+                        r, g, b = proj_to_color.get(proj, (0, 128, 0))
+
+                        # Normalize duration to 0.2 - 1.0 range
+                        intensity = min(duration / max_dur, 1.0)
+                        alpha = 0.2 + (0.8 * intensity)
+
+                        # Assign color with alpha
+                        rgba_grid[w, d] = (r / 255.0, g / 255.0, b / 255.0, alpha)
+                    else:
+                        # No activity: Light Grey (GitHub style empty cell)
+                        # #ebedf0 is roughly (0.92, 0.93, 0.94)
+                        rgba_grid[w, d] = (0.92, 0.93, 0.94, 1.0)
+
+        # Render using imshow (it handles direct RGBA grids)
+        # We set extent to align perfectly with the integer grid (0..7, 0..n_weeks)
+        # Origin="upper" aligns (0,0) to top-left, matching our iteration logic
+        mesh = ax.imshow(
+            rgba_grid,
+            aspect="equal",
+            interpolation="nearest",
+            origin="upper",
+            extent=[0, 7, n_weeks, 0],
         )
 
-    ax.invert_yaxis()
+        # Add white grid lines manually to separate cells
+        # This replicates the "gap" between cells seen in GitHub/Calendar charts
+        ax.set_xticks(np.arange(0.5, 7.5, 1), minor=True)
+        ax.set_yticks(np.arange(0.5, n_weeks + 0.5, 1), minor=True)
+        ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
+        ax.tick_params(which="minor", bottom=False, left=False)
+
+        # Disable major grid
+        ax.grid(which="major", visible=False)
+
+        # Create legend
+        import matplotlib.patches as mpatches
+
+        for proj, color_tuple in proj_to_color.items():
+            r, g, b = color_tuple
+            patch = mpatches.Patch(
+                color=(r / 255.0, g / 255.0, b / 255.0, 1.0), label=proj
+            )
+            legend_patches.append(patch)
+
+        # Add legend outside plot
+        ax.legend(
+            handles=legend_patches,
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+            title="Dominant Project",
+        )
+
+    else:
+        # --- Standard Green Scale Rendering ---
+
+        # Ensure grid is on for standard plot
+        ax.grid(False)  # Turn off main grid, we use edgecolors for cell borders
+
+        # Create a custom colormap (white to green)
+        cmap = sns.light_palette("green", as_cmap=True)
+
+        # Plot
+        # We need to invert Y axis so 1st Week is top
+        mesh = ax.pcolormesh(heatmap_data, cmap=cmap, edgecolors="white", linewidth=1)
+
+        # Masked areas (outside range) - plot as grey/transparent
+        if mask.any():
+            masked_data = np.ma.masked_where(~mask, mask)
+            ax.pcolormesh(
+                masked_data,
+                cmap=mcolors.ListedColormap(["#f0f0f0"]),
+                edgecolors="white",
+                linewidth=1,
+            )
+
+        ax.invert_yaxis()
 
     # --- 5. Formatting ---
     ax.set_aspect("equal")
@@ -460,10 +583,15 @@ def render_calendar_chart(
                 # Check if we have data for this date
                 val = heatmap_data[y_idx, x_idx]
 
+                # Get project if applicable
+                proj_label = ""
+                if color_by_project and project_grid[y_idx, x_idx]:
+                    proj_label = f"\nMain: {project_grid[y_idx, x_idx]}"
+
                 # Check if it's a valid date (not masked out)
                 if not mask[y_idx, x_idx] and not np.isnan(val):
                     annot.xy = (x_idx + 0.5, y_idx + 0.5)
-                    text = f"{target_date.strftime('%Y-%m-%d')}\n{val:.2f} hours"
+                    text = f"{target_date.strftime('%Y-%m-%d')}\n{val:.2f} hours{proj_label}"
                     annot.set_text(text)
                     annot.set_visible(True)
                     fig.canvas.draw_idle()
