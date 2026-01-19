@@ -20,17 +20,23 @@ from ..utils.dashboard.shell import execute_command
 def dash():
     """Launch the interactive Autumn Dashboard."""
     import os
+    import sys
 
+    # Force ANSI support on Windows if possible
     if os.name == "nt":
-        # This enables VT100/ANSI processing on Windows consoles
-        os.system("")
+        # Enable VT mode in Windows 10+
+        import ctypes
 
-    # We use the configured console but ensure it's in terminal mode for the TUI
+        kernel32 = ctypes.windll.kernel32
+        # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+
     from rich.console import Console
     from ..utils.console import THEME
 
-    # Create a fresh console for the dashboard that forces terminal support
-    dash_console = Console(theme=THEME, force_terminal=True)
+    # Let Rich detect the terminal capabilities naturally
+    # but we ensure it's pointing to the correct stdout
+    dash_console = Console(theme=THEME, file=sys.stdout)
 
     client = APIClient()
     state = DashboardState(client)
@@ -56,14 +62,13 @@ def dash():
 
     # Use patch_stdout to allow prompt_toolkit and rich to coexist
     with patch_stdout():
-        # We'll use screen=False first as it's more compatible with Legacy Windows terminals.
-        # It will re-print the dashboard in the same spot.
+        # Screen=True uses the alternate buffer for a cleaner full-screen experience
         with Live(
             render_dashboard(state),
             console=dash_console,
             auto_refresh=True,
             refresh_per_second=4,
-            screen=False,
+            screen=True,
         ) as live:
             # Start background refresh thread
             thread = threading.Thread(target=refresh_loop, args=(live,), daemon=True)
