@@ -422,23 +422,29 @@ def check_reminders_health() -> List[str]:
                 try:
                     next_fire = datetime.fromisoformat(fire_time_iso)
                     if next_fire < now:
-                        msg = (
-                            f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
-                            f"(scheduled for {next_fire.strftime('%Y-%m-%d %H:%M:%S')})"
-                        )
-                        messages.append(msg)
-
-                        # System notification
-                        notify_msg = f"Missed: {e.project}"
-                        send_notification(
-                            title=e.notify_title or "Autumn",
-                            message=e.remind_message.format(
-                                project=e.project, elapsed="?"
+                        # Only warn if the session is still active (or it's a standalone reminder)
+                        if _session_active(e.session_id):
+                            msg = (
+                                f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
+                                f"(scheduled for {next_fire.strftime('%Y-%m-%d %H:%M:%S')})"
                             )
-                            if e.remind_message
-                            else notify_msg,
-                        )
-                        missed = True
+                            messages.append(msg)
+
+                            # System notification
+                            notify_msg = f"Missed: {e.project}"
+                            send_notification(
+                                title=e.notify_title or "Autumn",
+                                message=e.remind_message.format(
+                                    project=e.project, elapsed="?"
+                                )
+                                if e.remind_message
+                                else notify_msg,
+                            )
+                            missed = True
+                        else:
+                            # Session is stopped; reminder is implicitly cancelled.
+                            # We just mark it so it gets pruned.
+                            pass
                 except Exception:
                     pass
 
