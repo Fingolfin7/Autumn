@@ -50,38 +50,50 @@ def dash():
 
     session = PromptSession(history=InMemoryHistory())
 
-    def refresh_loop(live: Live):
+    def data_refresh_loop():
         while True:
             try:
+                # state.refresh handles its own 60s throttling internally
                 state.refresh()
-                live.update(render_dashboard(state))
-            except Exception as e:
-                # We don't want to crash the refresh thread
+            except Exception:
                 pass
-            time.sleep(1)
+            time.sleep(10)
+
+    def ui_refresh_loop(live: Live):
+        while True:
+            try:
+                # Update the display (rebuilds layout for ticking clock)
+                live.update(render_dashboard(state))
+            except Exception:
+                pass
+            time.sleep(0.5)  # 2 FPS is plenty for a ticking clock
 
     # Use patch_stdout to allow prompt_toolkit and rich to coexist
     with patch_stdout():
-        # Screen=True uses the alternate buffer for a cleaner full-screen experience
+        # auto_refresh=False gives us manual control to reduce flickering
         with Live(
             render_dashboard(state),
             console=dash_console,
-            auto_refresh=True,
-            refresh_per_second=4,
+            auto_refresh=False,
             screen=True,
         ) as live:
-            # Start background refresh thread
-            thread = threading.Thread(target=refresh_loop, args=(live,), daemon=True)
-            thread.start()
+            # Start background data thread
+            data_thread = threading.Thread(target=data_refresh_loop, daemon=True)
+            data_thread.start()
+
+            # Start background UI thread
+            ui_thread = threading.Thread(
+                target=ui_refresh_loop, args=(live,), daemon=True
+            )
+            ui_thread.start()
 
             # Main input loop
             while True:
                 try:
-                    # session.prompt will show up below the dashboard
                     cmd = session.prompt("autumn> ")
                     if cmd.strip():
                         execute_command(cmd, state)
-                        # The Live display will naturally pick up state changes via refresh_loop or manual trigger
+                        # Manual update after command execution
                         live.update(render_dashboard(state))
                 except (KeyboardInterrupt, EOFError):
                     break
