@@ -10,13 +10,13 @@ from .console import console
 
 def parse_utc_to_local(iso_string: str) -> Optional[datetime]:
     """Parse UTC ISO string and convert to local timezone.
-    
+
     The server returns dates/times in UTC (with 'Z' suffix).
     This function converts them to the user's local timezone for display.
-    
+
     Args:
         iso_string: ISO 8601 datetime string, typically with 'Z' suffix
-        
+
     Returns:
         datetime object in local timezone, or None if parsing fails
     """
@@ -33,7 +33,7 @@ def parse_utc_to_local(iso_string: str) -> Optional[datetime]:
 
 def format_duration_minutes(minutes: float) -> str:
     """Format duration in minutes to human-readable string.
-    
+
     If duration is long enough, formats as "X day(s) Y hour(s)..."
     Otherwise uses "Hh Mm" or "Mm Ss".
     """
@@ -52,8 +52,8 @@ def format_duration_minutes(minutes: float) -> str:
 
     # If we have days, use the verbose day format (matching legacy td_str)
     if days > 0:
-        plural_form = lambda counter: 's'[:counter ^ 1]
-        
+        plural_form = lambda counter: "s"[: counter ^ 1]
+
         parts = []
         parts.append(f"{days} day{plural_form(days)}")
         if hours > 0:
@@ -62,14 +62,13 @@ def format_duration_minutes(minutes: float) -> str:
             parts.append(f"{mins} minute{plural_form(mins)}")
         if secs > 0:
             parts.append(f"{secs} second{plural_form(secs)}")
-            
+
         return " ".join(parts)
 
     # Otherwise use compact format
     if hours > 0:
         return f"{hours:02d}h {mins:02d}m"
     return f"{mins:02d}m {secs:02d}s"
-
 
 
 def format_duration_hours(hours: float) -> str:
@@ -99,6 +98,7 @@ def format_date(iso_string: str) -> str:
         return dt.strftime("%Y-%m-%d")
     return iso_string
 
+
 def format_day_date(iso_string: str) -> str:
     """Format ISO date/datetime string to 'Weekday DD Month YYYY' in local timezone."""
     dt = parse_utc_to_local(iso_string)
@@ -117,7 +117,7 @@ def format_time_hms(iso_string: str) -> str:
 
 def format_log_date_header(iso_date_or_datetime: str) -> str:
     """Format a date key (YYYY-MM-DD) to 'Weekday DD Month YYYY' in local timezone.
-    
+
     Note: This handles both simple date strings (YYYY-MM-DD) and full datetimes.
     For date-only strings, they're assumed to be in local timezone already.
     """
@@ -197,10 +197,14 @@ def sessions_table(
     table.add_column("End", style="autumn.time", no_wrap=True)
     table.add_column("Dur", style="autumn.time", no_wrap=True, justify="right")
     if show_notes:
-        table.add_column("Note", style="autumn.note", overflow="fold", max_width=note_width)
+        table.add_column(
+            "Note", style="autumn.note", overflow="fold", max_width=note_width
+        )
 
     if not sessions:
-        table.add_row("-", "-", "-", "-", "-", "-", "No sessions found." if show_notes else "")
+        table.add_row(
+            "-", "-", "-", "-", "-", "-", "No sessions found." if show_notes else ""
+        )
         return table
 
     for s in sessions:
@@ -209,7 +213,9 @@ def sessions_table(
 
         start_str = format_datetime(f["start"])
         end_str = format_datetime(f["end"]) if f["end"] else "Active"
-        dur_str = format_duration_minutes(float(f["duration"]) if f["duration"] is not None else 0)
+        dur_str = format_duration_minutes(
+            float(f["duration"]) if f["duration"] is not None else 0
+        )
 
         row = [
             str(f["id"] or ""),
@@ -277,11 +283,17 @@ def projects_tables(projects_data: Dict) -> List[Table]:
         )
 
         table.add_column("Project", style="autumn.project", no_wrap=True)
-        table.add_column("Total", style="autumn.duration", justify="right", no_wrap=True)
+        table.add_column(
+            "Total", style="autumn.duration", justify="right", no_wrap=True
+        )
         table.add_column("Started", style="autumn.time", no_wrap=True)
         table.add_column("Last Active", style="autumn.time", no_wrap=True)
-        table.add_column("Sessions", style="autumn.muted", justify="right", no_wrap=True)
-        table.add_column("Avg Duration", style="autumn.duration", justify="right", no_wrap=True)
+        table.add_column(
+            "Sessions", style="autumn.muted", justify="right", no_wrap=True
+        )
+        table.add_column(
+            "Avg Duration", style="autumn.duration", justify="right", no_wrap=True
+        )
         table.add_column("Context", style="autumn.subproject", no_wrap=True)
         table.add_column("Tags", style="autumn.note", overflow="fold", max_width=20)
 
@@ -301,13 +313,17 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 tags = proj.get("tags", []) or []
 
                 # Format the total time
-                total_str = format_duration_minutes(float(total_time)) if total_time else "0m"
+                total_str = (
+                    format_duration_minutes(float(total_time)) if total_time else "0m"
+                )
 
                 # Format session count
                 sessions_str = str(session_count) if session_count else "0"
 
                 # Format average session duration
-                avg_str = format_duration_minutes(float(avg_session)) if avg_session else "-"
+                avg_str = (
+                    format_duration_minutes(float(avg_session)) if avg_session else "-"
+                )
 
                 # Format dates
                 start_str = format_day_date(start_date) if start_date else "-"
@@ -316,7 +332,16 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 # Format tags
                 tags_str = ", ".join(tags) if tags else "-"
 
-                table.add_row(name, total_str, start_str, last_str, sessions_str, avg_str, context or "-", tags_str)
+                table.add_row(
+                    name,
+                    total_str,
+                    start_str,
+                    last_str,
+                    sessions_str,
+                    avg_str,
+                    context or "-",
+                    tags_str,
+                )
 
         tables.append(table)
 
@@ -364,7 +389,9 @@ def format_totals_table(totals_data: Dict) -> str:
     return tabulate(rows, headers=headers, tablefmt="grid")
 
 
-def contexts_table(contexts: List[Dict[str, Any]], show_description: bool = False) -> Table:
+def contexts_table(
+    contexts: List[Dict[str, Any]], show_description: bool = False
+) -> Table:
     """Render a table of contexts."""
     table = Table(show_header=True, header_style="autumn.title", padding=(0, 1))
     table.add_column("ID", style="autumn.id", no_wrap=True, justify="right")
@@ -376,7 +403,11 @@ def contexts_table(contexts: List[Dict[str, Any]], show_description: bool = Fals
         cid = c.get("id")
         name = c.get("name", "")
         if show_description:
-            table.add_row(str(cid) if cid is not None else "-", name, c.get("description", "") or "")
+            table.add_row(
+                str(cid) if cid is not None else "-",
+                name,
+                c.get("description", "") or "",
+            )
         else:
             table.add_row(str(cid) if cid is not None else "-", name)
 
@@ -395,9 +426,55 @@ def tags_table(tags: List[Dict[str, Any]], show_color: bool = False) -> Table:
         tid = t.get("id")
         name = t.get("name", "")
         if show_color:
-            table.add_row(str(tid) if tid is not None else "-", name, t.get("color", "") or "")
+            table.add_row(
+                str(tid) if tid is not None else "-", name, t.get("color", "") or ""
+            )
         else:
             table.add_row(str(tid) if tid is not None else "-", name)
 
     return table
 
+
+def subprojects_table(project_name: str, subprojects: List[Any]) -> Table:
+    """Create a Rich table for subprojects of a specific project."""
+    table = Table(
+        show_header=True,
+        header_style="autumn.title",
+        show_lines=False,
+        expand=False,
+        title=f"[autumn.label]Project:[/] [autumn.project]{project_name}[/]",
+        title_justify="left",
+        padding=(0, 1),
+    )
+
+    table.add_column("Subproject", style="autumn.subproject", no_wrap=True)
+    table.add_column(
+        "Total Time", style="autumn.duration", justify="right", no_wrap=True
+    )
+    table.add_column("Last Active", style="autumn.time", no_wrap=True)
+    table.add_column("Sessions", style="autumn.muted", justify="right", no_wrap=True)
+
+    if not subprojects:
+        table.add_row("No subprojects found.", "-", "-", "-")
+        return table
+
+    for sub in subprojects:
+        if isinstance(sub, str):
+            # Simple list from compact response
+            table.add_row(sub, "-", "-", "-")
+        else:
+            # Full DRF serializer format
+            name = sub.get("name") or sub.get("p") or ""
+            total_time = sub.get("total_time") or sub.get("dur") or 0
+            last_active = sub.get("last_updated") or sub.get("last_active") or ""
+            session_count = sub.get("session_count") or 0
+
+            total_str = (
+                format_duration_minutes(float(total_time)) if total_time else "0m"
+            )
+            last_str = format_day_date(last_active) if last_active else "-"
+            sessions_str = str(session_count) if session_count else "0"
+
+            table.add_row(name, total_str, last_str, sessions_str)
+
+    return table

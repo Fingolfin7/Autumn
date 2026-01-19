@@ -3,8 +3,9 @@
 import click
 from typing import Optional
 from ..api_client import APIClient, APIError
-from ..utils.formatters import projects_tables
+from ..utils.formatters import projects_tables, subprojects_table
 from ..utils.console import console
+
 from ..utils.resolvers import resolve_context_param, resolve_tag_params
 
 
@@ -119,20 +120,8 @@ def subprojects(project: str):
         else:
             subs = result.get("subprojects") or result.get("subs") or []
 
-        console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
-        if not subs:
-            console.print("[autumn.muted]No subprojects found.[/]")
-            return
-
-        console.print(f"[autumn.label]Subprojects ({len(subs)}):[/]")
-        # Check if subs is a dict (legacy style might imply values) or list
-        if isinstance(subs, dict):
-            subs_list = list(subs.keys())
-        else:
-            subs_list = list(subs)
-
-        for sub in sorted(subs_list):
-            console.print(f"  [autumn.subproject]{sub}[/]")
+        table = subprojects_table(project, subs)
+        console.print(table)
 
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
