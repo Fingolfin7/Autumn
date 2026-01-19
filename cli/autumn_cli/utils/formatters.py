@@ -284,9 +284,7 @@ def projects_tables(
             padding=(0, 1),
         )
 
-        table.add_column(
-            "Project", style="autumn.project", no_wrap=False
-        )  # Wrap for descriptions
+        table.add_column("Project", no_wrap=False)  # Wrap for descriptions
         table.add_column(
             "Total", style="autumn.duration", justify="right", no_wrap=True
         )
@@ -304,7 +302,9 @@ def projects_tables(
         for proj in proj_list:
             if isinstance(proj, str):
                 # Compact format - just project name
-                table.add_row(proj, "-", "-", "-", "-", "-", "-", "-")
+                table.add_row(
+                    f"[autumn.project]{proj}[/]", "-", "-", "-", "-", "-", "-", "-"
+                )
             else:
                 # Full format with metadata
                 name = proj.get("name", "")
@@ -319,9 +319,11 @@ def projects_tables(
 
                 # Format name cell with description if requested
                 if show_descriptions and desc:
-                    name_cell = f"[autumn.project]{name}[/]\n[dim italic]{desc}[/]"
+                    name_cell = (
+                        f"[autumn.project]{name}[/]\n[autumn.description]{desc}[/]"
+                    )
                 else:
-                    name_cell = name
+                    name_cell = f"[autumn.project]{name}[/]"
 
                 # Format the total time
                 total_str = (
@@ -462,8 +464,8 @@ def subprojects_table(
     )
 
     table.add_column(
-        "Subproject", style="autumn.subproject", no_wrap=False
-    )  # Wrap for descriptions
+        "Subproject", no_wrap=False
+    )  # Wrap for descriptions, style moved to cells
     table.add_column(
         "Total Time", style="autumn.duration", justify="right", no_wrap=True
     )
@@ -477,7 +479,7 @@ def subprojects_table(
     for sub in subprojects:
         if isinstance(sub, str):
             # Simple list from compact response
-            table.add_row(sub, "-", "-", "-")
+            table.add_row(f"[autumn.subproject]{sub}[/]", "-", "-", "-")
         else:
             # Full DRF serializer format
             name = sub.get("name") or sub.get("p") or ""
@@ -489,9 +491,11 @@ def subprojects_table(
 
             # Format name cell with description if requested
             if show_descriptions and desc:
-                name_cell = f"[autumn.subproject]{name}[/]\n[dim italic]{desc}[/]"
+                name_cell = (
+                    f"[autumn.subproject]{name}[/]\n[autumn.description]{desc}[/]"
+                )
             else:
-                name_cell = name
+                name_cell = f"[autumn.subproject]{name}[/]"
 
             total_str = (
                 format_duration_minutes(float(total_time)) if total_time else "0m"
