@@ -13,14 +13,12 @@ Registry entries are best-effort:
 """
 
 from __future__ import annotations
-
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List
-
 from ..config import CONFIG_DIR, load_config, save_config
 
 
@@ -39,6 +37,8 @@ class ReminderEntry:
     auto_stop_for: str | None = None
     remind_poll: str | None = None
     next_fire_at: str | None = None
+    remind_message: str | None = None
+    notify_title: str | None = None
 
 
 def _now_iso() -> str:
@@ -91,6 +91,68 @@ def _is_pid_alive(pid: int) -> bool:
         close_handle(handle)
         return True
     except Exception:
+        return True
+
+
+def _session_active(session_id: int | None) -> bool:
+    """Check if a session is currently active on the backend."""
+    if session_id is None:
+        # Standalone reminder (not attached to a session) -> always "active"
+        # (The daemon itself will exit if it finishes its task)
+        return True
+
+    try:
+        from ..api_client import APIClient, APIError
+
+        client = APIClient()
+    except Exception:
+        # If we can't create a client, be conservative and assume active.
+        return True
+
+    try:
+        # Use unfiltered status check (list all active) to handle stopped sessions robustly.
+        st = client.get_timer_status(session_id=None)
+        if not isinstance(st, dict) or not st.get("ok"):
+            return False
+
+        sessions = st.get("sessions")
+        if isinstance(sessions, list):
+            for s in sessions:
+                if not isinstance(s, dict):
+                    continue
+                sid = s.get("id")
+                try:
+                    if sid is not None and int(sid) == int(session_id):
+                        if "active" in s:
+                            return bool(s.get("active"))
+                        # If it's returned in the active list, treat as active.
+                        return True
+                except Exception:
+                    continue
+            # Not found in active list -> Inactive
+            return False
+
+        # Fallback: check legacy single-session shape
+        one = st.get("session")
+        if isinstance(one, dict):
+            if "active" in one:
+                return bool(one.get("active"))
+            return one.get("end") in (None, "")
+
+        return bool(st.get("active", 0))
+    except Exception as e:
+        # If the backend raises for "session not found", prune.
+        try:
+            from ..api_client import APIError
+
+            if isinstance(e, APIError):
+                msg = str(e).lower()
+                if "not found" in msg:
+                    return False
+        except Exception:
+            pass
+
+        # Otherwise, if we can't check, don't prune.
         return True
 
 
@@ -149,7 +211,14 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
                 next_fire_at=(
                     str(e.get("next_fire_at")) if e.get("next_fire_at") else None
                 ),
+                remind_message=(
+                    str(e.get("remind_message")) if e.get("remind_message") else None
+                ),
+                notify_title=(
+                    str(e.get("notify_title")) if e.get("notify_title") else None
+                ),
             )
+
             entries.append(entry)
         except Exception:
             continue
@@ -169,63 +238,6 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
     if prune_dead:
         alive: List[ReminderEntry] = []
-
-        # Optional extra pruning: drop entries whose sessions are no longer active.
-        # This covers cases where a background worker didn't exit for any reason.
-        try:
-            from ..api_client import APIClient, APIError
-
-            client = APIClient()
-        except Exception:
-            client = None
-            APIError = None  # type: ignore[assignment]
-
-        def _session_active(session_id: int | None) -> bool:
-            if session_id is None:
-                # Standalone reminder (not attached to a session) -> always "active"
-                # (The daemon itself will exit if it finishes its task)
-                return True
-
-            if client is None:
-                return True
-            try:
-                # Use unfiltered status check (list all active) to handle stopped sessions robustly.
-                st = client.get_timer_status(session_id=None)
-                if not isinstance(st, dict) or not st.get("ok"):
-                    return False
-
-                sessions = st.get("sessions")
-                if isinstance(sessions, list):
-                    for s in sessions:
-                        if not isinstance(s, dict):
-                            continue
-                        sid = s.get("id")
-                        try:
-                            if sid is not None and int(sid) == int(session_id):
-                                if "active" in s:
-                                    return bool(s.get("active"))
-                                return True
-                        except Exception:
-                            continue
-                    # Not found in active list -> Inactive
-                    return False
-
-                one = st.get("session")
-                if isinstance(one, dict):
-                    if "active" in one:
-                        return bool(one.get("active"))
-                    return one.get("end") in (None, "")
-
-                return bool(st.get("active", 0))
-            except Exception as e:
-                # If the backend raises for "session not found", prune.
-                if APIError is not None and isinstance(e, APIError):
-                    msg = str(e).lower()
-                    if "not found" in msg:
-                        return False
-
-                # Otherwise, if we can't check, don't prune.
-                return True
 
         for e in entries:
             # Heuristic for obviously-stale placeholder test artifacts.
@@ -276,6 +288,8 @@ def save_entries(entries: List[ReminderEntry]) -> None:
             "auto_stop_for": e.auto_stop_for,
             "remind_poll": e.remind_poll,
             "next_fire_at": e.next_fire_at,
+            "remind_message": e.remind_message,
+            "notify_title": e.notify_title,
         }
         for e in entries
     ]
@@ -294,6 +308,8 @@ def add_entry(
     auto_stop_for: str | None = None,
     remind_poll: str | None = None,
     next_fire_at: str | None = None,
+    remind_message: str | None = None,
+    notify_title: str | None = None,
 ) -> ReminderEntry:
     entry = ReminderEntry(
         pid=int(pid),
@@ -306,6 +322,8 @@ def add_entry(
         auto_stop_for=auto_stop_for,
         remind_poll=remind_poll,
         next_fire_at=next_fire_at,
+        remind_message=remind_message,
+        notify_title=notify_title,
     )
 
     # Don't prune here: immediately after spawning, PID-liveness checks can race on some platforms.
@@ -331,7 +349,10 @@ def update_next_fire_at(pid: int, next_fire_at: str | None) -> None:
                 auto_stop_for=e.auto_stop_for,
                 remind_poll=e.remind_poll,
                 next_fire_at=next_fire_at,
+                remind_message=e.remind_message,
+                notify_title=e.notify_title,
             )
+
             updated = True
             break
 
@@ -352,7 +373,11 @@ def clear_entries() -> None:
 
 
 def check_reminders_health() -> List[str]:
-    """Check for missed or orphaned reminders."""
+    """Check for missed or orphaned reminders and self-heal recurring ones."""
+    from .notify import send_notification
+    from .reminder_spawner import spawn_reminder
+    from .duration_parse import parse_duration_to_seconds
+
     # We load WITHOUT pruning first, so we can detect missed ones.
     entries = load_entries(prune_dead=False)
     now = datetime.now()
@@ -367,24 +392,75 @@ def check_reminders_health() -> List[str]:
             is_alive = True  # Conservative
 
         if not is_alive:
+            missed = False
             if e.next_fire_at:
                 try:
                     next_fire = datetime.fromisoformat(e.next_fire_at)
                     if next_fire < now:
-                        messages.append(
+                        msg = (
                             f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
                             f"(scheduled for {next_fire.strftime('%Y-%m-%d %H:%M:%S')})"
                         )
-                    overdue_pids.append(e.pid)
-                except Exception:
-                    continue
-            else:
-                # Dead PID, no fire time? Just prune it later.
-                overdue_pids.append(e.pid)
+                        messages.append(msg)
 
-    # Prune them now that we've reported them (if they were overdue)
+                        # System notification
+                        notify_msg = f"Missed: {e.project}"
+                        send_notification(
+                            title=e.notify_title or "Autumn",
+                            message=e.remind_message.format(
+                                project=e.project, elapsed="?"
+                            )
+                            if e.remind_message
+                            else notify_msg,
+                        )
+                        missed = True
+                except Exception:
+                    pass
+
+            # Self-healing for recurring reminders
+            if e.remind_every:
+                # Check if session is still active
+                if _session_active(e.session_id):
+                    try:
+                        # Calculate next future fire time
+                        interval = parse_duration_to_seconds(e.remind_every)
+                        last_fire = (
+                            datetime.fromisoformat(e.next_fire_at)
+                            if e.next_fire_at
+                            else datetime.fromisoformat(e.created_at)
+                        )
+
+                        next_target = last_fire + timedelta(seconds=interval)
+                        while next_target < now:
+                            next_target += timedelta(seconds=interval)
+
+                        # Respawn
+                        spawn_reminder(
+                            project=e.project,
+                            session_id=e.session_id,
+                            remind_every=e.remind_every,
+                            remind_message=e.remind_message
+                            or "Timer running: {project} ({elapsed})",
+                            notify_title=e.notify_title or "Autumn",
+                            remind_poll=e.remind_poll or "30s",
+                            quiet=True,
+                        )
+
+                        messages.append(
+                            f"[autumn.info]Respawned recurring reminder for project [autumn.project]{e.project}[/].[/]"
+                        )
+                    except Exception as err:
+                        messages.append(
+                            f"[autumn.error]Failed to respawn reminder for {e.project}: {err}[/]"
+                        )
+
+            overdue_pids.append(e.pid)
+
+    # Prune them now that we've reported/respawned them
     if overdue_pids:
-        remaining = [e for e in entries if e.pid not in overdue_pids]
+        # Reload current entries (which may include the newly respawned ones)
+        current_entries = load_entries(prune_dead=False)
+        remaining = [e for e in current_entries if e.pid not in overdue_pids]
         save_entries(remaining)
 
     return messages

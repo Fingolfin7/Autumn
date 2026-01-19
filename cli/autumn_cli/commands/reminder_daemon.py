@@ -11,8 +11,10 @@ It polls timer status and optionally stops the timer after a duration.
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
+
 from datetime import datetime, timedelta
 
 import click
@@ -301,7 +303,7 @@ def main(
         # Ensure forward progress and don't sleep longer than poll interval.
         wake = max(1.0, min(float(wake), float(plan.poll_seconds)))
 
-        sleep_seconds(int(wake))
+        sleep_seconds(int(math.ceil(wake)))
 
 
 if __name__ == "__main__":

@@ -5,19 +5,23 @@ from click.testing import CliRunner
 from autumn_cli.commands.reminders_cmd import reminders
 
 
-def test_reminders_list_does_not_clear_when_pid_check_errors(monkeypatch):
+def test_reminders_list_does_not_clear_when_pid_check_errors(monkeypatch, tmp_path):
     # If pid liveness check raises, we should conservatively keep entries.
     from autumn_cli.utils import reminders_registry as rr
 
-    state = {"reminders": [{"pid": 1, "session_id": 2, "project": "p", "created_at": "t", "mode": "m"}]}
+    reminders_file = tmp_path / "reminders.json"
+    monkeypatch.setattr(rr, "REMINDERS_FILE", reminders_file)
 
-    monkeypatch.setattr(rr, "load_config", lambda: dict(state))
+    # Initial state in reminders.json
+    entries = [
+        {"pid": 1, "session_id": 2, "project": "p", "created_at": "t", "mode": "m"}
+    ]
+    import json
 
-    def fake_save_config(cfg):
-        state.clear()
-        state.update(cfg)
+    reminders_file.write_text(json.dumps(entries))
 
-    monkeypatch.setattr(rr, "save_config", fake_save_config)
+    # Mock load_config to return empty (no migration)
+    monkeypatch.setattr(rr, "load_config", lambda: {})
 
     def boom(pid: int) -> bool:
         raise RuntimeError("nope")
@@ -29,5 +33,5 @@ def test_reminders_list_does_not_clear_when_pid_check_errors(monkeypatch):
     assert result.exit_code == 0
 
     # Entry should still be present (conservative behavior).
-    assert state.get("reminders")
-
+    data = json.loads(reminders_file.read_text())
+    assert data

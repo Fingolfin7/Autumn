@@ -21,6 +21,7 @@ def spawn_reminder(
     remind_message: str = "Timer running: {project} ({elapsed})",
     notify_title: str = "Autumn",
     remind_poll: str = "30s",
+    quiet: bool = False,
 ) -> None:
     """Spawn a background reminder daemon."""
 
@@ -84,8 +85,12 @@ def spawn_reminder(
             auto_stop_for=(str(auto_stop_for) if auto_stop_for else None),
             remind_poll=str(remind_poll),
             next_fire_at=next_fire_at,
+            remind_message=(str(remind_message) if remind_message else None),
+            notify_title=(str(notify_title) if notify_title else None),
         )
+
     except Exception:
         pass
 
-    console.print("[autumn.muted]Scheduled reminders in background.[/]")
+    if not quiet:
+        console.print("[autumn.muted]Scheduled reminders in background.[/]")
