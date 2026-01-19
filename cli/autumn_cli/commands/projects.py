@@ -27,6 +27,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 @click.option(
     "--pick", is_flag=True, help="Interactively pick context/tags if not provided"
 )
+@click.option("--desc", "-d", is_flag=True, help="Show project descriptions")
 def projects_list(
     status: Optional[str],
     context: Optional[str],
@@ -34,8 +35,10 @@ def projects_list(
     start_date: Optional[str],
     end_date: Optional[str],
     pick: bool,
+    desc: bool,
 ):
     """List projects grouped by status."""
+
     try:
         client = APIClient()
 
@@ -76,16 +79,8 @@ def projects_list(
             filtered_projects = {status: projects_data.get(status, [])}
             result["projects"] = filtered_projects
 
-        # Display colored summary
-        # console.print("[bold]Projects Summary[/]")
-        # console.print(f"  [autumn.status.active]Active:[/]   {summary.get('active', 0)}")
-        # console.print(f"  [autumn.status.paused]Paused:[/]   {summary.get('paused', 0)}")
-        # console.print(f"  [autumn.status.complete]Complete:[/] {summary.get('complete', 0)}")
-        # console.print(f"  [autumn.status.archived]Archived:[/] {summary.get('archived', 0)}")
-        # console.print(f"  [bold]Total:[/]    {summary.get('total', 0)}")
-        # console.print()
+        tables = projects_tables(result, show_descriptions=desc)
 
-        tables = projects_tables(result)
         if not tables:
             console.print("[dim]No projects found.[/]")
         else:
@@ -99,8 +94,10 @@ def projects_list(
 
 @click.command()
 @click.argument("project")
-def subprojects(project: str):
+@click.option("--desc", "-d", is_flag=True, help="Show subproject descriptions")
+def subprojects(project: str, desc: bool):
     """List subprojects for a given project."""
+
     try:
         client = APIClient()
         # Use list_subprojects endpoint - requesting non-compact to get full metadata
@@ -148,7 +145,7 @@ def subprojects(project: str):
                     if name in session_counts:
                         sub["session_count"] = session_counts[name]
 
-        table = subprojects_table(project, subs)
+        table = subprojects_table(project, subs, show_descriptions=desc)
         console.print(table)
 
     except APIError as e:

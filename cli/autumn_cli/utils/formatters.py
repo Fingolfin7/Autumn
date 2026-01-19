@@ -248,7 +248,9 @@ def format_sessions_table(sessions: List[Dict], compact: bool = True) -> str:
     return capture.get()
 
 
-def projects_tables(projects_data: Dict) -> List[Table]:
+def projects_tables(
+    projects_data: Dict, show_descriptions: bool = False
+) -> List[Table]:
     """Create Rich tables for projects grouped by status.
 
     Returns a list of Table objects that can be printed directly.
@@ -275,14 +277,16 @@ def projects_tables(projects_data: Dict) -> List[Table]:
         table = Table(
             show_header=True,
             header_style="autumn.title",
-            show_lines=False,
+            show_lines=show_descriptions,  # Add lines between rows if descriptions are shown
             expand=False,
             title=f"[{status_styles.get(status_key, 'autumn.title')}]{status_key.upper()} ({len(proj_list)})[/]",
             title_justify="left",
             padding=(0, 1),
         )
 
-        table.add_column("Project", style="autumn.project", no_wrap=True)
+        table.add_column(
+            "Project", style="autumn.project", no_wrap=False
+        )  # Wrap for descriptions
         table.add_column(
             "Total", style="autumn.duration", justify="right", no_wrap=True
         )
@@ -304,6 +308,7 @@ def projects_tables(projects_data: Dict) -> List[Table]:
             else:
                 # Full format with metadata
                 name = proj.get("name", "")
+                desc = proj.get("description", "")
                 total_time = proj.get("total_time", 0)
                 start_date = proj.get("start_date", "")
                 last_updated = proj.get("last_updated", "")
@@ -311,6 +316,12 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 avg_session = proj.get("avg_session_duration", 0)
                 context = proj.get("context", "") or ""
                 tags = proj.get("tags", []) or []
+
+                # Format name cell with description if requested
+                if show_descriptions and desc:
+                    name_cell = f"[autumn.project]{name}[/]\n[dim italic]{desc}[/]"
+                else:
+                    name_cell = name
 
                 # Format the total time
                 total_str = (
@@ -333,7 +344,7 @@ def projects_tables(projects_data: Dict) -> List[Table]:
                 tags_str = ", ".join(tags) if tags else "-"
 
                 table.add_row(
-                    name,
+                    name_cell,
                     total_str,
                     start_str,
                     last_str,
@@ -354,6 +365,7 @@ def format_projects_table(projects_data: Dict) -> str:
     For direct Rich console output, use projects_tables() instead.
     """
     tables = projects_tables(projects_data)
+
     if not tables:
         return "No projects found."
 
@@ -435,19 +447,23 @@ def tags_table(tags: List[Dict[str, Any]], show_color: bool = False) -> Table:
     return table
 
 
-def subprojects_table(project_name: str, subprojects: List[Any]) -> Table:
+def subprojects_table(
+    project_name: str, subprojects: List[Any], show_descriptions: bool = False
+) -> Table:
     """Create a Rich table for subprojects of a specific project."""
     table = Table(
         show_header=True,
         header_style="autumn.title",
-        show_lines=False,
+        show_lines=show_descriptions,  # Add lines between rows if descriptions are shown
         expand=False,
         title=f"[autumn.label]Project:[/] [autumn.project]{project_name}[/]",
         title_justify="left",
         padding=(0, 1),
     )
 
-    table.add_column("Subproject", style="autumn.subproject", no_wrap=True)
+    table.add_column(
+        "Subproject", style="autumn.subproject", no_wrap=False
+    )  # Wrap for descriptions
     table.add_column(
         "Total Time", style="autumn.duration", justify="right", no_wrap=True
     )
@@ -465,10 +481,17 @@ def subprojects_table(project_name: str, subprojects: List[Any]) -> Table:
         else:
             # Full DRF serializer format
             name = sub.get("name") or sub.get("p") or ""
+            desc = sub.get("description") or ""
             total_time = sub.get("total_time") or sub.get("dur") or 0
             last_active = sub.get("last_updated") or sub.get("last_active") or ""
             # session_count might be injected by the command
             session_count = sub.get("session_count")
+
+            # Format name cell with description if requested
+            if show_descriptions and desc:
+                name_cell = f"[autumn.subproject]{name}[/]\n[dim italic]{desc}[/]"
+            else:
+                name_cell = name
 
             total_str = (
                 format_duration_minutes(float(total_time)) if total_time else "0m"
@@ -476,6 +499,6 @@ def subprojects_table(project_name: str, subprojects: List[Any]) -> Table:
             last_str = format_day_date(last_active) if last_active else "-"
             sessions_str = str(session_count) if session_count is not None else "-"
 
-            table.add_row(name, total_str, last_str, sessions_str)
+            table.add_row(name_cell, total_str, last_str, sessions_str)
 
     return table
