@@ -67,6 +67,7 @@ def list_cmd(as_json: bool) -> None:
                         "next_fire_at": getattr(e, "next_fire_at", None),
                         "remind_message": getattr(e, "remind_message", None),
                         "notify_title": getattr(e, "notify_title", None),
+                        "status": getattr(e, "status", "pending"),
                     }
                     for e in entries
                 ],

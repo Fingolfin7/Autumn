@@ -87,6 +87,7 @@ def spawn_reminder(
             next_fire_at=next_fire_at,
             remind_message=(str(remind_message) if remind_message else None),
             notify_title=(str(notify_title) if notify_title else None),
+            status="pending",
         )
 
     except Exception:

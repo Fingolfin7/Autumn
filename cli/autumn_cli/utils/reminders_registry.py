@@ -32,6 +32,7 @@ class ReminderEntry:
     project: str
     created_at: str
     mode: str  # remind-in | remind-every | auto-stop | mixed
+    status: str = "pending"  # pending | firing | completed
     remind_in: str | None = None
     remind_every: str | None = None
     auto_stop_for: str | None = None
@@ -198,6 +199,7 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
                 project=str(e.get("project") or ""),
                 created_at=str(e.get("created_at") or ""),
                 mode=str(e.get("mode") or ""),
+                status=str(e.get("status") or "pending"),
                 remind_in=(str(e.get("remind_in")) if e.get("remind_in") else None),
                 remind_every=(
                     str(e.get("remind_every")) if e.get("remind_every") else None
@@ -283,6 +285,7 @@ def save_entries(entries: List[ReminderEntry]) -> None:
             "project": e.project,
             "created_at": e.created_at,
             "mode": e.mode,
+            "status": e.status,
             "remind_in": e.remind_in,
             "remind_every": e.remind_every,
             "auto_stop_for": e.auto_stop_for,
@@ -310,6 +313,7 @@ def add_entry(
     next_fire_at: str | None = None,
     remind_message: str | None = None,
     notify_title: str | None = None,
+    status: str = "pending",
 ) -> ReminderEntry:
     entry = ReminderEntry(
         pid=int(pid),
@@ -317,6 +321,7 @@ def add_entry(
         project=project,
         created_at=_now_iso(),
         mode=mode,
+        status=status,
         remind_in=remind_in,
         remind_every=remind_every,
         auto_stop_for=auto_stop_for,
@@ -333,7 +338,9 @@ def add_entry(
     return entry
 
 
-def update_next_fire_at(pid: int, next_fire_at: str | None) -> None:
+def update_next_fire_at(
+    pid: int, next_fire_at: str | None, status: str | None = None
+) -> None:
     entries = load_entries(prune_dead=False)
     updated = False
     for i, e in enumerate(entries):
@@ -344,6 +351,7 @@ def update_next_fire_at(pid: int, next_fire_at: str | None) -> None:
                 project=e.project,
                 created_at=e.created_at,
                 mode=e.mode,
+                status=status if status is not None else e.status,
                 remind_in=e.remind_in,
                 remind_every=e.remind_every,
                 auto_stop_for=e.auto_stop_for,
@@ -392,10 +400,27 @@ def check_reminders_health() -> List[str]:
             is_alive = True  # Conservative
 
         if not is_alive:
+            # If the process is dead, and not explicitly completed, it was likely missed/lost.
+            if e.status == "completed":
+                overdue_pids.append(e.pid)
+                continue
+
             missed = False
-            if e.next_fire_at:
+            # Fallback fire time if next_fire_at is missing (legacy migration or early death)
+            fire_time_iso = e.next_fire_at
+            if not fire_time_iso and e.remind_in:
                 try:
-                    next_fire = datetime.fromisoformat(e.next_fire_at)
+                    from .duration_parse import parse_duration_to_seconds
+
+                    secs = parse_duration_to_seconds(e.remind_in)
+                    created = datetime.fromisoformat(e.created_at)
+                    fire_time_iso = (created + timedelta(seconds=secs)).isoformat()
+                except Exception:
+                    pass
+
+            if fire_time_iso:
+                try:
+                    next_fire = datetime.fromisoformat(fire_time_iso)
                     if next_fire < now:
                         msg = (
                             f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
@@ -417,7 +442,14 @@ def check_reminders_health() -> List[str]:
                 except Exception:
                     pass
 
+            # If it wasn't strictly "missed" (no fire time found), but it's dead and not completed,
+            # we can report it as "lost".
+            if not missed and e.status != "completed":
+                # messages.append(f"[autumn.warn]Reminder process lost:[/] [autumn.project]{e.project}[/]")
+                pass
+
             # Self-healing for recurring reminders
+
             if e.remind_every:
                 # Check if session is still active
                 if _session_active(e.session_id):
