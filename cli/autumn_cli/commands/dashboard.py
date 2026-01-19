@@ -10,6 +10,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.history import InMemoryHistory
 
 from ..api_client import APIClient
+from ..utils.console import console as autumn_console
 from ..utils.dashboard.state import DashboardState
 from ..utils.dashboard.panels import render_dashboard
 from ..utils.dashboard.shell import execute_command
@@ -37,7 +38,13 @@ def dash():
             time.sleep(1)
 
     with patch_stdout():
-        with Live(render_dashboard(state), auto_refresh=False, screen=True) as live:
+        # Pass the themed autumn_console to Live
+        with Live(
+            render_dashboard(state),
+            console=autumn_console,
+            auto_refresh=False,
+            screen=True,
+        ) as live:
             # Start background refresh thread
             thread = threading.Thread(target=refresh_loop, args=(live,), daemon=True)
             thread.start()
@@ -45,12 +52,8 @@ def dash():
             # Main input loop
             while True:
                 try:
-                    # The prompt stays at the bottom. patch_stdout handles the Live output.
-                    # However, with screen=True, we might need a different approach.
-                    # Let's try without screen=True first if patch_stdout works.
-                    # Actually, for a fixed dashboard, screen=True is better.
-
-                    cmd = session.prompt("\nautumn> ")
+                    # session.prompt will show up at the bottom
+                    cmd = session.prompt("autumn> ")
                     if cmd.strip():
                         execute_command(cmd, state)
                         # Immediate update after command
