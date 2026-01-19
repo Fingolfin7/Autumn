@@ -25,25 +25,6 @@ def remind() -> None:
     """Timed reminders (desktop notifications)."""
 
 
-def _find_active_session_id() -> Optional[int]:
-    """Helper to find an active session ID for auto-binding reminders."""
-    try:
-        client = APIClient()
-        st = client.get_timer_status(session_id=None)
-        if st.get("ok"):
-            sessions = st.get("sessions")
-            if isinstance(sessions, list) and sessions:
-                # Return the most recently started active session
-                return sessions[0].get("id")
-
-            one = st.get("session")
-            if isinstance(one, dict):
-                return one.get("id")
-    except Exception:
-        pass
-    return None
-
-
 @remind.command("in")
 @click.argument("duration")
 @click.option("--title", default="Autumn", show_default=True, help="Notification title")
@@ -64,7 +45,6 @@ def remind_in(
     if background:
         spawn_reminder(
             project=f"Reminder: {message}",
-            session_id=_find_active_session_id(),
             remind_in=duration,
             remind_message=message,
             notify_title=title,
@@ -117,7 +97,6 @@ def remind_every(duration: str, title: str, message: str) -> None:
     """
     spawn_reminder(
         project=f"Recurring: {message}",
-        session_id=_find_active_session_id(),
         remind_every=duration,
         remind_message=message,
         notify_title=title,
@@ -153,7 +132,6 @@ def remind_at(time: str, title: str, message: str, background: bool) -> None:
         if background:
             spawn_reminder(
                 project=f"Reminder: {message}",
-                session_id=_find_active_session_id(),
                 remind_in=remind_in_str,
                 remind_message=message,
                 notify_title=title,

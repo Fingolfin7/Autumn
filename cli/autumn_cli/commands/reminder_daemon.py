@@ -263,7 +263,9 @@ def main(
         while True:
             now = datetime.now()
 
-            if not _is_session_active(client, plan.session_id):
+            if plan.session_id is not None and not _is_session_active(
+                client, plan.session_id
+            ):
                 log("session ended; exiting")
                 update_next_fire_at(os.getpid(), None, status="completed")
                 return

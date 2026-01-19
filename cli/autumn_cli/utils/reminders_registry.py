@@ -423,7 +423,12 @@ def check_reminders_health() -> List[str]:
                     next_fire = datetime.fromisoformat(fire_time_iso)
                     if next_fire < now:
                         # Only warn if the session is still active (or it's a standalone reminder)
-                        if _session_active(e.session_id):
+                        should_warn = True
+                        if e.session_id is not None:
+                            if not _session_active(e.session_id):
+                                should_warn = False
+
+                        if should_warn:
                             msg = (
                                 f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
                                 f"(scheduled for {next_fire.strftime('%Y-%m-%d %H:%M:%S')})"
@@ -442,9 +447,10 @@ def check_reminders_health() -> List[str]:
                             )
                             missed = True
                         else:
-                            # Session is stopped; reminder is implicitly cancelled.
+                            # Session-bound reminder and session is stopped; reminder is implicitly cancelled.
                             # We just mark it so it gets pruned.
                             pass
+
                 except Exception:
                     pass
 
@@ -457,8 +463,13 @@ def check_reminders_health() -> List[str]:
             # Self-healing for recurring reminders
 
             if e.remind_every:
-                # Check if session is still active
-                if _session_active(e.session_id):
+                # Only self-heal if session is still active (or it's a standalone reminder)
+                should_heal = True
+                if e.session_id is not None:
+                    if not _session_active(e.session_id):
+                        should_heal = False
+
+                if should_heal:
                     try:
                         # Calculate next future fire time
                         interval = parse_duration_to_seconds(e.remind_every)
