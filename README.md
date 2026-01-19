@@ -46,12 +46,6 @@ You’ll be prompted for:
 - **API Key**: Your AutumnWeb API token
 - **Base URL**: Your AutumnWeb instance URL (default: `http://localhost:8000`)
 
-You can also provide them as options:
-
-```bash
-autumn auth setup --api-key "your-token-here" --base-url "http://localhost:8000"
-```
-
 #### Option B: Username/email + password (new)
 
 This will request a token from the server and save it to your config file:
@@ -65,264 +59,151 @@ Options:
 - `--password` (will prompt if omitted)
 - `--base-url`
 
-#### Switch accounts / logout
-
-```bash
-autumn auth logout
-autumn auth login
-```
-
 ### 2) Verify configuration
 
 ```bash
-autumn auth verify
 autumn auth status
+autumn auth verify
 ```
 
 ### 3) Say hi
 
-Running `autumn` with no subcommands prints:
-- A short, dynamic greeting (time-of-day / moon phase / seasonal vibes, sometimes recent activity)
-- The base URL you’re currently connected to
+Running `autumn` with no subcommands prints a short, dynamic greeting (time-of-day / moon phase / seasonal vibes).
 
 ```bash
 autumn
 ```
 
-## Usage
-
 ## Command Reference
-
-A quick overview of the most-used commands:
 
 | Area | Command | What it does | Common options |
 |---|---|---|---|
-| Greeting | `autumn` | Show a short greeting + connection info | (see greeting knobs via `autumn config greeting show`) |
-| Auth | `autumn auth setup` | Save API token + base URL | `--api-key`, `--base-url` |
-| Auth | `autumn auth login` | Login with username/email + password and store token | `--username`, `--password`, `--base-url` |
-| Auth | `autumn auth logout` | Clear stored API token | — |
-| Timers | `autumn start <project>` | Start a timer | `--subprojects`, `--note` |
-| Timers | `autumn status` | Show active timers | `--project`, `--session-id` |
-| Timers | `autumn stop` | Stop timer | `--project`, `--session-id`, `--note` |
-| Timers | `autumn restart` | Restart timer | `--project`, `--session-id` |
-| Timers | `autumn resume` | Resume last worked-on project | `--stop-current` |
-| Timers | `autumn delete` | Delete timer without saving | `--session-id` |
-| Logs | `autumn log` | List sessions (saved) | `--period`, `--project`, `--context`, `--tag`, `--start-date`, `--end-date` |
-| Logs | `autumn log search` | Search sessions | `--note-snippet`, `--context`, `--tag`, `--limit`, `--offset` |
-| Projects | `autumn projects` | List projects grouped by status | `--status`, `--context`, `--tag` |
-| Charts | `autumn chart` | Render charts | `--type`, `--project`, `--context`, `--tag`, `--period/-pd`, `--save` |
-| Meta | `autumn context list` | List contexts | `--full`, `--json` |
-| Meta | `autumn tag list` | List tags | `--full`, `--json` |
-| Meta | `autumn meta refresh` | Clear cached contexts/tags + greeting activity cache | — |
-| Convenience | `autumn open` | Open the web app in your browser | `--path` |
-| Aliases | `autumn p` | Alias for `autumn projects` | same options as `projects` |
-| Aliases | `autumn ls` | Alias for `autumn log` | same options as `log` |
+| **Timers** | `autumn start <project>` | Start a timer | `-s`, `-n`, `--for`, `--remind-in` |
+| | `autumn status` | Show active timers | `-p`, `-i` |
+| | `autumn stop` | Stop timer | `-p`, `-i`, `-n` |
+| | `autumn restart` | Reset start time to now | `-p`, `-i` |
+| | `autumn resume` | Resume last project | `--stop-current` |
+| **Logs** | `autumn log` | List sessions (saved) | `-P month`, `-p`, `-t`, `-c` |
+| | `autumn log search` | Advanced search | `--note-snippet`, `--start-date` |
+| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-t` |
+| | `autumn subprojects` | List subprojects for a project | `-p <project>` |
+| | `autumn new` | Create a new project | `-d "description"` |
+| **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
+| | `autumn reminders` | Manage background workers | `list`, `stop` |
+| **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
+| **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
+| **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 
-### Timer Commands
+## Usage
 
-Start a timer:
+### Timer & Pomodoro Commands
+
+Start a basic timer:
 ```bash
-autumn start "My Project"
-autumn start "My Project" --subprojects "Frontend" "Backend" --note "Working on API"
+autumn start "AutumnWeb" --note "Implementing reminders"
 ```
 
-Check timer status:
+**Pomodoro / Timed Sessions:**
+You can set an auto-stop duration and various reminders when starting:
 ```bash
-autumn status
-autumn status --project "My Project"
+autumn start "Deep Work" --for 25m --remind-in 20m --remind-message "5 minutes left!"
 ```
 
-Stop a timer:
+Periodic reminders (runs in background):
 ```bash
-autumn stop
-autumn stop --project "My Project" --note "Finished for today"
+autumn start "Coding" --remind-every 1h --remind-message "Stand up and stretch!"
 ```
 
-Restart a timer:
+### Reminders (Ad-hoc)
+
+Set reminders independent of timers:
 ```bash
-autumn restart
-autumn restart --project "My Project"
-autumn restart --session-id 123
+# Relative time
+autumn remind in 15m --message "Check the oven"
+
+# Absolute time
+autumn remind at 5pm --message "Team Meeting"
+
+# Periodic
+autumn remind every 30m --message "Drink water"
+
+# Attach to an existing session
+autumn remind session 123 --every 20m --message "Review progress"
 ```
 
-Resume a project:
+**Managing Workers:**
+Reminders run as background processes.
 ```bash
-autumn resume
-autumn resume --stop-current
+autumn reminders list       # See what's running
+autumn reminders stop --all # Stop everything
 ```
 
-Delete a timer:
+### Sessions & Logs
+
+View activity for the current week (default):
 ```bash
-autumn delete --session-id 123
+autumn log
 ```
 
-### Sessions / Logs
-
-Show activity logs (saved sessions):
+Filter by period, project, or tags:
 ```bash
-autumn log                   # Default: last week
-autumn log --period month
+autumn log -P month -p "AutumnWeb" -t "Feature"
 ```
 
-You can filter logs by context and tags:
-```bash
-autumn log --context General --tag Code --tag "Error Handling"
-```
+*Note: Short flag `-P` is for **Period**, and `-p` is for **Project**.*
 
-Search sessions:
-```bash
-autumn log search --project "My Project"
-autumn log search --start-date 2024-01-01 --end-date 2024-01-31
-autumn log search --note-snippet "meeting"
-autumn log search --context General --tag Code
-```
+### Projects & Subprojects
 
-Track a completed session manually:
-```bash
-autumn track "My Project" --start "2024-01-15 09:00:00" --end "2024-01-15 11:30:00" --note "Morning work session"
-```
-
-### Projects
-
-List projects (grouped by status, including archived):
+List all projects:
 ```bash
 autumn projects
+autumn p            # Alias
 ```
 
-Filter by status/context/tags:
+List subprojects for a specific project:
 ```bash
-autumn projects --status archived
-autumn projects --context General
-autumn projects --tag Code --tag "Backend"
+autumn subprojects "AutumnWeb"
+autumn subs "AutumnWeb"        # Alias
 ```
 
-Create a project:
+### Charts & Visualization
+
+Autumn supports various chart types: `pie`, `bar`, `scatter`, `calendar`, `wordcloud`, `heatmap`.
+
 ```bash
-autumn new "New Project" --description "Project description"
-```
+# Calendar heatmap colored by project
+autumn chart --type calendar --color-by-project
 
-### Charts
-
-All charts can be displayed interactively or saved to a file using `--save`.
-Charts also support `--context` and repeatable `--tag` filtering.
-
-Chart types:
-- `pie` (default) - Project/subproject time distribution
-- `bar` - Horizontal bar chart of project/subproject totals
-- `scatter` - Session durations over time
-- `calendar` - GitHub contribution-style calendar heatmap
-- `wordcloud` - Word cloud from session notes
-- `heatmap` - Activity heatmap by day of week and hour
-
-Examples:
-```bash
-# Pie chart (default)
-autumn chart
-
-# Filtered chart
-autumn chart --context General --tag Code -pd month
-
-# Bar chart
-autumn chart --type bar
-
-# Save to file
-autumn chart --type pie --save chart.png
-```
-
-### Contexts & Tags
-
-List contexts:
-```bash
-autumn context list
-autumn context list --full
-```
-
-List tags:
-```bash
-autumn tag list
-autumn tag list --full
-```
-
-Refresh cached metadata (contexts/tags + greeting activity cache):
-```bash
-autumn meta refresh
+# Weekly bar chart for a specific context
+autumn chart --type bar -P week --context Work
 ```
 
 ## Configuration
 
-Configuration is stored in `~/.autumn/config.yaml`.
+Settings are stored in `~/.autumn/config.yaml`. You can edit this file directly or use the CLI:
 
-Common keys:
-```yaml
-api_key: your_api_token_here
-base_url: https://your-instance
-
-# Greeting knobs
-# How often the greeting references recent activity (0..1)
-greeting_activity_weight: 0.35
-
-# How often non-full/new moon phases can show up in the greeting (0..1)
-greeting_moon_cameo_weight: 0.15
-```
-
-### Config commands (new)
-
-Show config (redacts API key by default):
 ```bash
-autumn config show
+autumn config show    # View current config
+autumn config open    # Open config file in default editor
 ```
 
-Get/set values by dotted path:
-```bash
-autumn config get base_url
-autumn config set base_url https://example.com
-
-autumn config set greeting_activity_weight 0.15 --type float
-```
-
-Greeting convenience commands:
-```bash
-autumn config greeting show
-autumn config greeting set --activity-weight 0.2 --moon-cameo-weight 0.05
-```
-
-Environment variables:
-- `AUTUMN_API_KEY`: overrides `api_key`
-- `AUTUMN_API_BASE`: overrides `base_url`
+**Common Knobs:**
+- `tls.insecure: true` - Disable TLS verification (for local dev)
+- `greeting_activity_weight: 0.5` - How often to show activity in greetings (0-1)
+- `notify.log_file: "~/.autumn/notify.log"` - Enable notification debug logging
 
 ## Features
 
-- ✅ **Timer Management**: Start, stop, restart, and manage timers
-- ✅ **Session Logs + Search**: View and search sessions, including notes
-- ✅ **Projects (Grouped + Robust)**: Colored grouped tables with metadata; includes archived
-- ✅ **Contexts + Tags**: Discover via CLI and use for filtering (projects/logs/charts/search)
-- ✅ **Charts & Visualization**: Generate charts (pie/bar/scatter/calendar/wordcloud/heatmap)
-- ✅ **Dynamic Greeting**: Fun “alive” greeting when running `autumn` with no args
-- ✅ **Config Editor**: View/edit `config.yaml` from the CLI
-
-## API Endpoints
-
-The CLI communicates with your AutumnWeb instance using the REST API.
-
-Key endpoints used:
-- `/get-auth-token/` - create token via username/password
-- `/api/me/` - user identity for greeting
-- `/api/timer/*` - timer management
-- `/api/log/` - activity logs
-- `/api/sessions/search/` - session search
-- `/api/track/` - manual session tracking
-- `/api/projects/grouped/` - project listings (grouped)
-- `/api/contexts/`, `/api/tags/` - metadata discovery
-- `/api/tally_by_sessons/`, `/api/tally_by_subprojects/`, `/api/list_sessions/` - charts
+- ✅ **Full Timer Lifecycle**: Start, stop, restart, resume, and delete.
+- ✅ **Pomodoro Support**: Auto-stop timers and timed reminders.
+- ✅ **Background Reminders**: NLP-powered reminders (`at`, `every`, `in`).
+- ✅ **Rich Visualization**: Beautiful Matplotlib/Seaborn charts.
+- ✅ **Metadata Aware**: Context and Tag filtering across all commands.
+- ✅ **Cross-Platform Notifications**: Native toasts on Windows, macOS, and Linux.
+- ✅ **Smart Greetings**: Dynamic, personalized messages based on time and activity.
 
 ## Troubleshooting
 
-### Authentication errors
-
-- `autumn auth status`
-- `autumn auth verify`
-- Make sure `base_url` is correct and reachable
-
-### Charts don’t display
-
-- Use `--save` to render to a file
+- **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, ensure `terminal-notifier` is installed (the CLI tries to auto-install via Homebrew).
+- **SSL Errors?** If using a self-signed cert, set `autumn config set tls.insecure true`.
+- **Outdated Data?** Run `autumn meta refresh` to sync projects, tags, and contexts.

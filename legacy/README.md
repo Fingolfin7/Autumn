@@ -1,4 +1,12 @@
 # Autumn
+
+> [!WARNING]  
+> This directory contains the **Legacy** version of Autumn. This implementation operates on local JSON files and is no longer the primary development focus.
+
+For the modern version of Autumn that connects to **AutumnWeb** via API, please use the CLI found in the `cli/` directory.
+
+---
+
 CLI Time Tracking software inspired by [Watson](https://github.com/TailorDev/Watson) that allows the user to track the amount of time they spend working on a given activity. 
 Autumn allows users to create `projects` which can have sub activities or `subprojects`.
 Projects are stored in a .json file called `projects.json`
