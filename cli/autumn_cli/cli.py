@@ -30,6 +30,7 @@ from .commands.resume_cmd import resume
 from .commands.notify_cmd import notify_cmd
 from .commands.remind_cmd import remind
 from .commands.reminders_cmd import reminders
+from .commands.dashboard import dash
 
 
 @click.group(invoke_without_command=True)
@@ -280,6 +281,7 @@ cli.add_command(resume, name="resume")
 cli.add_command(notify_cmd, name="notify")
 cli.add_command(remind, name="remind")
 cli.add_command(reminders, name="reminders")
+cli.add_command(dash, name="dash")
 
 
 def main():

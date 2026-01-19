@@ -38,7 +38,9 @@ dependencies = [
     "rich>=13.0.0",
     "astral>=2.2.0",
     "plyer>=2.1.0",
+    "prompt-toolkit>=3.0.0",
 ]
+
 
 [project.scripts]
 autumn = "autumn_cli.cli:main"
