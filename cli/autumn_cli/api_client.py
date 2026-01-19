@@ -450,9 +450,9 @@ class APIClient:
             data["description"] = description
         return self._request("POST", "/api/create_project/", json=data)
 
-    def list_subprojects(self, project: str) -> Dict:
+    def list_subprojects(self, project: str, compact: bool = True) -> Dict:
         """List subprojects for a project."""
-        params = {"project": project}
+        params = {"project": project, "compact": str(compact).lower()}
         return self._request("GET", "/api/subprojects/", params=params)
 
     # Chart/analytics endpoints

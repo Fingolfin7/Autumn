@@ -103,8 +103,8 @@ def subprojects(project: str):
     """List subprojects for a given project."""
     try:
         client = APIClient()
-        # Use list_subprojects endpoint
-        result = client.list_subprojects(project)
+        # Use list_subprojects endpoint - requesting non-compact to get full metadata
+        result = client.list_subprojects(project, compact=False)
 
         # If the API explicitly returns ok: false, show the error.
         # Otherwise, assume it's a successful response (either a list or a dict).
