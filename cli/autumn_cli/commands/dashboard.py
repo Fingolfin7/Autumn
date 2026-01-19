@@ -19,6 +19,12 @@ from ..utils.dashboard.shell import execute_command
 @click.command()
 def dash():
     """Launch the interactive Autumn Dashboard."""
+    import os
+
+    if os.name == "nt":
+        # This enables VT100/ANSI processing on Windows consoles
+        os.system("")
+
     # We use the configured console but ensure it's in terminal mode for the TUI
     from rich.console import Console
     from ..utils.console import THEME

@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.console import RenderableType
 from rich.text import Text
-from rich.progress import ProgressBar
+from rich.progress_bar import ProgressBar
 
 from .state import DashboardState
 from ..formatters import format_duration_minutes
@@ -168,5 +168,16 @@ def render_dashboard(state: DashboardState) -> Layout:
     layout["intensity"].update(render_intensity_panel(state))
     layout["trends"].update(render_trends_panel(state))
     layout["logs"].update(render_log_panel(state))
+
+    # Add content to footer to avoid debug placeholder
+    footer_text = Text.assemble(
+        (" [q]", "bold green"),
+        (" Quit ", "white"),
+        (" [r]", "bold green"),
+        (" Refresh ", "white"),
+        (" [Enter]", "bold green"),
+        (" Run Command ", "white"),
+    )
+    layout["footer"].update(footer_text)
 
     return layout

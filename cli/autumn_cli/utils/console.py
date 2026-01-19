@@ -39,14 +39,12 @@ THEME = Theme(
         "autumn.description": "italic dim",
         "autumn.user": "bold color(208)",  # autumn-orange
     }
-
 )
 
 
-# Use a wide default width to avoid hard-wrapping captured output in tests.
+# Let Rich handle width automatically for the terminal.
 console = Console(
     theme=THEME,
-    width=200,
 )
 
 
@@ -58,4 +56,3 @@ class StatusStyles:
 
 
 styles = StatusStyles()
-
