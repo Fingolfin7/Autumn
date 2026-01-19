@@ -8,6 +8,8 @@ from rich.live import Live
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.filters import Condition
 
 from ..api_client import APIClient
 from ..utils.console import console as autumn_console
@@ -35,7 +37,6 @@ def dash():
     from ..utils.console import THEME
 
     # Let Rich detect the terminal capabilities naturally
-    # but we ensure it's pointing to the correct stdout
     dash_console = Console(theme=THEME, file=sys.stdout)
 
     client = APIClient()
@@ -48,7 +49,49 @@ def dash():
     except Exception as e:
         state.add_log(f"Startup Refresh Error: {str(e)}")
 
-    session = PromptSession(history=InMemoryHistory())
+    # Define key bindings for hotkeys
+    kb = KeyBindings()
+
+    @Condition
+    def is_buffer_empty():
+        from prompt_toolkit.application import get_app
+
+        return not get_app().current_buffer.text
+
+    @kb.add("left", filter=is_buffer_empty)
+    def _(event):
+        state.week_offset -= 1
+        state.refresh(force=True)
+
+    @kb.add("right", filter=is_buffer_empty)
+    def _(event):
+        state.week_offset += 1
+        state.refresh(force=True)
+
+    @kb.add("[", filter=is_buffer_empty)
+    def _(event):
+        state.week_offset -= 1
+        state.refresh(force=True)
+
+    @kb.add("]", filter=is_buffer_empty)
+    def _(event):
+        state.week_offset += 1
+        state.refresh(force=True)
+
+    @kb.add("t", filter=is_buffer_empty)
+    def _(event):
+        state.week_offset = 0
+        state.refresh(force=True)
+
+    @kb.add("r", filter=is_buffer_empty)
+    def _(event):
+        state.refresh(force=True)
+
+    @kb.add("q", filter=is_buffer_empty)
+    def _(event):
+        event.app.exit()
+
+    session = PromptSession(history=InMemoryHistory(), key_bindings=kb)
 
     def data_refresh_loop():
         while True:

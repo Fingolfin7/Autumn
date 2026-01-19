@@ -89,6 +89,7 @@ class DashboardState:
                 period=None,
             )
             all_logs = logs_res.get("logs", [])
+            self.add_log(f"Fetched {len(all_logs)} logs")
 
             daily_totals = Counter()
             this_week_total = 0.0
@@ -99,10 +100,18 @@ class DashboardState:
                 dur = float(log.get("duration_minutes") or log.get("dur") or 0)
                 # API uses start_time or start
                 log_start = log.get("start_time") or log.get("start") or ""
+                if not log_start:
+                    continue
+
+                # Take only the YYYY-MM-DD part
                 log_date_str = log_start.split("T")[0]
 
                 try:
-                    log_date = date.fromisoformat(log_date_str)
+                    # Defensive parsing for various date formats
+                    if "-" in log_date_str:
+                        log_date = date.fromisoformat(log_date_str[:10])
+                    else:
+                        continue
 
                     if target_monday <= log_date <= target_sunday:
                         daily_totals[log_date_str] += dur
@@ -111,7 +120,8 @@ class DashboardState:
                         (target_monday - timedelta(days=7)) <= log_date < target_monday
                     ):
                         last_week_total += dur
-                except Exception:
+                except Exception as e:
+                    # self.add_log(f"Date error: {log_date_str} - {str(e)}")
                     continue
 
             # Fill in intensity for the 7 days of the target week
@@ -119,6 +129,7 @@ class DashboardState:
             for i in range(7):
                 d = target_monday + timedelta(days=i)
                 d_str = d.strftime("%Y-%m-%d")
+                # Use the abbreviated day name (Mon, Tue, etc)
                 self.daily_intensity[d.strftime("%a")] = daily_totals.get(d_str, 0.0)
 
             # Trends

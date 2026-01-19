@@ -2,6 +2,7 @@ from __future__ import annotations
 import io
 import sys
 import shlex
+import time
 from typing import TYPE_CHECKING
 import click
 
@@ -52,21 +53,14 @@ def execute_command(command_str: str, state: DashboardState):
     # Redirect stdout and stderr
     # We use a wrapper that captures but also strips ANSI codes if we want clean logs,
     # or keeps them if the log panel can render them.
-    # For now, let's just capture everything.
     buf = io.StringIO()
 
-    # We use click's BaseCommand.main which handles the execution flow
     try:
-        # We wrap the call in a way that captures output correctly
-        with click.Context(cli, terminal_width=80) as ctx:
-            # We need to mock the stdout for the click context
-            # Click commands often use click.echo which uses the context's stdout
-            with patch_click_echo(buf):
-                try:
-                    cli.main(args=args, prog_name="autumn", standalone_mode=False)
-                except SystemExit:
-                    # click commands sometimes call sys.exit
-                    pass
+        from contextlib import redirect_stdout, redirect_stderr
+
+        with redirect_stdout(buf), redirect_stderr(buf):
+            # standalone_mode=False prevents click from calling sys.exit() on completion
+            cli.main(args=args, prog_name="autumn", standalone_mode=False)
 
         # Capture output from our buffer
         output = buf.getvalue().strip()
@@ -78,10 +72,13 @@ def execute_command(command_str: str, state: DashboardState):
         time.sleep(0.1)
         state.refresh(force=True)
 
-    except click.ClickException as e:
-        state.add_log(f"Error: {e.format_message()}")
+    except (click.ClickException, click.UsageError) as e:
+        state.add_log(f"Error: {str(e)}")
     except click.Abort:
         state.add_log("Aborted.")
+    except SystemExit:
+        # Some click commands might still exit
+        pass
     except Exception as e:
         state.add_log(f"System Error: {str(e)}")
 
