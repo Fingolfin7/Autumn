@@ -9,12 +9,23 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
 
 
 @click.command()
-@click.option("--status", "-S", type=click.Choice(["all", "active", "paused", "complete", "archived"]), default="active", show_default=True, help="Filter by status (use `all` to show every type)")
+@click.option(
+    "--status",
+    "-S",
+    type=click.Choice(["all", "active", "paused", "complete", "archived"]),
+    default="active",
+    show_default=True,
+    help="Filter by status (use `all` to show every type)",
+)
 @click.option("--context", "-c", help="Filter by context name")
-@click.option("--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)")
+@click.option(
+    "--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)"
+)
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
-@click.option("--pick", is_flag=True, help="Interactively pick context/tags if not provided")
+@click.option(
+    "--pick", is_flag=True, help="Interactively pick context/tags if not provided"
+)
 def projects_list(
     status: Optional[str],
     context: Optional[str],
@@ -45,7 +56,9 @@ def projects_list(
                 tag = tuple([chosen]) if chosen else tag
 
         ctx_res = resolve_context_param(context=context, contexts=contexts_payload)
-        tag_resolved, _tag_warnings = resolve_tag_params(tags=list(tag) if tag else None, known_tags=tags_payload)
+        tag_resolved, _tag_warnings = resolve_tag_params(
+            tags=list(tag) if tag else None, known_tags=tags_payload
+        )
 
         result = client.list_projects_grouped(
             start_date=start_date,
@@ -56,7 +69,7 @@ def projects_list(
 
         projects_data = result.get("projects", {})
         summary = result.get("summary", {})
-        
+
         # Filter by status if requested (use "all" to show every type)
         if status and status != "all":
             filtered_projects = {status: projects_data.get(status, [])}
@@ -91,13 +104,21 @@ def subprojects(project: str):
         client = APIClient()
         # Use list_subprojects endpoint
         result = client.list_subprojects(project)
-        
-        if not result.get("ok"):
-             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
-             return
 
-        subs = result.get("subprojects") or result.get("subs") or []
-        
+        # If the API explicitly returns ok: false, show the error.
+        # Otherwise, assume it's a successful response (either a list or a dict).
+        if isinstance(result, dict) and result.get("ok") is False:
+            console.print(
+                f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}"
+            )
+            return
+
+        # Check if result is a list (non-compact) or dict
+        if isinstance(result, list):
+            subs = result
+        else:
+            subs = result.get("subprojects") or result.get("subs") or []
+
         console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
         if not subs:
             console.print("[autumn.muted]No subprojects found.[/]")
@@ -109,7 +130,7 @@ def subprojects(project: str):
             subs_list = list(subs.keys())
         else:
             subs_list = list(subs)
-            
+
         for sub in sorted(subs_list):
             console.print(f"  [autumn.subproject]{sub}[/]")
 
@@ -126,7 +147,7 @@ def new_project(project: str, description: Optional[str]):
     try:
         client = APIClient()
         result = client.create_project(project, description)
-        
+
         click.echo(f"Project created: {project}")
         if description:
             click.echo(f"  Description: {description}")
