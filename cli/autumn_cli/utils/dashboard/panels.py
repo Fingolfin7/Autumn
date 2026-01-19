@@ -21,7 +21,9 @@ def render_header(state: DashboardState) -> Panel:
             or state.active_session.get("subprojects")
             or []
         )
-        start_str = state.active_session.get("start")
+        start_str = state.active_session.get("start_time") or state.active_session.get(
+            "start"
+        )
 
         elapsed_str = "00:00:00"
         if start_str:
@@ -45,10 +47,15 @@ def render_header(state: DashboardState) -> Panel:
     else:
         content = Text("[NO ACTIVE TIMER]", style="dim")
 
+    # Show week offset if not today
+    week_indicator = ""
+    if state.week_offset != 0:
+        week_indicator = f" [Week {state.week_offset:+d}]"
+
     now = datetime.now().strftime("%d %b, %H:%M")
     return Panel(
         content,
-        title="AUTUMN DASH",
+        title=f"AUTUMN DASH{week_indicator}",
         subtitle=now,
         title_align="left",
         subtitle_align="right",
@@ -71,7 +78,11 @@ def render_tally_panel(state: DashboardState) -> Panel:
         bar = ProgressBar(total=1.0, completed=pct, width=10, pulse=False)
         table.add_row(name, bar, format_duration_minutes(mins))
 
-    return Panel(table, title="WEEKLY TALLY")
+    title = "WEEKLY TALLY"
+    if state.week_offset != 0:
+        title += f" ({state.week_offset:+d}w)"
+
+    return Panel(table, title=title)
 
 
 def render_intensity_panel(state: DashboardState) -> Panel:
@@ -175,9 +186,14 @@ def render_dashboard(state: DashboardState) -> Layout:
         (" Quit ", "white"),
         (" [r]", "bold green"),
         (" Refresh ", "white"),
+        (" [[] / []]", "bold green"),
+        (" Prev/Next Week ", "white"),
+        (" [t]", "bold green"),
+        (" Today ", "white"),
         (" [Enter]", "bold green"),
         (" Run Command ", "white"),
     )
+
     layout["footer"].update(footer_text)
 
     return layout

@@ -27,12 +27,17 @@ class DashboardState:
         self.refresh_interval: int = 60  # seconds
         self._lock = threading.Lock()
         self.is_loading: bool = False
+        self.week_offset: int = 0  # 0 = this week, -1 = last week, etc.
 
     def add_log(self, message: str):
         with self._lock:
             timestamp = datetime.now().strftime("%H:%M")
-            self.logs.append(f"[{timestamp}] {message}")
-            if len(self.logs) > 5:
+            # Handle multiline messages by splitting them
+            for line in str(message).splitlines():
+                if line.strip():
+                    self.logs.append(f"[{timestamp}] {line}")
+
+            while len(self.logs) > 5:
                 self.logs.pop(0)
 
     def refresh(self, force: bool = False):
@@ -44,54 +49,75 @@ class DashboardState:
             # 1. Fetch active timer
             status = self.client.get_timer_status()
             if status.get("ok") and status.get("active", 0) > 0:
-                self.active_session = status.get("sessions", [None])[0]
+                # API returns a list of sessions
+                sessions = status.get("sessions") or status.get("session")
+                if isinstance(sessions, list) and sessions:
+                    self.active_session = sessions[0]
+                elif isinstance(sessions, dict):
+                    self.active_session = sessions
+                else:
+                    self.active_session = None
             else:
                 self.active_session = None
 
             # 2. Fetch weekly tally
-            # Get current week start (Monday)
             today = date.today()
-            start_of_week = today - timedelta(days=today.weekday())
-            start_date_str = start_of_week.strftime("%Y-%m-%d")
+            # Calculate Monday of the target week
+            target_monday = (
+                today
+                - timedelta(days=today.weekday())
+                + timedelta(weeks=self.week_offset)
+            )
+            target_sunday = target_monday + timedelta(days=6)
 
-            tally = self.client.tally_by_sessions(start_date=start_date_str)
+            start_date_str = target_monday.strftime("%Y-%m-%d")
+            end_date_str = target_sunday.strftime("%Y-%m-%d")
+
+            tally = self.client.tally_by_sessions(
+                start_date=start_date_str, end_date=end_date_str
+            )
             self.weekly_tally = sorted(
                 tally, key=lambda x: x.get("total_time", 0), reverse=True
             )
 
             # 3. Calculate Daily Intensity and Trends from logs
-            # Fetch last 14 days to calculate change vs last week
-            start_of_14_days = today - timedelta(days=13)
+            # Fetch target week + previous week for trends
+            start_for_trends = target_monday - timedelta(days=7)
             logs_res = self.client.log_activity(
-                start_date=start_of_14_days.strftime("%Y-%m-%d"), period=None
+                start_date=start_for_trends.strftime("%Y-%m-%d"),
+                end_date=end_date_str,
+                period=None,
             )
             all_logs = logs_res.get("logs", [])
 
-            # Aggregate by day
             daily_totals = Counter()
             this_week_total = 0.0
             last_week_total = 0.0
 
-            seven_days_ago = today - timedelta(days=6)
-
             for log in all_logs:
-                dur = float(log.get("dur") or log.get("duration_minutes") or 0)
-                log_date_str = log.get("start", "").split("T")[0]
+                # API uses duration_minutes or dur
+                dur = float(log.get("duration_minutes") or log.get("dur") or 0)
+                # API uses start_time or start
+                log_start = log.get("start_time") or log.get("start") or ""
+                log_date_str = log_start.split("T")[0]
+
                 try:
                     log_date = date.fromisoformat(log_date_str)
-                    daily_totals[log_date_str] += dur
 
-                    if log_date >= start_of_week:
+                    if target_monday <= log_date <= target_sunday:
+                        daily_totals[log_date_str] += dur
                         this_week_total += dur
-                    elif log_date >= (start_of_week - timedelta(days=7)):
+                    elif (
+                        (target_monday - timedelta(days=7)) <= log_date < target_monday
+                    ):
                         last_week_total += dur
                 except Exception:
                     continue
 
-            # Fill in intensity for last 7 days
+            # Fill in intensity for the 7 days of the target week
             self.daily_intensity = {}
             for i in range(7):
-                d = today - timedelta(days=6 - i)
+                d = target_monday + timedelta(days=i)
                 d_str = d.strftime("%Y-%m-%d")
                 self.daily_intensity[d.strftime("%a")] = daily_totals.get(d_str, 0.0)
 
@@ -99,25 +125,27 @@ class DashboardState:
             change = 0.0
             if last_week_total > 0:
                 change = ((this_week_total - last_week_total) / last_week_total) * 100
+            elif this_week_total > 0:
+                change = 100.0  # From zero to something
 
-            # Get streak from recent activity snippet (already has logic)
+            # Get streak
             activity = self.client.get_recent_activity_snippet()
 
             self.trends = {
                 "total_time": this_week_total,
                 "change_pct": change,
                 "streak": activity.get("streak_days", 0),
-                "avg_daily": this_week_total / (today.weekday() + 1)
-                if today.weekday() >= 0
-                else 0,
+                "avg_daily": this_week_total / 7,
             }
 
-            # 4. Top Subprojects for most active project
+            # 4. Top Subprojects
             if self.weekly_tally:
                 self.most_active_project = self.weekly_tally[0].get("name")
                 if self.most_active_project:
                     sub_tally = self.client.tally_by_subprojects(
-                        self.most_active_project, start_date=start_date_str
+                        self.most_active_project,
+                        start_date=start_date_str,
+                        end_date=end_date_str,
                     )
                     self.top_subprojects = sorted(
                         sub_tally, key=lambda x: x.get("total_time", 0), reverse=True
