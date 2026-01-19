@@ -12,7 +12,12 @@ from __future__ import annotations
 import click
 
 from ..utils.console import console
-from ..utils.reminders_registry import load_entries, kill_pid, remove_entry_by_pid, clear_entries
+from ..utils.reminders_registry import (
+    load_entries,
+    kill_pid,
+    remove_entry_by_pid,
+    clear_entries,
+)
 
 
 @click.group("reminders")
@@ -38,6 +43,8 @@ def list_cmd(as_json: bool) -> None:
             parts.append(f"For: {e.auto_stop_for}")
         if getattr(e, "remind_poll", None):
             parts.append(f"Poll: {e.remind_poll}")
+        if getattr(e, "next_fire_at", None):
+            parts.append(f"Next: {e.next_fire_at}")
 
         return " | ".join(parts)
 
@@ -57,12 +64,14 @@ def list_cmd(as_json: bool) -> None:
                         "remind_every": getattr(e, "remind_every", None),
                         "auto_stop_for": getattr(e, "auto_stop_for", None),
                         "remind_poll": getattr(e, "remind_poll", None),
+                        "next_fire_at": getattr(e, "next_fire_at", None),
                     }
                     for e in entries
                 ],
                 indent=2,
             )
         )
+
         return
 
     if not entries:
@@ -98,12 +107,12 @@ def stop_cmd(pid: int | None, session_id: int | None, stop_all: bool) -> None:
         targets = [e for e in entries if int(e.pid) == int(pid)]
     elif session_id is not None:
         targets = [
-            e for e in entries 
+            e
+            for e in entries
             if e.session_id is not None and int(e.session_id) == int(session_id)
         ]
 
     if not targets:
-
         console.print("[autumn.muted]No matching reminder workers found.[/]")
         return
 

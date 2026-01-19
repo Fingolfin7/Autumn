@@ -11,7 +11,9 @@ It polls timer status and optionally stops the timer after a duration.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 import click
 
@@ -21,6 +23,7 @@ from ..utils.duration_parse import parse_duration_to_seconds
 from ..utils.notify import send_notification
 from ..utils.formatters import format_duration_minutes
 from ..utils.scheduler import sleep_seconds
+from ..utils.reminders_registry import update_next_fire_at
 
 
 @dataclass(frozen=True)
@@ -50,7 +53,6 @@ def _is_session_active(client: APIClient, session_id: int | None) -> bool:
         return True
 
     try:
-
         # Fetch all active sessions. This avoids ambiguity where querying by ID
         # might raise an APIError (e.g. 404) if the session is stopped, which
         # we might mistakenly swallow as a network error.
@@ -83,14 +85,15 @@ def _is_session_active(client: APIClient, session_id: int | None) -> bool:
         # Fallback: check legacy single-session shape or active count
         one = st.get("session")
         if isinstance(one, dict):
-             try:
-                if one.get("id") is not None and int(one.get("id")) != int(session_id):
+            try:
+                sid_one = one.get("id")
+                if sid_one is not None and int(sid_one) != int(session_id):
                     return False
-             except Exception:
-                 pass
-             if "active" in one:
-                 return bool(one.get("active"))
-             return one.get("end") in (None, "")
+            except Exception:
+                pass
+            if "active" in one:
+                return bool(one.get("active"))
+            return one.get("end") in (None, "")
 
         return bool(st.get("active", 0))
 
@@ -106,7 +109,6 @@ def _is_session_active(client: APIClient, session_id: int | None) -> bool:
         # But we also don't want to kill reminders on a single blip.
         # Conservative choice here: assume active.
         return True
-
 
 
 def _elapsed_str(client: APIClient, session_id: int | None) -> str:
@@ -168,7 +170,6 @@ def main(
 ) -> None:
     """Worker entrypoint."""
 
-
     def parse_opt(raw: str | None) -> int | None:
         if not raw:
             return None
@@ -193,66 +194,114 @@ def main(
 
     client = APIClient()
 
-    # Schedule bookkeeping (simple counters, no threads)
-    t0 = 0
-    next_remind = plan.remind_in_seconds if plan.remind_in_seconds is not None else None
-    next_every = plan.remind_every_seconds if plan.remind_every_seconds is not None else None
-    stop_at = plan.for_seconds if plan.for_seconds is not None else None
+    # Schedule bookkeeping
+    start_time = datetime.now()
+
+    next_remind_dt = (
+        (start_time + timedelta(seconds=float(plan.remind_in_seconds)))
+        if plan.remind_in_seconds is not None
+        else None
+    )
+    next_every_dt = (
+        (start_time + timedelta(seconds=float(plan.remind_every_seconds)))
+        if plan.remind_every_seconds is not None
+        else None
+    )
+    stop_at_dt = (
+        (start_time + timedelta(seconds=float(plan.for_seconds)))
+        if plan.for_seconds is not None
+        else None
+    )
 
     def log(msg: str) -> None:
         if not quiet:
             click.echo(msg, err=True)
 
+    def get_imminent_iso() -> str | None:
+        cands = [
+            dt for dt in [next_remind_dt, next_every_dt, stop_at_dt] if dt is not None
+        ]
+        if not cands:
+            return None
+        return min(cands).isoformat()
+
     log(f"[autumn] reminder-daemon started (session_id={plan.session_id})")
 
+    # Initial registry update
+    update_next_fire_at(os.getpid(), get_imminent_iso())
+
     while True:
+        now = datetime.now()
+
         if not _is_session_active(client, plan.session_id):
             log("[autumn] session ended; exiting")
+            update_next_fire_at(os.getpid(), None)
             return
 
         # Auto-stop
-        if stop_at is not None and t0 >= stop_at:
+        if stop_at_dt is not None and now >= stop_at_dt:
             try:
                 client.stop_timer(session_id=plan.session_id, note=None)
             except Exception as e:
                 log(f"[autumn] auto-stop failed: {e}")
-            send_notification(title=plan.notify_title, message=f"Auto-stopped timer: {plan.project}")
+            send_notification(
+                title=plan.notify_title, message=f"Auto-stopped timer: {plan.project}"
+            )
             log("[autumn] auto-stopped; exiting")
+            update_next_fire_at(os.getpid(), None)
             return
 
         # One-shot remind
-        if next_remind is not None and t0 >= next_remind:
-            msg = (plan.remind_message or "").format(project=plan.project, elapsed=_elapsed_str(client, plan.session_id))
+        if next_remind_dt is not None and now >= next_remind_dt:
+            msg = (plan.remind_message or "").format(
+                project=plan.project, elapsed=_elapsed_str(client, plan.session_id)
+            )
             send_notification(title=plan.notify_title, message=msg)
-            next_remind = None
+            next_remind_dt = None
 
             # If this daemon was started only for a one-shot reminder, we're done.
-            # (If auto-stop is configured, keep running to potentially stop later.)
-            if plan.remind_every_seconds is None and stop_at is None:
+            if next_every_dt is None and stop_at_dt is None:
                 log("[autumn] remind-in fired; exiting")
+                update_next_fire_at(os.getpid(), None)
                 return
 
+            update_next_fire_at(os.getpid(), get_imminent_iso())
+
         # Periodic remind
-        if next_every is not None and t0 >= next_every:
-            msg = (plan.remind_message or "").format(project=plan.project, elapsed=_elapsed_str(client, plan.session_id))
+        if next_every_dt is not None and now >= next_every_dt:
+            msg = (plan.remind_message or "").format(
+                project=plan.project, elapsed=_elapsed_str(client, plan.session_id)
+            )
             send_notification(title=plan.notify_title, message=msg)
-            next_every += plan.remind_every_seconds or 0
+
+            # Wall-clock alignment: add exactly N seconds to the PREVIOUS target
+            if plan.remind_every_seconds is not None:
+                next_every_dt += timedelta(seconds=float(plan.remind_every_seconds))
+
+            # If we somehow drifted more than one interval, catch up
+            while (
+                next_every_dt is not None
+                and next_every_dt <= now
+                and plan.remind_every_seconds is not None
+            ):
+                next_every_dt += timedelta(seconds=float(plan.remind_every_seconds))
+
+            update_next_fire_at(os.getpid(), get_imminent_iso())
 
         # Sleep until the next due event, but cap by poll_seconds.
-        waits: list[int] = []
-        if next_remind is not None and next_remind > t0:
-            waits.append(int(next_remind - t0))
-        if next_every is not None and next_every > t0:
-            waits.append(int(next_every - t0))
-        if stop_at is not None and stop_at > t0:
-            waits.append(int(stop_at - t0))
+        waits: list[float] = []
+        if next_remind_dt is not None and next_remind_dt > now:
+            waits.append((next_remind_dt - now).total_seconds())
+        if next_every_dt is not None and next_every_dt > now:
+            waits.append((next_every_dt - now).total_seconds())
+        if stop_at_dt is not None and stop_at_dt > now:
+            waits.append((stop_at_dt - now).total_seconds())
 
-        wake = min(waits) if waits else int(plan.poll_seconds)
+        wake = min(waits) if waits else float(plan.poll_seconds)
         # Ensure forward progress and don't sleep longer than poll interval.
-        wake = max(1, min(int(wake), int(plan.poll_seconds)))
+        wake = max(1.0, min(float(wake), float(plan.poll_seconds)))
 
-        sleep_seconds(wake)
-        t0 += wake
+        sleep_seconds(int(wake))
 
 
 if __name__ == "__main__":

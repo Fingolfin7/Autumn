@@ -14,11 +14,17 @@ Registry entries are best-effort:
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
-from ..config import load_config, save_config
+from ..config import CONFIG_DIR, load_config, save_config
+
+
+REMINDERS_FILE = CONFIG_DIR / "reminders.json"
 
 
 @dataclass(frozen=True)
@@ -32,11 +38,11 @@ class ReminderEntry:
     remind_every: str | None = None
     auto_stop_for: str | None = None
     remind_poll: str | None = None
-
+    next_fire_at: str | None = None
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now().isoformat()
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -89,16 +95,28 @@ def _is_pid_alive(pid: int) -> bool:
 
 
 def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
-    cfg = load_config() or {}
+    # 1. Load from reminders.json if exists
+    raw_list = []
+    if REMINDERS_FILE.exists():
+        try:
+            with open(REMINDERS_FILE, "r") as f:
+                raw_list = json.load(f)
+        except Exception:
+            raw_list = []
 
-    # Support/repair older or corrupted shapes.
-    raw = cfg.get("reminders")
-    if raw is None:
-        raw_list = []
-    elif isinstance(raw, list):
-        raw_list = raw
-    else:
-        # If reminders somehow got saved as a non-list (or config became a list), treat as empty and repair.
+    # 2. Migration: Check config.yaml for legacy reminders
+    cfg = load_config() or {}
+    legacy_reminders = cfg.get("reminders")
+    migrated = False
+    if legacy_reminders and isinstance(legacy_reminders, list):
+        # Merge legacy into raw_list (avoid duplicates later)
+        raw_list.extend(legacy_reminders)
+        # Clear legacy and save config
+        del cfg["reminders"]
+        save_config(cfg)
+        migrated = True
+
+    if not isinstance(raw_list, list):
         raw_list = []
 
     # Parse entries
@@ -108,24 +126,35 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
         if not isinstance(e, dict):
             continue
         try:
+            pid_raw = e.get("pid")
+            if pid_raw is None:
+                continue
             sid_raw = e.get("session_id")
             entry = ReminderEntry(
-                pid=int(e.get("pid")),
+                pid=int(pid_raw),
                 session_id=int(sid_raw) if sid_raw is not None else None,
                 project=str(e.get("project") or ""),
                 created_at=str(e.get("created_at") or ""),
                 mode=str(e.get("mode") or ""),
                 remind_in=(str(e.get("remind_in")) if e.get("remind_in") else None),
-                remind_every=(str(e.get("remind_every")) if e.get("remind_every") else None),
-                auto_stop_for=(str(e.get("auto_stop_for")) if e.get("auto_stop_for") else None),
-                remind_poll=(str(e.get("remind_poll")) if e.get("remind_poll") else None),
+                remind_every=(
+                    str(e.get("remind_every")) if e.get("remind_every") else None
+                ),
+                auto_stop_for=(
+                    str(e.get("auto_stop_for")) if e.get("auto_stop_for") else None
+                ),
+                remind_poll=(
+                    str(e.get("remind_poll")) if e.get("remind_poll") else None
+                ),
+                next_fire_at=(
+                    str(e.get("next_fire_at")) if e.get("next_fire_at") else None
+                ),
             )
             entries.append(entry)
         except Exception:
             continue
 
     # De-duplicate: keep the newest per (pid, session_id) pair.
-    # This avoids the registry growing indefinitely if the same worker is re-added.
     dedup: dict[tuple[int, int | None], ReminderEntry] = {}
     for e in entries:
         key = (int(e.pid), e.session_id)
@@ -134,9 +163,8 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
             dedup[key] = e
     entries = list(dedup.values())
 
-
-    # If we detected a non-list/invalid structure, ensure we write back a clean list.
-    if not isinstance(raw, list):
+    # If we migrated but no pruning happened, ensure we write to reminders.json
+    if migrated and not prune_dead:
         save_entries(entries)
 
     if prune_dead:
@@ -190,7 +218,6 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
                 return bool(st.get("active", 0))
             except Exception as e:
-
                 # If the backend raises for "session not found", prune.
                 if APIError is not None and isinstance(e, APIError):
                     msg = str(e).lower()
@@ -226,7 +253,7 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
             alive.append(e)
 
-        if len(alive) != len(entries):
+        if migrated or len(alive) != len(entries):
             save_entries(alive)
         return alive
 
@@ -234,13 +261,10 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
 
 def save_entries(entries: List[ReminderEntry]) -> None:
-    cfg = load_config() or {}
+    # Ensure config directory exists
+    REMINDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    # If config is corrupted into a list, reset to a dict.
-    if not isinstance(cfg, dict):
-        cfg = {}
-
-    cfg["reminders"] = [
+    data = [
         {
             "pid": e.pid,
             "session_id": e.session_id,
@@ -251,10 +275,12 @@ def save_entries(entries: List[ReminderEntry]) -> None:
             "remind_every": e.remind_every,
             "auto_stop_for": e.auto_stop_for,
             "remind_poll": e.remind_poll,
+            "next_fire_at": e.next_fire_at,
         }
         for e in entries
     ]
-    save_config(cfg)
+    with open(REMINDERS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 def add_entry(
@@ -267,24 +293,50 @@ def add_entry(
     remind_every: str | None = None,
     auto_stop_for: str | None = None,
     remind_poll: str | None = None,
+    next_fire_at: str | None = None,
 ) -> ReminderEntry:
     entry = ReminderEntry(
         pid=int(pid),
         session_id=int(session_id) if session_id is not None else None,
         project=project,
-
         created_at=_now_iso(),
         mode=mode,
         remind_in=remind_in,
         remind_every=remind_every,
         auto_stop_for=auto_stop_for,
         remind_poll=remind_poll,
+        next_fire_at=next_fire_at,
     )
+
     # Don't prune here: immediately after spawning, PID-liveness checks can race on some platforms.
     entries = load_entries(prune_dead=False)
     entries.append(entry)
     save_entries(entries)
     return entry
+
+
+def update_next_fire_at(pid: int, next_fire_at: str | None) -> None:
+    entries = load_entries(prune_dead=False)
+    updated = False
+    for i, e in enumerate(entries):
+        if int(e.pid) == int(pid):
+            entries[i] = ReminderEntry(
+                pid=e.pid,
+                session_id=e.session_id,
+                project=e.project,
+                created_at=e.created_at,
+                mode=e.mode,
+                remind_in=e.remind_in,
+                remind_every=e.remind_every,
+                auto_stop_for=e.auto_stop_for,
+                remind_poll=e.remind_poll,
+                next_fire_at=next_fire_at,
+            )
+            updated = True
+            break
+
+    if updated:
+        save_entries(entries)
 
 
 def remove_entry_by_pid(pid: int) -> bool:
@@ -297,6 +349,45 @@ def remove_entry_by_pid(pid: int) -> bool:
 
 def clear_entries() -> None:
     save_entries([])
+
+
+def check_reminders_health() -> List[str]:
+    """Check for missed or orphaned reminders."""
+    # We load WITHOUT pruning first, so we can detect missed ones.
+    entries = load_entries(prune_dead=False)
+    now = datetime.now()
+    messages = []
+    overdue_pids = []
+
+    for e in entries:
+        is_alive = False
+        try:
+            is_alive = _is_pid_alive(e.pid)
+        except Exception:
+            is_alive = True  # Conservative
+
+        if not is_alive:
+            if e.next_fire_at:
+                try:
+                    next_fire = datetime.fromisoformat(e.next_fire_at)
+                    if next_fire < now:
+                        messages.append(
+                            f"[autumn.warn]Missed reminder:[/] [autumn.project]{e.project}[/] "
+                            f"(scheduled for {next_fire.strftime('%Y-%m-%d %H:%M:%S')})"
+                        )
+                    overdue_pids.append(e.pid)
+                except Exception:
+                    continue
+            else:
+                # Dead PID, no fire time? Just prune it later.
+                overdue_pids.append(e.pid)
+
+    # Prune them now that we've reported them (if they were overdue)
+    if overdue_pids:
+        remaining = [e for e in entries if e.pid not in overdue_pids]
+        save_entries(remaining)
+
+    return messages
 
 
 def kill_pid(pid: int) -> bool:

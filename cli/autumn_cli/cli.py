@@ -37,6 +37,17 @@ from .commands.reminders_cmd import reminders
 @click.pass_context
 def cli(ctx: click.Context):
     """Autumn CLI - Command-line interface for AutumnWeb."""
+    # Health check for reminders (orphaned/missed)
+    if ctx.invoked_subcommand != "reminder-daemon":
+        try:
+            from .utils.reminders_registry import check_reminders_health
+
+            health_msgs = check_reminders_health()
+            for msg in health_msgs:
+                console.print(msg)
+        except Exception:
+            pass
+
     if ctx.invoked_subcommand is None:
         try:
             client = APIClient()
@@ -47,7 +58,9 @@ def cli(ctx: click.Context):
             # Get recent activity (best-effort, cached)
             activity = None
             try:
-                activity = client.get_recent_activity_snippet(ttl_seconds=600, refresh=False)
+                activity = client.get_recent_activity_snippet(
+                    ttl_seconds=600, refresh=False
+                )
             except Exception:
                 pass
 
@@ -66,7 +79,9 @@ def cli(ctx: click.Context):
 
         except Exception:
             click.echo("Autumn CLI")
-            click.echo("Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started.")
+            click.echo(
+                "Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started."
+            )
 
 
 @cli.group()
@@ -76,7 +91,9 @@ def auth():
 
 
 @auth.command()
-@click.option("--api-key", help="Your AutumnWeb API token (can also paste when prompted)")
+@click.option(
+    "--api-key", help="Your AutumnWeb API token (can also paste when prompted)"
+)
 @click.option("--base-url", help="AutumnWeb base URL (can also paste when prompted)")
 def setup(api_key: str, base_url: str):
     """Configure API key and base URL."""
@@ -85,18 +102,20 @@ def setup(api_key: str, base_url: str):
         api_key = click.prompt("API Key", hide_input=False)
     if not base_url:
         base_url = click.prompt("Base URL", default="http://localhost:8000")
-    
+
     set_api_key(api_key)
     set_base_url(base_url)
     click.echo("Configuration saved successfully!")
     click.echo(f"Base URL: {base_url}")
     click.echo("API key saved (hidden)")
-    
+
     # Verify the configuration
     try:
         verify()
     except:
-        click.echo("\nWarning: Could not verify API key. Please check your credentials.")
+        click.echo(
+            "\nWarning: Could not verify API key. Please check your credentials."
+        )
 
 
 def _warn_if_insecure_tls() -> None:
@@ -123,7 +142,10 @@ def verify():
         base_url = get_base_url()
 
         if not api_key:
-            click.echo("Error: API key not configured. Run 'autumn auth setup' first.", err=True)
+            click.echo(
+                "Error: API key not configured. Run 'autumn auth setup' first.",
+                err=True,
+            )
             raise click.Abort()
 
         # Try to verify by making a simple API call
@@ -147,14 +169,14 @@ def status():
     config = load_config()
     api_key = get_api_key()
     base_url = get_base_url()
-    
+
     click.echo("Configuration:")
     click.echo(f"  Base URL: {base_url}")
     if api_key:
         click.echo(f"  API key: {api_key[:8]}... (configured)")
     else:
         click.echo("  API key: Not configured")
-    
+
     # Test connection
     if api_key:
         try:
