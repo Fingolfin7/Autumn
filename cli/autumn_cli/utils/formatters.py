@@ -467,13 +467,14 @@ def subprojects_table(project_name: str, subprojects: List[Any]) -> Table:
             name = sub.get("name") or sub.get("p") or ""
             total_time = sub.get("total_time") or sub.get("dur") or 0
             last_active = sub.get("last_updated") or sub.get("last_active") or ""
-            session_count = sub.get("session_count") or 0
+            # session_count might be injected by the command
+            session_count = sub.get("session_count")
 
             total_str = (
                 format_duration_minutes(float(total_time)) if total_time else "0m"
             )
             last_str = format_day_date(last_active) if last_active else "-"
-            sessions_str = str(session_count) if session_count else "0"
+            sessions_str = str(session_count) if session_count is not None else "-"
 
             table.add_row(name, total_str, last_str, sessions_str)
 
