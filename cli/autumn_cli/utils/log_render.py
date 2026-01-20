@@ -25,6 +25,8 @@ from .formatters import (
     parse_utc_to_local,
 )
 
+from rich.markup import escape as rich_escape
+
 
 def _normalize_ws(text: str) -> str:
     return (text or "").strip().replace("\r", " ").replace("\n", " ")
@@ -219,7 +221,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
                 continue
 
             # Notes are sanitized to single-line text; keep them on one line for stable output.
-            lines.append(base + f" -> [autumn.note]{note}[/]")
+            lines.append(base + f" -> [autumn.note]{rich_escape(_normalize_ws(note))}[/]") # extra escape to avoid breaking formatting due to urls/links
 
     return "\n".join(lines)
 
