@@ -197,7 +197,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
             start_iso = _session_start_iso(sess)
             return end_iso or start_iso
 
-        for s in sorted(day_sessions, key=_sort_key, reverse=True):
+        for s in sorted(day_sessions, key=_sort_key):
             start = format_time_hms(_session_start_iso(s))
             end = format_time_hms(_session_end_iso(s))
             dur_str = format_duration_minutes(_duration_minutes(s))
@@ -215,7 +215,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
 
 
             if not note:
-                lines.append(base)
+                lines.append(base + "[/]")
                 continue
 
             # Notes are sanitized to single-line text; keep them on one line for stable output.

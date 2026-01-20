@@ -400,6 +400,9 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
+
+        params["compact"] = "false" # make sure to get full session data and session notes
+
         return self._request("GET", "/api/sessions/search/", params=params)
 
     def track_session(

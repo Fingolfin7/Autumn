@@ -147,7 +147,7 @@ def log(
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
-@click.option("--note-snippet", help="Search for text in notes")
+@click.option("--note-snippet", "-n", help="Search for text in notes")
 @click.option("--active/--no-active", default=False, help="Include active sessions")
 @click.option("--limit", type=int, help="Limit number of results")
 @click.option("--offset", type=int, help="Offset for pagination")
