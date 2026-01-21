@@ -221,7 +221,8 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
                 continue
 
             # Notes are sanitized to single-line text; keep them on one line for stable output.
-            lines.append(base + f" -> [autumn.note]{rich_escape(_normalize_ws(note))}[/]") # extra escape to avoid breaking formatting due to urls/links
+            lines.append(base + f" -> [autumn.note]{rich_escape(_normalize_ws(note))}[/]"
+                                f"[autumn.label][/]") # extra escape to avoid breaking formatting due to urls/links
 
     return "\n".join(lines)
 
