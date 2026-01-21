@@ -30,6 +30,11 @@ from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")
+@click.option(
+    "--raw/--markdown",
+    default=False,
+    help="Show raw (single-line) notes instead of Markdown",
+)
 def log(
     ctx: click.Context,
     period: Optional[str],
@@ -39,6 +44,7 @@ def log(
     start_date: Optional[str],
     end_date: Optional[str],
     pick: bool,
+    raw: bool,
 ):
     """Show activity logs (saved sessions). Use 'log search' for advanced search."""
     # If a subcommand was invoked, don't run this command
@@ -134,7 +140,12 @@ def log(
             count = result.get("count", len(logs))
 
             console.print(f"[autumn.label]Sessions:[/] {count}")
-            console.print(render_sessions_list(logs))
+            rendered = render_sessions_list(logs, markdown_notes=not raw)
+            if isinstance(rendered, list):
+                for r in rendered:
+                    console.print(r)
+            else:
+                console.print(rendered)
         except APIError as e:
             console.print(f"[autumn.err]Error:[/] {e}")
             raise click.Abort()
@@ -152,6 +163,11 @@ def log(
 @click.option("--limit", type=int, help="Limit number of results")
 @click.option("--offset", type=int, help="Offset for pagination")
 @click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")
+@click.option(
+    "--raw/--markdown",
+    default=False,
+    help="Show raw (single-line) notes instead of Markdown",
+)
 def log_search(
     project: Optional[str],
     context: Optional[str],
@@ -163,6 +179,7 @@ def log_search(
     limit: Optional[int],
     offset: Optional[int],
     pick: bool,
+    raw: bool,
 ):
     """Search sessions with filters."""
     try:
@@ -219,7 +236,12 @@ def log_search(
         count = result.get("count", len(sessions_list))
 
         console.print(f"[autumn.label]Sessions:[/] {count}")
-        console.print(render_sessions_list(sessions_list))
+        rendered = render_sessions_list(sessions_list, markdown_notes=not raw)
+        if isinstance(rendered, list):
+            for r in rendered:
+                console.print(r)
+        else:
+            console.print(rendered)
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -278,8 +300,12 @@ def _normalize_datetime(dt_str: str) -> str:
       - Relative offsets like `-5m`, `+2h`, `now-1d`, `today+90m`
 
     If the input includes a timezone (e.g. `Z` or `-05:00`), we convert it to
-    *local time* and then drop the timezone info to match what the server expects.
+    local time before formatting.
     """
 
-    pr = parse_user_datetime(dt_str)
-    return format_server_datetime(pr.dt)
+    user_dt = parse_user_datetime(dt_str)
+    if not user_dt:
+        raise ValueError(f"Could not parse datetime: {dt_str}")
+
+    # Convert to server format
+    return format_server_datetime(user_dt.dt)

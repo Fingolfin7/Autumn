@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from datetime import datetime
 from textwrap import wrap
-from typing import Dict, Any, Iterable, List, Optional
+from typing import Dict, Any, Iterable, List, Optional, Union
 
 from .formatters import (
     format_duration_minutes,
@@ -26,6 +26,7 @@ from .formatters import (
 )
 
 from rich.markup import escape as rich_escape
+from rich.markdown import Markdown
 
 
 def _normalize_ws(text: str) -> str:
@@ -163,11 +164,32 @@ def render_active_timer_block(session: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
-    """Render logs grouped by date header in the old CLI style."""
+def render_sessions_list(sessions: Iterable[Dict[str, Any]], *, markdown_notes: bool = False) -> Union[str, List[object]]:
+    """Render logs grouped by date header in the old CLI style.
+
+    Args:
+        sessions: Session dicts from the API.
+        markdown_notes: If True, notes are rendered as Rich Markdown blocks.
+
+    Returns:
+        Either a single markup string (default) or a list of Rich renderables
+        (strings + Markdown objects) when markdown_notes is enabled.
+    """
+
+    def _markdown_note_renderable(note: str) -> object:
+        """Render note Markdown using autumn.note as the base style.
+
+        We intentionally return Rich's Markdown renderable directly.
+        This preserves hyperlink metadata (OSC 8) so terminals that support it
+        can show clickable links.
+        """
+
+        return Markdown(note, style="autumn.note")
+
     sessions_list = list(sessions)
     if not sessions_list:
-        return "[autumn.muted]No sessions found.[/]"
+        empty = "[autumn.muted]No sessions found.[/]"
+        return [empty] if markdown_notes else empty
 
     grouped: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
     day_totals: Dict[str, float] = {}
@@ -177,7 +199,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
         grouped.setdefault(key, []).append(s)
         day_totals[key] = day_totals.get(key, 0.0) + _duration_minutes(s)
 
-    lines: List[str] = []
+    items: List[object] = []
 
     first_header = True
     for date_key in reversed(list(grouped.keys())):
@@ -187,11 +209,11 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
 
         # Blank line above each new date header (except the first)
         if not first_header:
-            lines.append("")
+            items.append("")
         first_header = False
 
         # Date header should be plain (uncolored) text, but underlined. Day total stays blue.
-        lines.append(f"[underline]{header}[/] [autumn.duration]({total_str})[/]")
+        items.append(f"[underline]{header}[/] [autumn.duration]({total_str})[/]")
 
         def _sort_key(sess: Dict[str, Any]):
 
@@ -205,7 +227,7 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
             dur_str = format_duration_minutes(_duration_minutes(s))
             project = _session_project(s)
             subs = _session_subs(s)
-            note = _normalize_ws(s.get("note") or "")
+            note_raw = s.get("note") or ""
 
             subs_bracket = _format_subs_bracketed(subs)
 
@@ -215,16 +237,25 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]]) -> str:
                 f"{subs_bracket}"
             )
 
-
-            if not note:
-                lines.append(base + "[/]")
+            if not note_raw:
+                items.append(base)
                 continue
 
-            # Notes are sanitized to single-line text; keep them on one line for stable output.
-            lines.append(base + f" -> [autumn.note]{rich_escape(_normalize_ws(note))}[/]"
-                                f"[autumn.label][/]") # extra escape to avoid breaking formatting due to urls/links
+            if not markdown_notes:
+                # Notes are sanitized to single-line text; keep them on one line for stable output.
+                note = _normalize_ws(note_raw)
+                items.append(
+                    base
+                    + f" -> [autumn.note]{rich_escape(note)}[/]"  # extra escape to avoid breaking formatting due to urls/links
+                    + f"[autumn.label][/]"  # hard reset to avoid note colour bleeding
+                )
+                continue
 
-    return "\n".join(lines)
+            # Markdown mode: keep user's original whitespace/newlines for Markdown parsing.
+            items.append(base + " ->")
+            items.append(_markdown_note_renderable(note_raw))
+
+    return items if markdown_notes else "\n".join([x for x in items if isinstance(x, str)])
 
 
 def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
