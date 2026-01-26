@@ -481,8 +481,8 @@ class APIClient:
         if tags:
             params["tags"] = ",".join(tags)
         return self._request(
-            "GET", "/api/tally_by_sessons/", params=params
-        )  # Note: typo in API endpoint
+            "GET", "/api/tally_by_sessions/", params=params
+        )
 
     def tally_by_subprojects(
         self,
