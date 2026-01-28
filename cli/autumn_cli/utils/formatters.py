@@ -3,7 +3,10 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
+from rich.console import Group
+from rich.markdown import Markdown
 from rich.table import Table
+from rich.text import Text
 
 from .console import console
 
@@ -319,9 +322,9 @@ def projects_tables(
 
                 # Format name cell with description if requested
                 if show_descriptions and desc:
-                    name_cell = (
-                        f"[autumn.project]{name}[/]\n[autumn.description]{desc}[/]"
-                    )
+                    name_text = Text(name, style="autumn.project")
+                    desc_md = Markdown(desc, style="autumn.description")
+                    name_cell = Group(name_text, desc_md)
                 else:
                     name_cell = f"[autumn.project]{name}[/]"
 
@@ -491,9 +494,9 @@ def subprojects_table(
 
             # Format name cell with description if requested
             if show_descriptions and desc:
-                name_cell = (
-                    f"[autumn.subproject]{name}[/]\n[autumn.description]{desc}[/]"
-                )
+                name_text = Text(name, style="autumn.subproject")
+                desc_md = Markdown(desc, style="autumn.description")
+                name_cell = Group(name_text, desc_md)
             else:
                 name_cell = f"[autumn.subproject]{name}[/]"
 

@@ -8,6 +8,7 @@ from ..api_client import APIClient, APIError
 from ..utils.console import console
 from ..utils.formatters import contexts_table, tags_table
 from ..utils.meta_cache import clear_cached_snapshot
+from ..utils.projects_cache import clear_cached_projects
 from ..utils.recent_activity_cache import clear_cached_activity
 
 
@@ -74,7 +75,8 @@ def meta() -> None:
 
 @meta.command("refresh")
 def meta_refresh() -> None:
-    """Refresh cached contexts/tags (forces a re-fetch on next command)."""
+    """Refresh cached contexts/tags/projects (forces a re-fetch on next command)."""
     clear_cached_snapshot()
+    clear_cached_projects()
     clear_cached_activity()
-    console.print("[autumn.ok]Metadata cache cleared.[/] Next command will re-fetch contexts/tags and recent activity.")
+    console.print("[autumn.ok]Metadata cache cleared.[/] Next command will re-fetch contexts/tags, projects, and recent activity.")

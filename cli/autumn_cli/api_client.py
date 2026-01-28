@@ -561,3 +561,40 @@ class APIClient:
             pass
 
         return {"contexts": contexts, "tags": tags, "cached": False}
+
+    def get_discovery_projects(
+        self, *, ttl_seconds: int = 300, refresh: bool = False
+    ) -> Dict[str, Any]:
+        """Get cached projects list for discovery/resolution.
+
+        Returns: {"projects": [...], "cached": bool}
+
+        Each project dict contains: name, description, status (active/paused/completed).
+        This reduces repeated calls for commands that need to resolve project names.
+        """
+        from .utils.projects_cache import load_cached_projects, save_cached_projects
+
+        if not refresh:
+            snap = load_cached_projects(ttl_seconds=ttl_seconds)
+            if snap is not None:
+                return {"projects": snap.projects, "cached": True}
+
+        # Fetch grouped projects and flatten into a single list with status attached
+        grouped = self.list_projects_grouped()
+        projects = []
+
+        for status in ("active", "paused", "completed"):
+            for proj in grouped.get(status, []):
+                proj_entry = {
+                    "name": proj.get("name") or proj.get("project"),
+                    "description": proj.get("description", ""),
+                    "status": status,
+                }
+                projects.append(proj_entry)
+
+        try:
+            save_cached_projects(projects)
+        except Exception:
+            pass
+
+        return {"projects": projects, "cached": False}

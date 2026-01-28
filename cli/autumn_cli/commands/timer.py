@@ -13,12 +13,14 @@ from ..utils.notify import send_notification
 from ..utils.scheduler import schedule_in, schedule_every, sleep_seconds
 from ..utils.reminder_spawner import spawn_reminder
 from ..utils.reminders_registry import add_entry
+from ..utils.resolvers import resolve_project_param, resolve_subproject_params
+from ..utils.completions import complete_project, complete_subproject
 
 
 
 @click.command()
-@click.argument("project")
-@click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
+@click.argument("project", shell_complete=complete_project)
+@click.option("--subprojects", "-s", multiple=True, shell_complete=complete_subproject, help="Subproject names (can specify multiple)")
 @click.option("--note", "-n", help="Note for the session")
 @click.option("--for", "for_", help="Auto-stop after a duration (e.g. 25m, 1h30m)")
 @click.option("--remind-in", help="Send a reminder after a duration (e.g. 30m)")
@@ -142,8 +144,30 @@ def start(
 
     try:
         client = APIClient()
-        subprojects_list = list(subprojects) if subprojects else None
-        result = client.start_timer(project, subprojects_list, note)
+
+        # Resolve project name (case-insensitive + alias support)
+        projects_meta = client.get_discovery_projects()
+        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+        if proj_res.warning:
+            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+        resolved_project = proj_res.value or project
+
+        # Resolve subprojects (case-insensitive + alias support)
+        subprojects_list = None
+        if subprojects:
+            try:
+                known_subs_res = client.list_subprojects(resolved_project)
+                known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
+            except Exception:
+                known_subs = []
+            resolved_subs, sub_warnings = resolve_subproject_params(
+                subprojects=subprojects, known_subprojects=known_subs
+            )
+            for w in sub_warnings:
+                console.print(f"[autumn.warn]Warning:[/] {w}")
+            subprojects_list = resolved_subs if resolved_subs else None
+
+        result = client.start_timer(resolved_project, subprojects_list, note)
 
         if not result.get("ok"):
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
@@ -153,7 +177,7 @@ def start(
         session_id = session.get("id")
 
         console.print("[autumn.ok]Timer started.[/]", highlight=True)
-        console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
+        console.print(f"[autumn.label]Project:[/] [autumn.project]{resolved_project}[/]")
         subs = session.get("subs") or session.get("subprojects") or []
         if subs:
             console.print(f"[autumn.label]Subprojects:[/] [autumn.subproject]{', '.join(subs)}[/]")
@@ -169,7 +193,7 @@ def start(
         # If background mode is enabled, spawn a worker and return immediately.
         if background:
             spawn_reminder(
-                project=project,
+                project=resolved_project,
                 session_id=session_id,
                 remind_in=remind_in,
                 remind_every=remind_every,
@@ -277,7 +301,7 @@ def start(
             # Only notify if the session still exists.
             if not _is_session_active():
                 return
-            msg = (remind_message or "").format(project=project, elapsed=_elapsed_str())
+            msg = (remind_message or "").format(project=resolved_project, elapsed=_elapsed_str())
             send_notification(title=notify_title, message=msg)
 
         # One-shot reminder
@@ -304,7 +328,7 @@ def start(
                 except Exception:
                     # If stopping fails, we still try to notify.
                     pass
-                send_notification(title=notify_title, message=f"Auto-stopped timer: {project}")
+                send_notification(title=notify_title, message=f"Auto-stopped timer: {resolved_project}")
 
             tasks.append(schedule_in(seconds=for_seconds, fn=_auto_stop, name="auto-stop"))
 

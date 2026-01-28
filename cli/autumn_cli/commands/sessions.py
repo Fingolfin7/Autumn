@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from ..api_client import APIClient, APIError
 from ..utils.console import console
 from ..utils.log_render import render_sessions_list
-from ..utils.resolvers import resolve_context_param, resolve_tag_params
+from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param, resolve_subproject_params
+from ..utils.completions import complete_project, complete_context, complete_tag, complete_subproject
 from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
 
 
@@ -23,10 +24,9 @@ from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
     default="week",
     help="Time period (default: week)",
 )
-@click.option("--project", "-p", help="Filter by project name")
-
-@click.option("--context", "-c", help="Filter by context (name or id)")
-@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
+@click.option("--project", "-p", shell_complete=complete_project, help="Filter by project name")
+@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")
@@ -87,6 +87,15 @@ def log(
             resolved_context = ctx_res.value
             resolved_tags = tag_resolved or None
 
+            # Resolve project name (case-insensitive + alias support)
+            resolved_project = project
+            if project:
+                projects_meta = client.get_discovery_projects()
+                proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+                if proj_res.warning:
+                    console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+                resolved_project = proj_res.value or project
+
             # Normalize period to a consistent trailing window.
             # Server interprets period=week as "since Monday"; we want "last 7 days".
             normalized_period = period.lower() if period else "week"
@@ -98,7 +107,7 @@ def log(
             if not start_date and not end_date and normalized_period in server_periods:
                 result = client.log_activity(
                     period=normalized_period,
-                    project=project,
+                    project=resolved_project,
                     start_date=None,
                     end_date=None,
                     context=resolved_context,
@@ -120,7 +129,7 @@ def log(
                 if normalized_period == "all" and not (calculated_start_date or calculated_end_date):
                     result = client.log_activity(
                         period="all",
-                        project=project,
+                        project=resolved_project,
                         start_date=None,
                         end_date=None,
                         context=resolved_context,
@@ -129,7 +138,7 @@ def log(
                 else:
                     result = client.log_activity(
                         period=None,
-                        project=project,
+                        project=resolved_project,
                         start_date=calculated_start_date,
                         end_date=calculated_end_date,
                         context=resolved_context,
@@ -152,10 +161,9 @@ def log(
 
 
 @log.command("search")
-@click.option("--project", "-p", help="Filter by project name")
-@click.option("--context", "-c", help="Filter by context (name or id)")
-
-@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
+@click.option("--project", "-p", shell_complete=complete_project, help="Filter by project name")
+@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--note-snippet", "-n", help="Search for text in notes")
@@ -220,8 +228,17 @@ def log_search(
         resolved_context = ctx_res.value
         resolved_tags = tag_resolved or None
 
+        # Resolve project name (case-insensitive + alias support)
+        resolved_project = project
+        if project:
+            projects_meta = client.get_discovery_projects()
+            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+            if proj_res.warning:
+                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+            resolved_project = proj_res.value or project
+
         result = client.search_sessions(
-            project=project,
+            project=resolved_project,
             start_date=start_date,
             end_date=end_date,
             note_snippet=note_snippet,
@@ -248,8 +265,8 @@ def log_search(
 
 
 @click.command()
-@click.argument("project")
-@click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
+@click.argument("project", shell_complete=complete_project)
+@click.option("--subprojects", "-s", multiple=True, shell_complete=complete_subproject, help="Subproject names (can specify multiple)")
 @click.option(
     "--start",
     required=True,
@@ -268,15 +285,37 @@ def track(project: str, subprojects: tuple, start: str, end: str, note: Optional
         end_iso = _normalize_datetime(end)
 
         client = APIClient()
-        subprojects_list = list(subprojects) if subprojects else None
-        result = client.track_session(project, start_iso, end_iso, subprojects_list, note)
+
+        # Resolve project name (case-insensitive + alias support)
+        projects_meta = client.get_discovery_projects()
+        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+        if proj_res.warning:
+            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+        resolved_project = proj_res.value or project
+
+        # Resolve subprojects (case-insensitive + alias support)
+        subprojects_list = None
+        if subprojects:
+            try:
+                known_subs_res = client.list_subprojects(resolved_project)
+                known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
+            except Exception:
+                known_subs = []
+            resolved_subs, sub_warnings = resolve_subproject_params(
+                subprojects=subprojects, known_subprojects=known_subs
+            )
+            for w in sub_warnings:
+                console.print(f"[autumn.warn]Warning:[/] {w}")
+            subprojects_list = resolved_subs if resolved_subs else None
+
+        result = client.track_session(resolved_project, start_iso, end_iso, subprojects_list, note)
 
         if result.get("ok"):
             session = result.get("session", {})
             duration = session.get("elapsed") or session.get("duration_minutes", 0)
             console.print("[autumn.ok]Session tracked.[/]")
             console.print(f"[autumn.label]ID:[/] [autumn.id]{session.get('id')}[/]")
-            console.print(f"[autumn.label]Project:[/] [autumn.project]{project}[/]")
+            console.print(f"[autumn.label]Project:[/] [autumn.project]{resolved_project}[/]")
             console.print(f"[autumn.label]Duration:[/] [autumn.duration]{duration} minutes[/]")
 
         else:

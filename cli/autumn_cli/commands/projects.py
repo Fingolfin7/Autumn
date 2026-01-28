@@ -6,7 +6,8 @@ from ..api_client import APIClient, APIError
 from ..utils.formatters import projects_tables, subprojects_table
 from ..utils.console import console
 
-from ..utils.resolvers import resolve_context_param, resolve_tag_params
+from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+from ..utils.completions import complete_project, complete_context, complete_tag
 
 
 @click.command()
@@ -18,9 +19,9 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
     show_default=True,
     help="Filter by status (use `all` to show every type)",
 )
-@click.option("--context", "-c", help="Filter by context name")
+@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context name")
 @click.option(
-    "--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)"
+    "--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (can be used multiple times)"
 )
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
@@ -93,15 +94,23 @@ def projects_list(
 
 
 @click.command()
-@click.argument("project")
+@click.argument("project", shell_complete=complete_project)
 @click.option("--desc", "-d", is_flag=True, help="Show subproject descriptions")
 def subprojects(project: str, desc: bool):
     """List subprojects for a given project."""
 
     try:
         client = APIClient()
+
+        # Resolve project name (case-insensitive + alias support)
+        projects_meta = client.get_discovery_projects()
+        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+        if proj_res.warning:
+            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+        resolved_project = proj_res.value or project
+
         # Use list_subprojects endpoint - requesting non-compact to get full metadata
-        result = client.list_subprojects(project, compact=False)
+        result = client.list_subprojects(resolved_project, compact=False)
 
         # If the API explicitly returns ok: false, show the error.
         # Otherwise, assume it's a successful response (either a list or a dict).
@@ -122,7 +131,7 @@ def subprojects(project: str, desc: bool):
         session_counts = {}
         try:
             # Search for sessions for this project to calculate counts
-            sessions_res = client.search_sessions(project=project, limit=1000)
+            sessions_res = client.search_sessions(project=resolved_project, limit=1000)
             sessions = sessions_res.get("sessions", [])
 
             from collections import Counter
@@ -145,7 +154,7 @@ def subprojects(project: str, desc: bool):
                     if name in session_counts:
                         sub["session_count"] = session_counts[name]
 
-        table = subprojects_table(project, subs, show_descriptions=desc)
+        table = subprojects_table(resolved_project, subs, show_descriptions=desc)
         console.print(table)
 
     except APIError as e:

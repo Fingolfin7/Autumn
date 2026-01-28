@@ -12,7 +12,8 @@ from ..utils.charts import (
     render_calendar_chart,
     render_wordcloud_chart,
 )
-from ..utils.resolvers import resolve_context_param, resolve_tag_params
+from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+from ..utils.completions import complete_project, complete_context, complete_tag
 
 
 @click.command()
@@ -27,10 +28,10 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params
     help="Chart type (default: pie)",
 )
 @click.option(
-    "--project", "-p", help="Project name (shows subprojects if specified for pie/bar)"
+    "--project", "-p", shell_complete=complete_project, help="Project name (shows subprojects if specified for pie/bar)"
 )
-@click.option("--context", "-c", help="Filter by context (name or id)")
-@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
+@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
 @click.option(
     "--period",
     "-P",
@@ -131,21 +132,30 @@ def chart(
         resolved_context = ctx_res.value
         resolved_tags = tag_resolved or None
 
+        # Resolve project name (case-insensitive + alias support)
+        resolved_project = project
+        if project:
+            projects_meta = client.get_discovery_projects()
+            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+            if proj_res.warning:
+                click.echo(f"Warning: {proj_res.warning}", err=True)
+            resolved_project = proj_res.value or project
+
         if type in ("pie", "bar"):
             # Use tally endpoints for pie/bar
-            if project:
+            if resolved_project:
                 # Show subprojects for specific project
                 data = client.tally_by_subprojects(
-                    project,
+                    resolved_project,
                     start_date,
                     end_date,
                     context=resolved_context,
                     tags=resolved_tags,
                 )
                 title = (
-                    f"Time Distribution: {project} (Subprojects)"
+                    f"Time Distribution: {resolved_project} (Subprojects)"
                     if type == "pie"
-                    else f"Time Totals: {project} (Subprojects)"
+                    else f"Time Totals: {resolved_project} (Subprojects)"
                 )
             else:
                 # Show all projects
@@ -170,7 +180,7 @@ def chart(
         elif type in ("scatter", "calendar", "heatmap", "wordcloud"):
             # Use list_sessions for scatter/calendar/heatmap/wordcloud
             sessions = client.list_sessions(
-                project_name=project,
+                project_name=resolved_project,
                 start_date=start_date,
                 end_date=end_date,
                 context=resolved_context,
@@ -179,14 +189,14 @@ def chart(
 
             if type == "scatter":
                 title = f"Session Duration Over Time"
-                if project:
-                    title += f" - {project}"
+                if resolved_project:
+                    title += f" - {resolved_project}"
                 render_scatter_chart(sessions, title=title, save_path=save_path)
 
             elif type == "calendar":
                 title = "Projects Calendar"
-                if project:
-                    title += f" - {project}"
+                if resolved_project:
+                    title += f" - {resolved_project}"
                 render_calendar_chart(
                     sessions,
                     title=title,
@@ -198,14 +208,14 @@ def chart(
 
             elif type == "heatmap":
                 title = "Activity Heatmap"
-                if project:
-                    title += f" - {project}"
+                if resolved_project:
+                    title += f" - {resolved_project}"
                 render_heatmap(sessions, title=title, save_path=save_path)
 
             elif type == "wordcloud":
                 title = "Session Notes Wordcloud"
-                if project:
-                    title += f" - {project}"
+                if resolved_project:
+                    title += f" - {resolved_project}"
                 render_wordcloud_chart(sessions, title=title, save_path=save_path)
     except APIError as e:
         click.echo(f"Error: {e}", err=True)

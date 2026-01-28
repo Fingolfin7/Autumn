@@ -17,6 +17,12 @@ class _FakeClient:
         # Default: always active
         return {"ok": True, "session": {"id": 123, "active": True, "end": None, "elapsed": 1}}
 
+    def get_discovery_projects(self, ttl_seconds=300, refresh=False):
+        return {"projects": [{"name": "MyProj", "status": "active"}], "cached": True}
+
+    def list_subprojects(self, project, compact=True):
+        return {"subprojects": []}
+
 
 def test_start_with_for_sleeps(monkeypatch):
     calls = {"sleep": []}
