@@ -581,10 +581,11 @@ class APIClient:
 
         # Fetch grouped projects and flatten into a single list with status attached
         grouped = self.list_projects_grouped()
+        projects_by_status = grouped.get("projects", {})
         projects = []
 
         for status in ("active", "paused", "completed"):
-            for proj in grouped.get(status, []):
+            for proj in projects_by_status.get(status, []):
                 proj_entry = {
                     "name": proj.get("name") or proj.get("project"),
                     "description": proj.get("description", ""),
