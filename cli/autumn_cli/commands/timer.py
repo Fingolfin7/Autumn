@@ -14,13 +14,12 @@ from ..utils.scheduler import schedule_in, schedule_every, sleep_seconds
 from ..utils.reminder_spawner import spawn_reminder
 from ..utils.reminders_registry import add_entry
 from ..utils.resolvers import resolve_project_param, resolve_subproject_params
-from ..utils.completions import complete_project, complete_subproject
 
 
 
 @click.command()
-@click.argument("project", shell_complete=complete_project)
-@click.option("--subprojects", "-s", multiple=True, shell_complete=complete_subproject, help="Subproject names (can specify multiple)")
+@click.argument("project")
+@click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option("--note", "-n", help="Note for the session")
 @click.option("--for", "for_", help="Auto-stop after a duration (e.g. 25m, 1h30m)")
 @click.option("--remind-in", help="Send a reminder after a duration (e.g. 30m)")

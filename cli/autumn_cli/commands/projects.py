@@ -7,7 +7,6 @@ from ..utils.formatters import projects_tables, subprojects_table
 from ..utils.console import console
 
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
-from ..utils.completions import complete_project, complete_context, complete_tag
 
 
 @click.command()
@@ -19,9 +18,9 @@ from ..utils.completions import complete_project, complete_context, complete_tag
     show_default=True,
     help="Filter by status (use `all` to show every type)",
 )
-@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context name")
+@click.option("--context", "-c", help="Filter by context name")
 @click.option(
-    "--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (can be used multiple times)"
+    "--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)"
 )
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
@@ -94,7 +93,7 @@ def projects_list(
 
 
 @click.command()
-@click.argument("project", shell_complete=complete_project)
+@click.argument("project")
 @click.option("--desc", "-d", is_flag=True, help="Show subproject descriptions")
 def subprojects(project: str, desc: bool):
     """List subprojects for a given project."""

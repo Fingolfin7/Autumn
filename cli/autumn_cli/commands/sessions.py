@@ -8,7 +8,6 @@ from ..api_client import APIClient, APIError
 from ..utils.console import console
 from ..utils.log_render import render_sessions_list
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param, resolve_subproject_params
-from ..utils.completions import complete_project, complete_context, complete_tag, complete_subproject
 from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
 
 
@@ -24,9 +23,9 @@ from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
     default="week",
     help="Time period (default: week)",
 )
-@click.option("--project", "-p", shell_complete=complete_project, help="Filter by project name")
-@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
-@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
+@click.option("--project", "-p", help="Filter by project name")
+@click.option("--context", "-c", help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")
@@ -161,9 +160,9 @@ def log(
 
 
 @log.command("search")
-@click.option("--project", "-p", shell_complete=complete_project, help="Filter by project name")
-@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
-@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
+@click.option("--project", "-p", help="Filter by project name")
+@click.option("--context", "-c", help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--end-date", help="End date (YYYY-MM-DD)")
 @click.option("--note-snippet", "-n", help="Search for text in notes")
@@ -265,8 +264,8 @@ def log_search(
 
 
 @click.command()
-@click.argument("project", shell_complete=complete_project)
-@click.option("--subprojects", "-s", multiple=True, shell_complete=complete_subproject, help="Subproject names (can specify multiple)")
+@click.argument("project")
+@click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option(
     "--start",
     required=True,

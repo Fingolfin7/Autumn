@@ -13,7 +13,6 @@ from ..utils.charts import (
     render_wordcloud_chart,
 )
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
-from ..utils.completions import complete_project, complete_context, complete_tag
 
 
 @click.command()
@@ -28,10 +27,10 @@ from ..utils.completions import complete_project, complete_context, complete_tag
     help="Chart type (default: pie)",
 )
 @click.option(
-    "--project", "-p", shell_complete=complete_project, help="Project name (shows subprojects if specified for pie/bar)"
+    "--project", "-p", help="Project name (shows subprojects if specified for pie/bar)"
 )
-@click.option("--context", "-c", shell_complete=complete_context, help="Filter by context (name or id)")
-@click.option("--tag", "-t", multiple=True, shell_complete=complete_tag, help="Filter by tag (repeatable)")
+@click.option("--context", "-c", help="Filter by context (name or id)")
+@click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option(
     "--period",
     "-P",
