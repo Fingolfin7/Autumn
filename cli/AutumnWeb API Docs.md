@@ -92,7 +92,7 @@ Response:
 }
 ```
 
-2) Stop timer
+## 2) Stop timer
 
 
 POST /api/timer/stop/
@@ -126,7 +126,7 @@ Response 200 OK:
 }
 ```
 
-3) Timer status
+## 3) Timer status
 
 
 GET /api/timer/status/
@@ -177,7 +177,7 @@ Quirk:
 
 - With session_id, it errors if the session exists but is not active: 400 “Session not active”.
 
-4) Restart timer
+## 4) Restart timer
 
 
 POST /api/timer/restart/
@@ -201,7 +201,7 @@ Response:
 { "ok": true, "session": { "...": "same shape as start" } }
 ```
 
-5) Delete timer (discard session)
+## 5) Delete timer (discard session)
 
 
 DELETE /api/timer/delete/
@@ -222,7 +222,7 @@ Response 200 OK:
 { "ok": true, "deleted": 123 }
 ```
 
-6) Track a completed session (no live timer)
+## 6) Track a completed session (no live timer)
 
 
 POST /api/track/
@@ -275,7 +275,7 @@ Response 201 Created:
 { "ok": true, "session": { "...": "same shape as start" } }
 ```
 
-7) Projects grouped by status
+## 7) Projects grouped by status
 
 
 GET /api/projects/grouped/
@@ -322,7 +322,7 @@ Note:
 
 - Unknown/legacy status strings become their own group key.
 
-8) Subprojects list
+## 8) Subprojects list
 
 
 GET /api/subprojects/
@@ -343,7 +343,7 @@ Compact response:
 
 Non-compact returns DRF SubProjectSerializer array.
 
-9) Totals (project + subproject totals)
+## 9) Totals (project + subproject totals)
 
 
 GET /api/totals/
@@ -375,7 +375,7 @@ Notes:
 
 - If a session has multiple subprojects, its full duration is added to each subproject total.
 
-10) Rename (project or subproject)
+## 10) Rename (project or subproject)
 
 
 POST /api/rename/
@@ -417,7 +417,7 @@ Conflicts:
 
 - 409 if the target name already exists.
 
-11) Delete project via JSON body
+## 11) Delete project via JSON body
 
 
 DELETE /api/project/delete/
@@ -434,7 +434,7 @@ Response:
 
 - 204 No Content
 
-12) Search sessions
+## 12) Search sessions
 
 
 GET /api/sessions/search/
@@ -476,7 +476,7 @@ Compact response:
 }
 ```
 
-13) Activity log
+## 13) Activity log
 
 
 GET /api/log/
@@ -506,7 +506,7 @@ Response:
 { "count": 3, "logs": [] }
 ```
 
-14) Mark project status
+## 14) Mark project status
 
 
 POST /api/mark/
@@ -523,6 +523,87 @@ Response:
 
 ```json
 { "ok": true, "project": "Project Name", "status": "paused" }
+```
+
+## 15) Export JSON (sessions/projects)
+
+**GET** or **POST** `/api/export/`
+
+Accepts filters via query params (GET) or JSON body (POST):
+
+- `project_name` (or `project`): string (icontains)
+- `start_date`: `YYYY-MM-DD` (inclusive)
+- `end_date`: `YYYY-MM-DD` (inclusive)
+- `context`: context id (integer only)
+- `tags`: list of tag ids, or comma-separated string
+- `compress`: bool (wraps payload with `json_compress`)
+- `autumn_compatible`: bool (CLI compatibility format)
+
+Response 200 OK: JSON object (either the export payload or a compressed wrapper).
+
+## 16) Contexts list
+
+**GET** `/api/contexts/`
+
+Query:
+
+- `compact=true|false` (default true)
+
+Compact response:
+
+```json
+{ "count": 2, "contexts": [{"id": 1, "name": "Work"}] }
+```
+
+Non-compact response includes `description`.
+
+## 17) Tags list
+
+**GET** `/api/tags/`
+
+Query:
+
+- `compact=true|false` (default true)
+
+Compact response:
+
+```json
+{ "count": 2, "tags": [{"id": 1, "name": "Client"}] }
+```
+
+Non-compact response includes `color`.
+
+## 18) Current user
+
+**GET** `/api/me/`
+
+Response 200 OK:
+
+```json
+{
+  "ok": true,
+  "id": 1,
+  "username": "alice",
+  "email": "alice@example.com",
+  "first_name": "Alice",
+  "last_name": "Doe"
+}
+```
+
+## 19) Audit (recompute totals)
+
+**POST** `/api/audit/`
+
+Recomputes and persists totals for all of the authenticated user's projects and subprojects using `audit_total_time(log=False)`.
+
+Response 200 OK:
+
+```json
+{
+  "ok": true,
+  "projects": {"count": 3, "changed": 1, "delta_total": 9.0},
+  "subprojects": {"count": 5, "changed": 2, "delta_total": 18.0}
+}
 ```
 
 
@@ -582,7 +663,7 @@ Direct:
 
 Tallies
 
-- GET /api/tally_by_sessons/ (note the URL typo: sessons)
+- GET /api/tally_by_sessions/
 
 - GET /api/tally_by_subprojects/
 
