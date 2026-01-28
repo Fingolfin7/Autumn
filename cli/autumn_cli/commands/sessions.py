@@ -56,28 +56,18 @@ def log(
             tags_payload = meta.get("tags", [])
 
             if pick:
-                from ..utils.pickers import pick_from_names
+                from ..utils.pickers import pick_project, pick_context, pick_tag
 
                 if not project:
-                    grouped = client.list_projects_grouped()
-                    all_projects = []
-                    for bucket in (grouped.get("projects") or {}).values():
-                        for p in bucket or []:
-                            name = p.get("name") or p.get("project")
-                            if name:
-                                all_projects.append(name)
-                    all_projects = sorted(set(all_projects))
-                    chosen = pick_from_names(label="project", names=all_projects)
+                    chosen = pick_project(client)
                     project = chosen or project
 
                 if not context:
-                    ctx_names = [c.get("name") for c in contexts_payload if c.get("name")]
-                    chosen = pick_from_names(label="context", names=sorted(ctx_names))
+                    chosen = pick_context(client)
                     context = chosen or context
 
                 if not tag:
-                    tag_names = [t.get("name") for t in tags_payload if t.get("name")]
-                    chosen = pick_from_names(label="tag", names=sorted(tag_names))
+                    chosen = pick_tag(client)
                     tag = tuple([chosen]) if chosen else tag
 
             ctx_res = resolve_context_param(context=context, contexts=contexts_payload)
@@ -197,28 +187,18 @@ def log_search(
         tags_payload = meta.get("tags", [])
 
         if pick:
-            from ..utils.pickers import pick_from_names
+            from ..utils.pickers import pick_project, pick_context, pick_tag
 
             if not project:
-                grouped = client.list_projects_grouped()
-                all_projects = []
-                for bucket in (grouped.get("projects") or {}).values():
-                    for p in bucket or []:
-                        name = p.get("name") or p.get("project")
-                        if name:
-                            all_projects.append(name)
-                all_projects = sorted(set(all_projects))
-                chosen = pick_from_names(label="project", names=all_projects)
+                chosen = pick_project(client)
                 project = chosen or project
 
             if not context:
-                ctx_names = [c.get("name") for c in contexts_payload if c.get("name")]
-                chosen = pick_from_names(label="context", names=sorted(ctx_names))
+                chosen = pick_context(client)
                 context = chosen or context
 
             if not tag:
-                tag_names = [t.get("name") for t in tags_payload if t.get("name")]
-                chosen = pick_from_names(label="tag", names=sorted(tag_names))
+                chosen = pick_tag(client)
                 tag = tuple([chosen]) if chosen else tag
 
         ctx_res = resolve_context_param(context=context, contexts=contexts_payload)
@@ -264,7 +244,7 @@ def log_search(
 
 
 @click.command()
-@click.argument("project")
+@click.argument("project", required=False)
 @click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option(
     "--start",
@@ -277,13 +257,30 @@ def log_search(
     help="End time (e.g. 2026-01-12T02:56:13-05:00, 2026-01-12T02:56:13Z, or 2026-01-12 02:56:13)",
 )
 @click.option("--note", "-n", help="Note for the session")
-def track(project: str, subprojects: tuple, start: str, end: str, note: Optional[str]):
+@click.option("--pick", is_flag=True, help="Interactively pick project/subprojects")
+def track(project: Optional[str], subprojects: tuple, start: str, end: str, note: Optional[str], pick: bool):
     """Track a completed session (manually log time)."""
     try:
         start_iso = _normalize_datetime(start)
         end_iso = _normalize_datetime(end)
 
         client = APIClient()
+
+        # Interactive picker for project if --pick or no project provided
+        if pick or not project:
+            from ..utils.pickers import pick_project, pick_subproject
+
+            picked_project = pick_project(client)
+            if not picked_project:
+                console.print("[autumn.warn]No project selected.[/]")
+                raise click.Abort()
+            project = picked_project
+
+            # Also offer to pick subprojects if --pick was explicit
+            if pick and not subprojects:
+                picked_sub = pick_subproject(client, project)
+                if picked_sub:
+                    subprojects = (picked_sub,)
 
         # Resolve project name (case-insensitive + alias support)
         projects_meta = client.get_discovery_projects()

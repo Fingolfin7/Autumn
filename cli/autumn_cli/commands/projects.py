@@ -47,16 +47,14 @@ def projects_list(
         tags_payload = meta.get("tags", [])
 
         if pick:
-            from ..utils.pickers import pick_from_names
+            from ..utils.pickers import pick_context, pick_tag
 
             if not context:
-                ctx_names = [c.get("name") for c in contexts_payload if c.get("name")]
-                chosen = pick_from_names(label="context", names=sorted(ctx_names))
+                chosen = pick_context(client)
                 context = chosen or context
 
             if not tag:
-                tag_names = [t.get("name") for t in tags_payload if t.get("name")]
-                chosen = pick_from_names(label="tag", names=sorted(tag_names))
+                chosen = pick_tag(client)
                 tag = tuple([chosen]) if chosen else tag
 
         ctx_res = resolve_context_param(context=context, contexts=contexts_payload)

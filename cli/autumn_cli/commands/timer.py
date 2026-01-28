@@ -18,7 +18,7 @@ from ..utils.resolvers import resolve_project_param, resolve_subproject_params
 
 
 @click.command()
-@click.argument("project")
+@click.argument("project", required=False)
 @click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option("--note", "-n", help="Note for the session")
 @click.option("--for", "for_", help="Auto-stop after a duration (e.g. 25m, 1h30m)")
@@ -27,7 +27,6 @@ from ..utils.resolvers import resolve_project_param, resolve_subproject_params
 @click.option("--remind-every", help="Send periodic reminders every duration (e.g. 15m)")
 @click.option(
     "--remind-message",
-
     default="Timer running: {project} ({elapsed})",
     show_default=True,
     help="Reminder message template. Available: {project}, {elapsed}",
@@ -50,8 +49,9 @@ from ..utils.resolvers import resolve_project_param, resolve_subproject_params
     show_default=True,
     help="Run reminders/auto-stop in a detached background process (non-blocking)",
 )
+@click.option("--pick", is_flag=True, help="Interactively pick project/subprojects")
 def start(
-    project: str,
+    project: Optional[str],
     subprojects: tuple,
     note: Optional[str],
     for_: Optional[str],
@@ -62,6 +62,7 @@ def start(
     notify_title: str,
     remind_poll: str,
     background: bool,
+    pick: bool,
 ):
     """Start a new timer for a project.
 
@@ -143,6 +144,22 @@ def start(
 
     try:
         client = APIClient()
+
+        # Interactive picker for project if --pick or no project provided
+        if pick or not project:
+            from ..utils.pickers import pick_project, pick_subproject
+
+            picked_project = pick_project(client)
+            if not picked_project:
+                console.print("[autumn.warn]No project selected.[/]")
+                raise click.Abort()
+            project = picked_project
+
+            # Also offer to pick subprojects if --pick was explicit
+            if pick and not subprojects:
+                picked_sub = pick_subproject(client, project)
+                if picked_sub:
+                    subprojects = (picked_sub,)
 
         # Resolve project name (case-insensitive + alias support)
         projects_meta = client.get_discovery_projects()

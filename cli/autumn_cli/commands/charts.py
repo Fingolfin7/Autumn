@@ -93,29 +93,18 @@ def chart(
         tags_payload = meta.get("tags", [])
 
         if pick:
-            from ..utils.pickers import pick_from_names, normalize_repeatable
+            from ..utils.pickers import pick_project, pick_context, pick_tag
 
             if not project:
-                # Pick project from grouped endpoint
-                grouped = client.list_projects_grouped()
-                all_projects = []
-                for bucket in (grouped.get("projects") or {}).values():
-                    for p in bucket or []:
-                        name = p.get("name") or p.get("project")
-                        if name:
-                            all_projects.append(name)
-                all_projects = sorted(set(all_projects))
-                chosen = pick_from_names(label="project", names=all_projects)
+                chosen = pick_project(client)
                 project = chosen or project
 
             if not context:
-                ctx_names = [c.get("name") for c in contexts_payload if c.get("name")]
-                chosen = pick_from_names(label="context", names=sorted(ctx_names))
+                chosen = pick_context(client)
                 context = chosen or context
 
             if not tag:
-                tag_names = [t.get("name") for t in tags_payload if t.get("name")]
-                chosen = pick_from_names(label="tag", names=sorted(tag_names))
+                chosen = pick_tag(client)
                 tag = tuple([chosen]) if chosen else tag
 
         ctx_res = resolve_context_param(context=context, contexts=contexts_payload)
