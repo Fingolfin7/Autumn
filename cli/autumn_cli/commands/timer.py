@@ -149,7 +149,8 @@ def start(
         if pick or not project:
             from ..utils.pickers import pick_project, pick_subproject
 
-            picked_project = pick_project(client)
+            # Only show active/paused projects for starting timers
+            picked_project = pick_project(client, statuses=["active", "paused"])
             if not picked_project:
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()

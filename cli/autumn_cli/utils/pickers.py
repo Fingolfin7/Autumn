@@ -170,14 +170,29 @@ def pick_project(
     *,
     label: str = "project",
     default: Optional[str] = None,
+    statuses: Optional[Sequence[str]] = None,
 ) -> Optional[str]:
     """Pick a project with recency ordering.
 
     Fetches projects and recent activity to order by recency.
+
+    Args:
+        client: API client instance
+        label: Label for the picker prompt
+        default: Default selection
+        statuses: Filter to only show projects with these statuses.
+                  None = all statuses. E.g., ["active", "paused"]
     """
     # Get all projects
     projects_meta = client.get_discovery_projects()
-    all_projects = [p.get("name") for p in projects_meta.get("projects", []) if p.get("name")]
+    all_projects_data = projects_meta.get("projects", [])
+
+    # Filter by status if specified
+    if statuses:
+        status_set = set(statuses)
+        all_projects_data = [p for p in all_projects_data if p.get("status") in status_set]
+
+    all_projects = [p.get("name") for p in all_projects_data if p.get("name")]
 
     if not all_projects:
         console.print("[dim]No projects found.[/]")

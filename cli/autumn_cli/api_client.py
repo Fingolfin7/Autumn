@@ -584,7 +584,7 @@ class APIClient:
         projects_by_status = grouped.get("projects", {})
         projects = []
 
-        for status in ("active", "paused", "completed"):
+        for status in ("active", "paused", "complete", "archived"):
             for proj in projects_by_status.get(status, []):
                 proj_entry = {
                     "name": proj.get("name") or proj.get("project"),
