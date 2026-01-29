@@ -6,9 +6,9 @@ This plan covers implementing missing API features in the Autumn CLI, prioritize
 
 ---
 
-## Priority 1: High Value Features
+## Priority 1: High Value Features ✅ COMPLETE
 
-### 1.1 Create Subproject
+### 1.1 Create Subproject ✅
 
 **API:** `POST /api/create_subproject/`
 
@@ -30,7 +30,7 @@ autumn new "My Project" -s "Frontend" -d "React UI components"
 
 ---
 
-### 1.2 Mark Project Status
+### 1.2 Mark Project Status ✅
 
 **API:** `POST /api/mark/`
 
@@ -53,7 +53,7 @@ autumn mark "Side Project" paused
 
 ---
 
-### 1.3 Rename Project/Subproject
+### 1.3 Rename Project/Subproject ✅
 
 **API:** `POST /api/rename/`
 
@@ -79,7 +79,7 @@ autumn rename "OldSub" "NewSub" -p "My Project"
 
 ---
 
-### 1.4 Delete Project/Subproject
+### 1.4 Delete Project/Subproject ✅
 
 **API:**
 - `DELETE /api/project/delete/` (project)
@@ -106,7 +106,7 @@ autumn delete-sub <project> <subproject> --yes
 
 ---
 
-### 1.5 Export Data
+### 1.5 Export Data ✅
 
 **API:** `GET/POST /api/export/`
 
@@ -138,7 +138,7 @@ autumn export -o data.json --compress
 
 ---
 
-### 1.6 Audit (Recompute Totals)
+### 1.6 Audit (Recompute Totals) ✅
 
 **API:** `POST /api/audit/`
 
@@ -158,7 +158,7 @@ autumn audit
 
 ---
 
-## Priority 2: Medium Value Features
+## Priority 2: Medium Value Features (Partial)
 
 ### 2.1 Search Projects
 
@@ -181,7 +181,7 @@ autumn projects --search "client" --status paused
 
 ---
 
-### 2.2 Project Totals
+### 2.2 Project Totals ✅
 
 **API:** `GET /api/totals/`
 
@@ -287,19 +287,19 @@ autumn subprojects "My Project" --search "api"
 ## Implementation Order
 
 ```
-Phase 1 (High Priority):
-├── 1.1 Create Subproject
-├── 1.2 Mark Project Status
-├── 1.3 Rename Project/Subproject
-├── 1.4 Delete Project/Subproject
-├── 1.5 Export Data
-└── 1.6 Audit
+Phase 1 (High Priority): ✅ COMPLETE
+├── 1.1 Create Subproject ✅
+├── 1.2 Mark Project Status ✅
+├── 1.3 Rename Project/Subproject ✅
+├── 1.4 Delete Project/Subproject ✅
+├── 1.5 Export Data ✅
+└── 1.6 Audit ✅
 
-Phase 2 (Medium Priority):
+Phase 2 (Medium Priority): PARTIAL
 ├── 2.1 Search Projects
-└── 2.2 Project Totals
+└── 2.2 Project Totals ✅
 
-Phase 3 (Lower Priority):
+Phase 3 (Lower Priority): NOT STARTED
 ├── 3.1 Merge Projects
 ├── 3.2 Merge Subprojects
 ├── 3.3 Get Single Project Details
@@ -308,15 +308,16 @@ Phase 3 (Lower Priority):
 
 ---
 
-## Files to Modify/Create
+## Files Modified/Created
 
-| File | Changes |
-|------|---------|
-| `api_client.py` | Add 10+ new API methods |
-| `commands/projects.py` | Add mark, rename, delete-project, delete-sub, totals, merge commands |
-| `commands/export_cmd.py` | **NEW** - Export command |
-| `commands/meta.py` | Add audit command |
-| `cli.py` | Register new commands |
+| File | Changes | Status |
+|------|---------|--------|
+| `api_client.py` | Added 10+ new API methods | ✅ |
+| `commands/projects.py` | Added mark, rename, delete-project, delete-sub, totals | ✅ |
+| `commands/export_cmd.py` | **NEW** - Export command | ✅ |
+| `commands/meta.py` | Added audit command | ✅ |
+| `cli.py` | Registered new commands | ✅ |
+| `tests/test_api_client_new_methods.py` | **NEW** - 14 tests for API methods | ✅ |
 
 ---
 
