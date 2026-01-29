@@ -599,3 +599,181 @@ class APIClient:
             pass
 
         return {"projects": projects, "cached": False}
+
+    # Subproject management
+
+    def create_subproject(
+        self,
+        parent_project: str,
+        name: str,
+        description: Optional[str] = None,
+    ) -> Dict:
+        """Create a new subproject under an existing project."""
+        data = {"parent_project": parent_project, "name": name}
+        if description:
+            data["description"] = description
+        return self._request("POST", "/api/create_subproject/", json=data)
+
+    # Project status management
+
+    def mark_project_status(self, project: str, status: str) -> Dict:
+        """Mark a project with a new status (active, paused, complete, archived)."""
+        data = {"project": project, "status": status}
+        return self._request("POST", "/api/mark/", json=data)
+
+    # Rename operations
+
+    def rename_project(self, old_name: str, new_name: str) -> Dict:
+        """Rename a project."""
+        data = {"type": "project", "project": old_name, "new_name": new_name}
+        return self._request("POST", "/api/rename/", json=data)
+
+    def rename_subproject(
+        self, project: str, old_subproject: str, new_subproject: str
+    ) -> Dict:
+        """Rename a subproject within a project."""
+        data = {
+            "type": "subproject",
+            "project": project,
+            "subproject": old_subproject,
+            "new_name": new_subproject,
+        }
+        return self._request("POST", "/api/rename/", json=data)
+
+    # Delete operations
+
+    def delete_project(self, project: str) -> Dict:
+        """Delete a project and all its sessions."""
+        data = {"project": project}
+        # This endpoint returns 204 No Content, so we handle it specially
+        url = f"{self.base_url}/api/project/delete/"
+        try:
+            response = requests.request(
+                method="DELETE",
+                url=url,
+                headers=self._headers(),
+                json=data,
+                timeout=30,
+                verify=self._verify,
+            )
+            response.raise_for_status()
+            # 204 returns no body
+            if response.status_code == 204:
+                return {"ok": True, "deleted": project}
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_data = response.json() if response is not None else {}
+                error_msg = error_data.get("error", str(e))
+                raise APIError(f"API error: {error_msg}")
+            except APIError:
+                raise
+            except Exception:
+                raise APIError(f"API error: {e}")
+
+    def delete_subproject(self, project: str, subproject: str) -> Dict:
+        """Delete a subproject from a project."""
+        from urllib.parse import quote
+
+        endpoint = f"/api/delete_subproject/{quote(project, safe='')}/{quote(subproject, safe='')}/"
+        # This endpoint likely returns 204 No Content
+        url = f"{self.base_url}{endpoint}"
+        try:
+            response = requests.request(
+                method="DELETE",
+                url=url,
+                headers=self._headers(),
+                timeout=30,
+                verify=self._verify,
+            )
+            response.raise_for_status()
+            if response.status_code == 204:
+                return {"ok": True, "deleted": subproject, "project": project}
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_data = response.json() if response is not None else {}
+                error_msg = error_data.get("error", str(e))
+                raise APIError(f"API error: {error_msg}")
+            except APIError:
+                raise
+            except Exception:
+                raise APIError(f"API error: {e}")
+
+    # Export
+
+    def export_data(
+        self,
+        project: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        context: Optional[int] = None,
+        tags: Optional[List[int]] = None,
+        compress: bool = False,
+        autumn_compatible: bool = True,
+    ) -> Dict:
+        """Export sessions/projects data as JSON.
+
+        Note: context must be an integer ID, not a name.
+        Tags should be a list of tag IDs.
+        """
+        data = {}
+        if project:
+            data["project_name"] = project
+        if start_date:
+            data["start_date"] = start_date
+        if end_date:
+            data["end_date"] = end_date
+        if context is not None:
+            data["context"] = context
+        if tags:
+            data["tags"] = tags
+        if compress:
+            data["compress"] = True
+        if autumn_compatible:
+            data["autumn_compatible"] = True
+        return self._request("POST", "/api/export/", json=data)
+
+    # Audit
+
+    def audit_totals(self) -> Dict:
+        """Recompute and persist totals for all projects and subprojects."""
+        return self._request("POST", "/api/audit/")
+
+    # Project details and search
+
+    def get_project(self, name: str) -> Dict:
+        """Get detailed information about a single project."""
+        from urllib.parse import quote
+
+        endpoint = f"/api/get_project/{quote(name, safe='')}/"
+        return self._request("GET", endpoint)
+
+    def search_projects(
+        self, search_term: str, status: Optional[str] = None
+    ) -> Dict:
+        """Search projects by name with optional status filter."""
+        params = {"search_term": search_term}
+        if status:
+            params["status"] = status
+        return self._request("GET", "/api/search_projects/", params=params)
+
+    def get_project_totals(
+        self,
+        project: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict:
+        """Get project totals with subproject breakdown."""
+        params = {"project": project, "compact": "true"}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        if context:
+            params["context"] = context
+        if tags:
+            params["tags"] = ",".join(tags)
+        return self._request("GET", "/api/totals/", params=params)

@@ -80,3 +80,51 @@ def meta_refresh() -> None:
     clear_cached_projects()
     clear_cached_activity()
     console.print("[autumn.ok]Metadata cache cleared.[/] Next command will re-fetch contexts/tags, projects, and recent activity.")
+
+
+@meta.command("audit")
+def meta_audit() -> None:
+    """Recompute and persist totals for all projects and subprojects.
+
+    This fixes any discrepancies between computed totals and actual session data.
+    Useful after imports, manual database changes, or if totals seem incorrect.
+    """
+    try:
+        client = APIClient()
+        console.print("[dim]Auditing project/subproject totals...[/]")
+
+        result = client.audit_totals()
+
+        if result.get("ok"):
+            projects = result.get("projects", {})
+            subprojects = result.get("subprojects", {})
+
+            console.print()
+            console.print("[autumn.ok]Audit complete.[/]")
+            console.print()
+
+            # Projects summary
+            proj_count = projects.get("count", 0)
+            proj_changed = projects.get("changed", 0)
+            proj_delta = projects.get("delta_total", 0)
+
+            delta_sign = "+" if proj_delta >= 0 else ""
+            console.print(f"[autumn.label]Projects:[/] {proj_count} checked, {proj_changed} changed (delta: {delta_sign}{proj_delta:.1f} min)")
+
+            # Subprojects summary
+            sub_count = subprojects.get("count", 0)
+            sub_changed = subprojects.get("changed", 0)
+            sub_delta = subprojects.get("delta_total", 0)
+
+            delta_sign = "+" if sub_delta >= 0 else ""
+            console.print(f"[autumn.label]Subprojects:[/] {sub_count} checked, {sub_changed} changed (delta: {delta_sign}{sub_delta:.1f} min)")
+
+            # Clear caches since totals may have changed
+            clear_cached_projects()
+            clear_cached_activity()
+        else:
+            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.Abort()
+    except APIError as e:
+        console.print(f"[autumn.err]Error:[/] {e}")
+        raise click.Abort()

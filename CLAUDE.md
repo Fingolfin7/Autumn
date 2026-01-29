@@ -107,6 +107,11 @@ cli/
 | Timestamp | `[autumn.time]` (cyan) |
 | Duration | `[autumn.duration]` (green) |
 
+## Git Commits
+
+- Do NOT include `Co-Authored-By` or other sign-off lines in commit messages
+- Keep commit messages concise and descriptive
+
 ## Key Documentation
 
 - `cli/README.md` - Usage guide

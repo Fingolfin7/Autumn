@@ -19,7 +19,7 @@ from .config import (
 from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
 from .commands.sessions import log, track
-from .commands.projects import projects_list, new_project, subprojects
+from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals
 from .commands.charts import chart
 
 from .commands.meta import context, tag
@@ -30,6 +30,8 @@ from .commands.resume_cmd import resume
 from .commands.notify_cmd import notify_cmd
 from .commands.remind_cmd import remind
 from .commands.reminders_cmd import reminders
+from .commands.export_cmd import export
+from .commands.meta import meta_audit
 
 
 @click.group(invoke_without_command=True)
@@ -261,6 +263,11 @@ cli.add_command(projects_list, name="p")
 cli.add_command(subprojects, name="subprojects")
 cli.add_command(subprojects, name="subs")
 cli.add_command(new_project, name="new")
+cli.add_command(mark, name="mark")
+cli.add_command(rename, name="rename")
+cli.add_command(delete_project, name="delete-project")
+cli.add_command(delete_sub, name="delete-sub")
+cli.add_command(totals, name="totals")
 
 
 # Chart command
@@ -280,6 +287,10 @@ cli.add_command(resume, name="resume")
 cli.add_command(notify_cmd, name="notify")
 cli.add_command(remind, name="remind")
 cli.add_command(reminders, name="reminders")
+
+# Data commands
+cli.add_command(export, name="export")
+cli.add_command(meta_audit, name="audit")
 
 
 def main():
