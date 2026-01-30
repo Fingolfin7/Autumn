@@ -19,7 +19,7 @@ from .config import (
 from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
 from .commands.sessions import log, track
-from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals
+from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
 from .commands.charts import chart
 
 from .commands.meta import context, tag
@@ -32,6 +32,7 @@ from .commands.remind_cmd import remind
 from .commands.reminders_cmd import reminders
 from .commands.export_cmd import export
 from .commands.meta import meta_audit
+from .commands.alias_cmd import alias
 
 
 @click.group(invoke_without_command=True)
@@ -268,6 +269,9 @@ cli.add_command(rename, name="rename")
 cli.add_command(delete_project, name="delete-project")
 cli.add_command(delete_sub, name="delete-sub")
 cli.add_command(totals, name="totals")
+cli.add_command(project_details, name="project")
+cli.add_command(merge, name="merge")
+cli.add_command(merge_subs, name="merge-subs")
 
 
 # Chart command
@@ -291,6 +295,9 @@ cli.add_command(reminders, name="reminders")
 # Data commands
 cli.add_command(export, name="export")
 cli.add_command(meta_audit, name="audit")
+
+# Alias management
+cli.add_command(alias, name="alias")
 
 
 def main():

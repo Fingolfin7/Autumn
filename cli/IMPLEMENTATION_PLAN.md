@@ -158,9 +158,9 @@ autumn audit
 
 ---
 
-## Priority 2: Medium Value Features (Partial)
+## Priority 2: Medium Value Features ✅ COMPLETE
 
-### 2.1 Search Projects
+### 2.1 Search Projects ✅
 
 **API:** `GET /api/search_projects/?search_term=...&status=...`
 
@@ -206,9 +206,9 @@ autumn totals "My Project" --start-date 2026-01-01
 
 ---
 
-## Priority 3: Lower Priority Features
+## Priority 3: Lower Priority Features ✅ COMPLETE
 
-### 3.1 Merge Projects
+### 3.1 Merge Projects ✅
 
 **API:** `POST /api/merge_projects/`
 
@@ -228,7 +228,7 @@ autumn merge "Project A" "Project B" --into "Combined Project"
 
 ---
 
-### 3.2 Merge Subprojects
+### 3.2 Merge Subprojects ✅
 
 **API:** `POST /api/merge_subprojects/`
 
@@ -247,7 +247,7 @@ autumn merge-subs "My Project" "Frontend" "UI" --into "Frontend UI"
 
 ---
 
-### 3.3 Get Single Project Details
+### 3.3 Get Single Project Details ✅
 
 **API:** `GET /api/get_project/<name>/`
 
@@ -266,7 +266,7 @@ autumn project <name>
 
 ---
 
-### 3.4 Search Subprojects
+### 3.4 Search Subprojects ✅
 
 **API:** `GET /api/search_subprojects/?project_name=...&search_term=...`
 
@@ -295,15 +295,15 @@ Phase 1 (High Priority): ✅ COMPLETE
 ├── 1.5 Export Data ✅
 └── 1.6 Audit ✅
 
-Phase 2 (Medium Priority): PARTIAL
-├── 2.1 Search Projects
+Phase 2 (Medium Priority): ✅ COMPLETE
+├── 2.1 Search Projects ✅
 └── 2.2 Project Totals ✅
 
-Phase 3 (Lower Priority): NOT STARTED
-├── 3.1 Merge Projects
-├── 3.2 Merge Subprojects
-├── 3.3 Get Single Project Details
-└── 3.4 Search Subprojects
+Phase 3 (Lower Priority): ✅ COMPLETE
+├── 3.1 Merge Projects ✅
+├── 3.2 Merge Subprojects ✅
+├── 3.3 Get Single Project Details ✅
+└── 3.4 Search Subprojects ✅
 ```
 
 ---
@@ -312,11 +312,11 @@ Phase 3 (Lower Priority): NOT STARTED
 
 | File | Changes | Status |
 |------|---------|--------|
-| `api_client.py` | Added 10+ new API methods | ✅ |
-| `commands/projects.py` | Added mark, rename, delete-project, delete-sub, totals | ✅ |
+| `api_client.py` | Added 15+ new API methods (incl. merge, search) | ✅ |
+| `commands/projects.py` | Added mark, rename, delete-project, delete-sub, totals, project, merge, merge-subs + search options | ✅ |
 | `commands/export_cmd.py` | **NEW** - Export command | ✅ |
 | `commands/meta.py` | Added audit command | ✅ |
-| `cli.py` | Registered new commands | ✅ |
+| `cli.py` | Registered all new commands | ✅ |
 | `tests/test_api_client_new_methods.py` | **NEW** - 14 tests for API methods | ✅ |
 
 ---

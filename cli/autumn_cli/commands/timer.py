@@ -178,7 +178,7 @@ def start(
             except Exception:
                 known_subs = []
             resolved_subs, sub_warnings = resolve_subproject_params(
-                subprojects=subprojects, known_subprojects=known_subs
+                subprojects=subprojects, known_subprojects=known_subs, project=resolved_project
             )
             for w in sub_warnings:
                 console.print(f"[autumn.warn]Warning:[/] {w}")

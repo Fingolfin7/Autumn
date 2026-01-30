@@ -14,7 +14,9 @@ Alias configuration is stored in ~/.autumn/config.yaml under the `aliases` key:
       tags:
         imp: Important
       subprojects:
-        docs: Documentation
+        "Autumn CLI":
+          fe: Frontend
+          be: Backend
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ def _get_alias(alias_type: str, name: str) -> Optional[str]:
     """Look up alias from config.
 
     Args:
-        alias_type: One of 'projects', 'subprojects', 'contexts', 'tags'
+        alias_type: One of 'projects', 'contexts', 'tags'
         name: The alias key to look up
 
     Returns:
@@ -54,6 +56,43 @@ def _get_alias(alias_type: str, name: str) -> Optional[str]:
     for alias_key, target in aliases.items():
         if _norm_key(alias_key) == _norm_key(name):
             return target
+    return None
+
+
+def _get_subproject_alias(name: str, project: Optional[str] = None) -> Optional[str]:
+    """Look up subproject alias from config.
+
+    Subproject aliases are scoped to their parent project.
+
+    Args:
+        name: The alias key to look up
+        project: The parent project name (required for scoped lookup)
+
+    Returns:
+        The canonical subproject name if alias exists, None otherwise
+    """
+    all_sub_aliases = get_config_value("aliases.subprojects", {})
+    if not isinstance(all_sub_aliases, dict):
+        return None
+
+    if not project:
+        return None
+
+    # Find matching project key (case-insensitive)
+    project_aliases = None
+    for proj_key, aliases in all_sub_aliases.items():
+        if _norm_key(proj_key) == _norm_key(project):
+            project_aliases = aliases
+            break
+
+    if not project_aliases or not isinstance(project_aliases, dict):
+        return None
+
+    # Case-insensitive alias lookup within project
+    for alias_key, target in project_aliases.items():
+        if _norm_key(alias_key) == _norm_key(name):
+            return target
+
     return None
 
 
@@ -202,13 +241,14 @@ def resolve_subproject_params(
     *,
     subprojects: Optional[Iterable[str]],
     known_subprojects: Iterable[dict],
+    project: Optional[str] = None,
 ) -> Tuple[List[str], List[str]]:
     """Resolve subproject args to canonical names.
 
     Returns: (resolved_names, warnings)
 
     Steps for each subproject:
-    1. Check aliases first
+    1. Check project-scoped aliases first (if project is provided)
     2. Case-insensitive match against known_subprojects
     3. Pass through with warning if unknown
 
@@ -216,6 +256,7 @@ def resolve_subproject_params(
         subprojects: User-provided subproject names/aliases
         known_subprojects: Iterable of subproject dicts with 'name' key,
                           or strings for compact format
+        project: Parent project name (for scoped alias lookup)
 
     Returns:
         Tuple of (resolved_names, warnings)
@@ -241,8 +282,8 @@ def resolve_subproject_params(
         if not raw:
             continue
 
-        # Check alias first
-        aliased = _get_alias("subprojects", raw)
+        # Check project-scoped alias first
+        aliased = _get_subproject_alias(raw, project)
         if aliased:
             raw = aliased
 

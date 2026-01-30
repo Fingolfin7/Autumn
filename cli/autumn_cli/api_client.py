@@ -777,3 +777,33 @@ class APIClient:
         if tags:
             params["tags"] = ",".join(tags)
         return self._request("GET", "/api/totals/", params=params)
+
+    def search_subprojects(
+        self, project: str, search_term: str
+    ) -> Dict:
+        """Search subprojects by name within a project."""
+        params = {"project_name": project, "search_term": search_term}
+        return self._request("GET", "/api/search_subprojects/", params=params)
+
+    def merge_projects(
+        self, project1: str, project2: str, new_project_name: str
+    ) -> Dict:
+        """Merge two projects into a new one."""
+        data = {
+            "project1": project1,
+            "project2": project2,
+            "new_project_name": new_project_name,
+        }
+        return self._request("POST", "/api/merge_projects/", json=data)
+
+    def merge_subprojects(
+        self, project_id: int, subproject1: str, subproject2: str, new_subproject_name: str
+    ) -> Dict:
+        """Merge two subprojects into a new one within a project."""
+        data = {
+            "project_id": project_id,
+            "subproject1": subproject1,
+            "subproject2": subproject2,
+            "new_subproject_name": new_subproject_name,
+        }
+        return self._request("POST", "/api/merge_subprojects/", json=data)
