@@ -19,12 +19,13 @@ def context() -> None:
 
 @context.command("list")
 @click.option("--json", "json_out", is_flag=True, help="Output raw JSON")
-@click.option("--full", is_flag=True, help="Include extra fields")
-def context_list(json_out: bool, full: bool) -> None:
-    """List available contexts."""
+@click.option("--compact", is_flag=True, help="Show minimal output (names only)")
+@click.option("--desc", "-d", is_flag=True, help="Show descriptions")
+def context_list(json_out: bool, compact: bool, desc: bool) -> None:
+    """List available contexts with stats."""
     try:
         client = APIClient()
-        result = client.list_contexts(compact=not full)
+        result = client.list_contexts(compact=compact)
         if json_out:
             console.print_json(data=result)
             return
@@ -34,7 +35,7 @@ def context_list(json_out: bool, full: bool) -> None:
             console.print("[dim]No contexts found.[/]")
             return
 
-        console.print(contexts_table(contexts, show_description=full))
+        console.print(contexts_table(contexts, show_description=desc))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -47,12 +48,13 @@ def tag() -> None:
 
 @tag.command("list")
 @click.option("--json", "json_out", is_flag=True, help="Output raw JSON")
-@click.option("--full", is_flag=True, help="Include extra fields")
-def tag_list(json_out: bool, full: bool) -> None:
-    """List available tags."""
+@click.option("--compact", is_flag=True, help="Show minimal output (names only)")
+@click.option("--color", is_flag=True, help="Show tag colors")
+def tag_list(json_out: bool, compact: bool, color: bool) -> None:
+    """List available tags with stats."""
     try:
         client = APIClient()
-        result = client.list_tags(compact=not full)
+        result = client.list_tags(compact=compact)
         if json_out:
             console.print_json(data=result)
             return
@@ -62,7 +64,7 @@ def tag_list(json_out: bool, full: bool) -> None:
             console.print("[dim]No tags found.[/]")
             return
 
-        console.print(tags_table(tags, show_color=full))
+        console.print(tags_table(tags, show_color=color))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
