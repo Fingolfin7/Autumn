@@ -86,12 +86,15 @@ autumn
 | **Logs** | `autumn log` | List sessions (saved) | `-P month`, `-p`, `-t`, `-c`, `--pick` |
 | | `autumn log search` | Advanced search | `--note-snippet`, `--start-date` |
 | | `autumn track` | Manually log a session | `--start`, `--end`, `-n` |
-| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-t`, `-d` |
-| | `autumn subprojects` | List subprojects for a project | `<project>`, `-d` |
+| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-t`, `-d`, `--search` |
+| | `autumn project` | Show single project details | `<name>`, `--pick` |
+| | `autumn subprojects` | List subprojects for a project | `<project>`, `-d`, `--search` |
 | | `autumn new` | Create project or subproject | `-s`, `-d`, `--pick` |
 | | `autumn mark` | Change project status | `<project> <status>`, `--pick` |
 | | `autumn rename` | Rename project or subproject | `<old> <new>`, `-p` for subprojects |
 | | `autumn totals` | Show project time breakdown | `<project>`, `--start-date`, `--end-date` |
+| | `autumn merge` | Merge two projects | `<p1> <p2> --into <name>`, `-y` |
+| | `autumn merge-subs` | Merge two subprojects | `<project> <s1> <s2> --into`, `-y` |
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
 | **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `--stdout` |
@@ -100,6 +103,7 @@ autumn
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
 | **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
 | **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
+| | `autumn alias` | Manage aliases | `add`, `list`, `remove` |
 | **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 
 ## Usage
@@ -205,6 +209,35 @@ autumn totals "My Project"
 autumn totals "My Project" --start-date 2026-01-01
 ```
 
+**View single project details:**
+```bash
+autumn project "My Project"
+autumn project --pick  # Interactive selection
+```
+
+Shows: status, total time, session count, average session duration, context, tags, and subprojects.
+
+**Search projects and subprojects:**
+```bash
+autumn projects --search "web"              # Search by name
+autumn projects --search "api" -S all       # Search across all statuses
+autumn subprojects "My Project" --search "frontend"
+```
+
+**Merge projects:**
+```bash
+autumn merge "Project A" "Project B" --into "Combined Project"
+autumn merge --pick --into "Merged"  # Interactive selection
+```
+
+All sessions and subprojects from both projects are moved to the new project. The original projects are deleted.
+
+**Merge subprojects:**
+```bash
+autumn merge-subs "My Project" "Frontend" "UI" --into "Frontend UI"
+autumn merge-subs --pick --into "Merged Sub"
+```
+
 **Delete projects or subprojects:**
 ```bash
 autumn delete-project "Old Project"      # Prompts for confirmation
@@ -278,25 +311,49 @@ autumn config open    # Open config file in default editor
 - `greeting_activity_weight: 0.5` - How often to show activity in greetings (0-1)
 - `notify.log_file: "~/.autumn/notify.log"` - Enable notification debug logging
 
-**Aliases:**
+### Aliases
 
-Define short names for projects, contexts, or tags:
+Define short names for projects, contexts, tags, or subprojects using the `alias` command:
+
+**Add aliases:**
 ```bash
-autumn config set aliases.projects '{"cli": "Autumn CLI", "oss": "Open Source"}' --type json
-autumn config set aliases.contexts '{"w": "Work", "h": "Personal"}' --type json
+autumn alias add project cli "Autumn CLI"
+autumn alias add context w Work
+autumn alias add tag imp Important
+autumn alias add subproject fe Frontend -p "Autumn CLI"  # Scoped to project
+
+# Interactive mode
+autumn alias add project myalias --pick
 ```
 
-Then use the short names in commands:
+**List aliases:**
 ```bash
-autumn start cli        # Resolves to "Autumn CLI"
-autumn log -c w         # Resolves to "Work" context
+autumn alias list                # Show all aliases
+autumn alias list --type project # Filter by type
+autumn alias list --json         # JSON output
 ```
+
+**Remove aliases:**
+```bash
+autumn alias remove project cli
+autumn alias remove subproject fe -p "Autumn CLI"
+```
+
+**Use aliases in commands:**
+```bash
+autumn start cli           # Resolves to "Autumn CLI"
+autumn log -c w            # Resolves to "Work" context
+autumn start cli -s fe     # Subproject alias resolves within project scope
+```
+
+Subproject aliases are **project-scoped** — the alias `fe` can map to different subprojects in different projects.
 
 ## Features
 
 - ✅ **Full Timer Lifecycle**: Start, stop, restart, resume, and delete.
 - ✅ **Pomodoro Support**: Auto-stop timers and timed reminders.
-- ✅ **Project Management**: Create, rename, mark status, and delete projects/subprojects.
+- ✅ **Project Management**: Create, rename, mark status, merge, and delete projects/subprojects.
+- ✅ **Search & Discovery**: Search projects and subprojects by name, view detailed project info.
 - ✅ **Interactive Pickers**: Fuzzy-search selection with `--pick` flag.
 - ✅ **Data Export**: Export sessions and projects to JSON with filtering.
 - ✅ **Background Reminders**: NLP-powered reminders (`at`, `every`, `in`).
@@ -305,7 +362,7 @@ autumn log -c w         # Resolves to "Work" context
 - ✅ **Cross-Platform Notifications**: Native toasts on Windows, macOS, and Linux.
 - ✅ **Smart Greetings**: Dynamic, personalized messages based on time and activity.
 - ✅ **Case-Insensitive Input**: Project/subproject names resolve regardless of case.
-- ✅ **Alias Support**: Define short names for frequently used projects.
+- ✅ **Powerful Aliases**: Dedicated alias commands with project-scoped subproject aliases.
 
 ## Troubleshooting
 
