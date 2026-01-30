@@ -807,3 +807,49 @@ class APIClient:
             "new_subproject_name": new_subproject_name,
         }
         return self._request("POST", "/api/merge_subprojects/", json=data)
+
+    def list_projects_flat(
+        self,
+        status: Optional[str] = None,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        compact: bool = True,
+    ) -> Dict:
+        """List projects as a flat (ungrouped) list with optional filters."""
+        params = {"compact": str(compact).lower()}
+        if status:
+            params["status"] = status
+        if context:
+            params["context"] = context
+        if tags:
+            params["tags"] = ",".join(tags)
+        if search:
+            params["search"] = search
+        return self._request("GET", "/api/projects/", params=params)
+
+    def edit_session(
+        self,
+        session_id: int,
+        project: Optional[str] = None,
+        subprojects: Optional[List[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        note: Optional[str] = None,
+        compact: bool = True,
+    ) -> Dict:
+        """Edit an existing completed session."""
+        data = {}
+        if project is not None:
+            data["project"] = project
+        if subprojects is not None:
+            data["subprojects"] = subprojects
+        if start is not None:
+            data["start"] = start
+        if end is not None:
+            data["end"] = end
+        if note is not None:
+            data["note"] = note
+
+        params = {"compact": str(compact).lower()}
+        return self._request("PATCH", f"/api/session/{session_id}/", params=params, json=data)

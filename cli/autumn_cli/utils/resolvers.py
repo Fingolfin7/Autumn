@@ -145,24 +145,24 @@ def resolve_tag_params(
     tags: Optional[Iterable[str]],
     known_tags: Iterable[dict],
 ) -> Tuple[List[str], List[str]]:
-    """Resolve tag args (ids or names) into a list of tag id strings.
+    """Resolve tag args (ids or names) into canonical tag names.
 
-    Returns: (resolved_tag_values, warnings)
+    Returns: (resolved_tag_names, warnings)
 
-    - numeric strings are kept
+    - numeric strings (IDs) are kept as-is for backwards compatibility
     - aliases are expanded first
-    - names are matched case-insensitively against known_tags
+    - names are matched case-insensitively against known_tags and resolved to canonical names
     - unknown names are passed through unchanged (API supports names too), but we warn
     """
     if not tags:
         return [], []
 
-    name_to_id = {}
+    # Build lookup: normalized name -> canonical name
+    name_lookup = {}
     for t in known_tags:
         name = t.get("name")
-        tid = t.get("id")
-        if name and tid is not None:
-            name_to_id[_norm_key(name)] = str(tid)
+        if name:
+            name_lookup[_norm_key(name)] = name
 
     resolved: List[str] = []
     warnings: List[str] = []
@@ -172,6 +172,7 @@ def resolve_tag_params(
         if not raw:
             continue
 
+        # Keep numeric IDs as-is for backwards compatibility
         if _is_int_string(raw):
             resolved.append(str(int(raw)))
             continue
@@ -181,7 +182,8 @@ def resolve_tag_params(
         if aliased:
             raw = aliased
 
-        hit = name_to_id.get(_norm_key(raw))
+        # Resolve to canonical name (case-insensitive match)
+        hit = name_lookup.get(_norm_key(raw))
         if hit:
             resolved.append(hit)
         else:

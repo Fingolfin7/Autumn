@@ -406,48 +406,95 @@ def format_totals_table(totals_data: Dict) -> str:
     return tabulate(rows, headers=headers, tablefmt="grid")
 
 
+def _format_duration_short(minutes: float) -> str:
+    """Format minutes as hours and minutes string."""
+    if minutes is None or minutes == 0:
+        return "-"
+    hours = int(minutes // 60)
+    mins = int(minutes % 60)
+    if hours > 0:
+        return f"{hours}h {mins}m"
+    return f"{mins}m"
+
+
 def contexts_table(
     contexts: List[Dict[str, Any]], show_description: bool = False
 ) -> Table:
-    """Render a table of contexts."""
+    """Render a table of contexts with optional stats."""
     table = Table(show_header=True, header_style="autumn.title", padding=(0, 1))
     table.add_column("ID", style="autumn.id", no_wrap=True, justify="right")
     table.add_column("Name", style="autumn.project", no_wrap=True)
+
+    # Check if stats are available (non-compact response)
+    has_stats = contexts and contexts[0].get("project_count") is not None
+
+    if has_stats:
+        table.add_column("Projects", justify="right")
+        table.add_column("Sessions", justify="right")
+        table.add_column("Total Time", style="autumn.duration", justify="right")
+        table.add_column("Avg Session", justify="right")
+
     if show_description:
         table.add_column("Description", style="autumn.description", overflow="fold")
 
     for c in contexts:
         cid = c.get("id")
         name = c.get("name", "")
+
+        row = [str(cid) if cid is not None else "-", name]
+
+        if has_stats:
+            row.extend([
+                str(c.get("project_count", 0)),
+                str(c.get("session_count", 0)),
+                _format_duration_short(c.get("total_minutes", 0)),
+                _format_duration_short(c.get("avg_session_minutes", 0)),
+            ])
+
         if show_description:
-            table.add_row(
-                str(cid) if cid is not None else "-",
-                name,
-                c.get("description", "") or "",
-            )
-        else:
-            table.add_row(str(cid) if cid is not None else "-", name)
+            row.append(c.get("description", "") or "")
+
+        table.add_row(*row)
 
     return table
 
 
 def tags_table(tags: List[Dict[str, Any]], show_color: bool = False) -> Table:
-    """Render a table of tags."""
+    """Render a table of tags with optional stats."""
     table = Table(show_header=True, header_style="autumn.title", padding=(0, 1))
     table.add_column("ID", style="autumn.id", no_wrap=True, justify="right")
     table.add_column("Name", style="autumn.note", no_wrap=True)
+
+    # Check if stats are available (non-compact response)
+    has_stats = tags and tags[0].get("project_count") is not None
+
+    if has_stats:
+        table.add_column("Projects", justify="right")
+        table.add_column("Sessions", justify="right")
+        table.add_column("Total Time", style="autumn.duration", justify="right")
+        table.add_column("Avg Session", justify="right")
+
     if show_color:
         table.add_column("Color", style="autumn.muted", no_wrap=True)
 
     for t in tags:
         tid = t.get("id")
         name = t.get("name", "")
+
+        row = [str(tid) if tid is not None else "-", name]
+
+        if has_stats:
+            row.extend([
+                str(t.get("project_count", 0)),
+                str(t.get("session_count", 0)),
+                _format_duration_short(t.get("total_minutes", 0)),
+                _format_duration_short(t.get("avg_session_minutes", 0)),
+            ])
+
         if show_color:
-            table.add_row(
-                str(tid) if tid is not None else "-", name, t.get("color", "") or ""
-            )
-        else:
-            table.add_row(str(tid) if tid is not None else "-", name)
+            row.append(t.get("color", "") or "")
+
+        table.add_row(*row)
 
     return table
 
@@ -487,9 +534,10 @@ def subprojects_table(
             # Full DRF serializer format
             name = sub.get("name") or sub.get("p") or ""
             desc = sub.get("description") or ""
-            total_time = sub.get("total_time") or sub.get("dur") or 0
+            # API returns total_minutes now, fallback to total_time for backwards compat
+            total_time = sub.get("total_minutes") or sub.get("total_time") or sub.get("dur") or 0
             last_active = sub.get("last_updated") or sub.get("last_active") or ""
-            # session_count might be injected by the command
+            # session_count now comes from API directly
             session_count = sub.get("session_count")
 
             # Format name cell with description if requested

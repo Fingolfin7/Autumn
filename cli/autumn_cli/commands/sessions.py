@@ -345,3 +345,109 @@ def _normalize_datetime(dt_str: str) -> str:
 
     # Convert to server format
     return format_server_datetime(user_dt.dt)
+
+
+@click.command("edit")
+@click.argument("session_id", type=int)
+@click.option("-p", "--project", help="Change the project")
+@click.option("-s", "--subproject", "subprojects", multiple=True, help="Change subprojects (can use multiple times)")
+@click.option("--start", help="Change start time (YYYY-MM-DD HH:MM:SS or relative like 'now-1h')")
+@click.option("--end", help="Change end time (YYYY-MM-DD HH:MM:SS or relative like 'now')")
+@click.option("-n", "--note", help="Change the note")
+@click.option("--pick", is_flag=True, help="Interactively pick project/subprojects")
+def edit_session(
+    session_id: int,
+    project: Optional[str],
+    subprojects: tuple,
+    start: Optional[str],
+    end: Optional[str],
+    note: Optional[str],
+    pick: bool,
+):
+    """Edit an existing completed session.
+
+    Note: The session will get a new ID after editing.
+
+    Examples:
+        autumn edit 123 --note "Updated note"
+        autumn edit 123 -p "New Project"
+        autumn edit 123 --start "2026-01-15 09:00:00" --end "2026-01-15 10:30:00"
+        autumn edit 123 -s Frontend -s Backend
+    """
+    try:
+        client = APIClient()
+
+        # Handle project selection
+        resolved_project = None
+        if pick and not project:
+            from ..utils.pickers import pick_project
+            project = pick_project(client, label="new project")
+
+        if project:
+            projects_meta = client.get_discovery_projects()
+            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
+            if proj_res.warning:
+                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+            resolved_project = proj_res.value or project
+
+        # Handle subproject selection
+        subprojects_list = None
+        if pick and not subprojects and resolved_project:
+            from ..utils.pickers import pick_subproject
+            picked_sub = pick_subproject(client, resolved_project, label="new subproject")
+            if picked_sub:
+                subprojects = (picked_sub,)
+
+        if subprojects and resolved_project:
+            try:
+                known_subs_res = client.list_subprojects(resolved_project)
+                known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
+            except Exception:
+                known_subs = []
+            resolved_subs, sub_warnings = resolve_subproject_params(
+                subprojects=subprojects, known_subprojects=known_subs, project=resolved_project
+            )
+            for w in sub_warnings:
+                console.print(f"[autumn.warn]Warning:[/] {w}")
+            subprojects_list = resolved_subs if resolved_subs else None
+        elif subprojects:
+            # If subprojects provided but no project change, pass them through
+            subprojects_list = list(subprojects)
+
+        # Normalize datetime strings
+        start_iso = _normalize_datetime(start) if start else None
+        end_iso = _normalize_datetime(end) if end else None
+
+        result = client.edit_session(
+            session_id=session_id,
+            project=resolved_project,
+            subprojects=subprojects_list,
+            start=start_iso,
+            end=end_iso,
+            note=note,
+        )
+
+        if result.get("ok"):
+            session = result.get("session", {})
+            new_id = session.get("id")
+            proj_name = session.get("p") or session.get("project")
+            duration = session.get("elapsed") or session.get("dur") or 0
+
+            console.print("[autumn.ok]Session updated.[/]")
+            console.print(f"[autumn.label]New ID:[/] [autumn.id]{new_id}[/]")
+            console.print(f"[autumn.label]Project:[/] [autumn.project]{proj_name}[/]")
+            console.print(f"[autumn.label]Duration:[/] [autumn.duration]{duration:.1f} minutes[/]")
+
+            if session.get("subs"):
+                subs_str = ", ".join(session.get("subs", []))
+                console.print(f"[autumn.label]Subprojects:[/] [autumn.subproject]{subs_str}[/]")
+        else:
+            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.Abort()
+
+    except APIError as e:
+        console.print(f"[autumn.err]Error:[/] {e}")
+        raise click.Abort()
+    except ValueError as e:
+        console.print(f"[autumn.err]Error:[/] Invalid date format - {e}")
+        raise click.Abort()

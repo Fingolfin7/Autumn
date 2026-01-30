@@ -194,34 +194,7 @@ def subprojects(project: str, desc: bool, search: Optional[str]):
         else:
             subs = result.get("subprojects") or result.get("subs") or []
 
-        # Fetch session counts by searching all sessions for this project
-        # We'll use the search_sessions endpoint with a large limit
-        session_counts = {}
-        try:
-            # Search for sessions for this project to calculate counts
-            sessions_res = client.search_sessions(project=resolved_project, limit=1000)
-            sessions = sessions_res.get("sessions", [])
-
-            from collections import Counter
-
-            counts = Counter()
-            for s in sessions:
-                s_subs = s.get("subs") or s.get("subprojects") or []
-                for sub_name in s_subs:
-                    counts[sub_name] += 1
-            session_counts = dict(counts)
-        except Exception:
-            # Fallback if session search fails
-            session_counts = {}
-
-        # Add session_count to subproject objects
-        if isinstance(subs, list):
-            for sub in subs:
-                if isinstance(sub, dict):
-                    name = sub.get("name")
-                    if name in session_counts:
-                        sub["session_count"] = session_counts[name]
-
+        # API now returns session_count and total_minutes directly in non-compact mode
         table = subprojects_table(resolved_project, subs, show_descriptions=desc)
         console.print(table)
 

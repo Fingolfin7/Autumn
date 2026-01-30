@@ -19,14 +19,15 @@ def test_resolve_context_param_case_insensitive_name_to_id():
     assert res.value == "1"
 
 
-def test_resolve_tag_params_case_insensitive_names_to_ids():
+def test_resolve_tag_params_case_insensitive_names():
     known_tags = [
         {"id": 10, "name": "Code"},
         {"id": 11, "name": "DeepWork"},
     ]
 
+    # Should resolve to canonical names (not IDs) for API compatibility
     resolved, warnings = resolve_tag_params(tags=["code", "DEEPWORK"], known_tags=known_tags)
-    assert resolved == ["10", "11"]
+    assert resolved == ["Code", "DeepWork"]
     assert warnings == []
 
 

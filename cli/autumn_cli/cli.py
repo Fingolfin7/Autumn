@@ -18,7 +18,7 @@ from .config import (
 )
 from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
-from .commands.sessions import log, track
+from .commands.sessions import log, track, edit_session
 from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
 from .commands.charts import chart
 
@@ -257,6 +257,7 @@ cli.add_command(delete, name="delete")
 cli.add_command(log, name="log")
 cli.add_command(log, name="ls")
 cli.add_command(track, name="track")
+cli.add_command(edit_session, name="edit")
 
 # Project commands
 cli.add_command(projects_list, name="projects")

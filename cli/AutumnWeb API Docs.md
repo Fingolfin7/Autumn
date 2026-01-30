@@ -72,9 +72,7 @@ Notes:
 
 Response:
 
-
 - 201 Created
-
 
 ```json
 {
@@ -82,6 +80,7 @@ Response:
   "session": {
     "id": 123,
     "p": "Project Name",
+    "pid": 42,
     "subs": ["A", "B"],
     "start": "2026-01-15T12:34:56+01:00",
     "end": null,
@@ -91,6 +90,8 @@ Response:
   }
 }
 ```
+
+Note: All session responses now include `pid` (compact) or `project_id` (non-compact) for the parent project ID.
 
 ## 2) Stop timer
 
@@ -153,7 +154,6 @@ Responses:
 
 - If active timers:
 
-
 ```json
 {
   "ok": true,
@@ -162,6 +162,7 @@ Responses:
     {
       "id": 1,
       "p": "P1",
+      "pid": 42,
       "subs": [],
       "start": "2026-01-15T12:00:00+01:00",
       "end": null,
@@ -322,31 +323,86 @@ Note:
 
 - Unknown/legacy status strings become their own group key.
 
-## 8) Subprojects list
+## 8) Projects list (flat)
 
+**GET** `/api/projects/`
 
-GET /api/subprojects/
+Returns a flat (ungrouped) list of projects with optional filters.
 
 Query:
 
-
-- project (or project_name) required
-
-- compact=true|false
+- `status`: filter by status (active, paused, complete, archived) - optional
+- `context`: filter by context id or name - optional
+- `tags`: filter by tag names (comma-separated) - optional
+- `search`: search by name (icontains) - optional
+- `compact=true|false` (default true)
 
 Compact response:
 
+```json
+{
+  "count": 15,
+  "projects": ["Project A", "Project B", "..."]
+}
+```
+
+Non-compact response:
+
+```json
+{
+  "count": 15,
+  "projects": [
+    {
+      "id": 1,
+      "name": "Project A",
+      "status": "active",
+      "description": "...",
+      "total_minutes": 1234.5,
+      "session_count": 42,
+      "avg_session_minutes": 29.4,
+      "context": "Work",
+      "tags": ["Client", "Priority"]
+    }
+  ]
+}
+```
+
+## 9) Subprojects list
+
+**GET** `/api/subprojects/`
+
+Query:
+
+- `project` (or `project_name`) required
+- `compact=true|false` (default true)
+
+Compact response:
 
 ```json
 { "project": "My Project", "subprojects": ["A", "B"] }
 ```
 
-Non-compact returns DRF SubProjectSerializer array.
+Non-compact response includes stats and parent project ID:
 
-## 9) Totals (project + subproject totals)
+```json
+{
+  "project": "My Project",
+  "project_id": 42,
+  "subprojects": [
+    {
+      "id": 1,
+      "name": "A",
+      "description": "...",
+      "session_count": 25,
+      "total_minutes": 750.0
+    }
+  ]
+}
+```
 
+## 10) Totals (project + subproject totals)
 
-GET /api/totals/
+**GET** `/api/totals/`
 
 Query:
 
@@ -375,10 +431,9 @@ Notes:
 
 - If a session has multiple subprojects, its full duration is added to each subproject total.
 
-## 10) Rename (project or subproject)
+## 11) Rename (project or subproject)
 
-
-POST /api/rename/
+**POST** `/api/rename/`
 
 Project rename:
 
@@ -417,10 +472,9 @@ Conflicts:
 
 - 409 if the target name already exists.
 
-## 11) Delete project via JSON body
+## 12) Delete project via JSON body
 
-
-DELETE /api/project/delete/
+**DELETE** `/api/project/delete/`
 
 Body:
 
@@ -434,10 +488,9 @@ Response:
 
 - 204 No Content
 
-## 12) Search sessions
+## 13) Search sessions
 
-
-GET /api/sessions/search/
+**GET** `/api/sessions/search/`
 
 Requires at least one of:
 
@@ -465,54 +518,52 @@ Optional:
 
 Compact response:
 
-
 ```json
 {
   "count": 2,
   "sessions": [
-    { "id": 1, "p": "P", "subs": ["A"], "start": "...", "end": "...", "dur": 12.5 },
-    { "id": 2, "p": "P", "subs": [], "start": "...", "end": "...", "dur": 5.0 }
+    { "id": 1, "p": "P", "pid": 42, "subs": ["A"], "start": "...", "end": "...", "dur": 12.5 },
+    { "id": 2, "p": "P", "pid": 42, "subs": [], "start": "...", "end": "...", "dur": 5.0 }
   ]
 }
 ```
 
-## 13) Activity log
+Non-compact response includes `project_id` instead of `pid`.
+
+## 14) Activity log
 
 
-GET /api/log/
+**GET** `/api/log/`
 
 Query supports:
 
-
-- period=day|week|month|all
-
+- `period=day|week|month|all`
 - plus filters like search (project/subproject/date/note/context/tags/compact)
 
 Default window:
 
-
 - If period is day|week|month and no explicit start_date/end_date is provided:
     - day: since today 00:00
-
-    - week: trailing 7 days (not “since Monday”)
-
+    - week: trailing 7 days (not "since Monday")
     - month: since 1st of current month
 
-
-Response:
-
+Response includes `pid`/`project_id` for each log entry:
 
 ```json
-{ "count": 3, "logs": [] }
+{
+  "count": 3,
+  "logs": [
+    { "id": 1, "p": "P", "pid": 42, "subs": [], "start": "...", "end": "...", "dur": 30.5 }
+  ]
+}
 ```
 
-## 14) Mark project status
+## 15) Mark project status
 
 
-POST /api/mark/
+**POST** `/api/mark/`
 
 Body:
-
 
 ```json
 { "project": "Project Name", "status": "active|paused|complete|archived" }
@@ -520,12 +571,11 @@ Body:
 
 Response:
 
-
 ```json
 { "ok": true, "project": "Project Name", "status": "paused" }
 ```
 
-## 15) Export JSON (sessions/projects)
+## 16) Export JSON (sessions/projects)
 
 **GET** or **POST** `/api/export/`
 
@@ -541,7 +591,7 @@ Accepts filters via query params (GET) or JSON body (POST):
 
 Response 200 OK: JSON object (either the export payload or a compressed wrapper).
 
-## 16) Contexts list
+## 17) Contexts list
 
 **GET** `/api/contexts/`
 
@@ -555,9 +605,26 @@ Compact response:
 { "count": 2, "contexts": [{"id": 1, "name": "Work"}] }
 ```
 
-Non-compact response includes `description`.
+Non-compact response includes stats:
 
-## 17) Tags list
+```json
+{
+  "count": 2,
+  "contexts": [
+    {
+      "id": 1,
+      "name": "Work",
+      "description": "Work-related projects",
+      "project_count": 5,
+      "session_count": 142,
+      "total_minutes": 8520.5,
+      "avg_session_minutes": 60.0
+    }
+  ]
+}
+```
+
+## 18) Tags list
 
 **GET** `/api/tags/`
 
@@ -571,9 +638,26 @@ Compact response:
 { "count": 2, "tags": [{"id": 1, "name": "Client"}] }
 ```
 
-Non-compact response includes `color`.
+Non-compact response includes stats:
 
-## 18) Current user
+```json
+{
+  "count": 2,
+  "tags": [
+    {
+      "id": 1,
+      "name": "DeepWork",
+      "color": "#ff5500",
+      "project_count": 3,
+      "session_count": 87,
+      "total_minutes": 4350.0,
+      "avg_session_minutes": 50.0
+    }
+  ]
+}
+```
+
+## 19) Current user
 
 **GET** `/api/me/`
 
@@ -586,11 +670,60 @@ Response 200 OK:
   "username": "alice",
   "email": "alice@example.com",
   "first_name": "Alice",
-  "last_name": "Doe"
+  "last_name": "Doe",
+  "active_session_count": 1
 }
 ```
 
-## 19) Audit (recompute totals)
+## 20) Edit session
+
+**PATCH** `/api/session/<id>/`
+
+Edit an existing completed session. Uses delete-and-recreate pattern internally to work correctly with signal-based time totals.
+
+Body (all fields optional - only provided fields are updated):
+
+```json
+{
+  "project": "New Project Name",
+  "subprojects": ["A", "B"],
+  "start": "2026-01-15T09:00:00+00:00",
+  "end": "2026-01-15T10:30:00+00:00",
+  "note": "Updated note"
+}
+```
+
+Query:
+
+- `compact=true|false` (default true)
+
+Notes:
+
+- Cannot edit active sessions (stop the timer first)
+- Returns the new session object with a **new ID**
+- If changing project, subprojects must exist under the new project
+- If `subprojects` is not provided, existing subprojects are preserved (if valid for the project)
+
+Response 200 OK:
+
+```json
+{
+  "ok": true,
+  "session": {
+    "id": 456,
+    "p": "New Project Name",
+    "pid": 42,
+    "subs": ["A", "B"],
+    "start": "2026-01-15T09:00:00+00:00",
+    "end": "2026-01-15T10:30:00+00:00",
+    "active": false,
+    "elapsed": 90.0,
+    "note": "Updated note"
+  }
+}
+```
+
+## 21) Audit (recompute totals)
 
 **POST** `/api/audit/`
 
