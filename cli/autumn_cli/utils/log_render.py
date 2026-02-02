@@ -69,7 +69,7 @@ def _duration_minutes(session: Dict[str, Any]) -> float:
     )
     try:
         return float(dur or 0)
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 

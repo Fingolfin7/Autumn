@@ -68,7 +68,7 @@ def load_cached_projects(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Pro
         )
         _mem_snapshot = snap
         return snap
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None
 
 

@@ -8,21 +8,49 @@ from ..utils.charts import (
     render_pie_chart,
     render_bar_chart,
     render_scatter_chart,
+    render_line_chart,
     render_heatmap,
     render_calendar_chart,
     render_wordcloud_chart,
+    render_stacked_area_chart,
+    render_cumulative_chart,
+    render_treemap_chart,
+    render_sunburst_chart,
+    render_status_chart,
+    render_context_chart,
+    render_histogram_chart,
+    render_radar_chart,
+    render_tag_bubble_chart,
 )
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+
+
+# All available chart types
+CHART_TYPES = [
+    "pie",
+    "bar",
+    "scatter",
+    "line",
+    "area",
+    "cumulative",
+    "calendar",
+    "heatmap",
+    "wordcloud",
+    "treemap",
+    "sunburst",
+    "status",
+    "context",
+    "histogram",
+    "radar",
+    "bubble",
+]
 
 
 @click.command()
 @click.option(
     "--type",
     "-T",
-    type=click.Choice(
-        ["pie", "bar", "scatter", "calendar", "wordcloud", "heatmap"],
-        case_sensitive=False,
-    ),
+    type=click.Choice(CHART_TYPES, case_sensitive=False),
     default="pie",
     help="Chart type (default: pie)",
 )
@@ -68,7 +96,27 @@ def chart(
     color_by_project: bool,
     pick: bool,
 ):
-    """Render charts. Default type is pie. Also accepts: bar, scatter, calendar, wordcloud, heatmap."""
+    """Render charts visualizing your tracked time.
+
+    \b
+    Chart types:
+      pie        - Time distribution pie chart (default)
+      bar        - Horizontal bar chart of totals
+      scatter    - Individual sessions plotted over time
+      line       - Daily totals connected with lines
+      area       - Stacked area chart showing cumulative daily time
+      cumulative - Running total of hours over time
+      calendar   - GitHub-style activity calendar
+      heatmap    - Activity by day of week and hour
+      wordcloud  - Word cloud from session notes
+      treemap    - Nested rectangles (Context > Project > Subproject)
+      sunburst   - Concentric rings showing hierarchy
+      status     - Donut chart by project status
+      context    - Bar chart comparing time across contexts
+      histogram  - Distribution of session lengths
+      radar      - Spider chart comparing top projects
+      bubble     - Tag bubble chart (projects vs hours vs avg time)
+    """
     type = type.lower()  # Normalize case
 
     # Derive start/end from period if not explicitly supplied
@@ -129,10 +177,9 @@ def chart(
                 click.echo(f"Warning: {proj_res.warning}", err=True)
             resolved_project = proj_res.value or project
 
+        # ===== PIE / BAR charts =====
         if type in ("pie", "bar"):
-            # Use tally endpoints for pie/bar
             if resolved_project:
-                # Show subprojects for specific project
                 data = client.tally_by_subprojects(
                     resolved_project,
                     start_date,
@@ -146,7 +193,6 @@ def chart(
                     else f"Time Totals: {resolved_project} (Subprojects)"
                 )
             else:
-                # Show all projects
                 data = client.tally_by_sessions(
                     project_name=None,
                     start_date=start_date,
@@ -162,11 +208,11 @@ def chart(
 
             if type == "pie":
                 render_pie_chart(data, title=title, save_path=save_path)
-            else:  # bar
+            else:
                 render_bar_chart(data, title=title, save_path=save_path)
 
-        elif type in ("scatter", "calendar", "heatmap", "wordcloud"):
-            # Use list_sessions for scatter/calendar/heatmap/wordcloud
+        # ===== Session-based charts =====
+        elif type in ("scatter", "line", "area", "cumulative", "calendar", "heatmap", "wordcloud", "histogram"):
             sessions = client.list_sessions(
                 project_name=resolved_project,
                 start_date=start_date,
@@ -176,10 +222,28 @@ def chart(
             )
 
             if type == "scatter":
-                title = f"Session Duration Over Time"
+                title = "Session Duration Over Time"
                 if resolved_project:
                     title += f" - {resolved_project}"
                 render_scatter_chart(sessions, title=title, save_path=save_path)
+
+            elif type == "line":
+                title = "Daily Duration Over Time"
+                if resolved_project:
+                    title += f" - {resolved_project}"
+                render_line_chart(sessions, title=title, save_path=save_path)
+
+            elif type == "area":
+                title = "Stacked Daily Duration"
+                if resolved_project:
+                    title += f" - {resolved_project}"
+                render_stacked_area_chart(sessions, title=title, save_path=save_path)
+
+            elif type == "cumulative":
+                title = "Cumulative Time Tracked"
+                if resolved_project:
+                    title += f" - {resolved_project}"
+                render_cumulative_chart(sessions, title=title, save_path=save_path)
 
             elif type == "calendar":
                 title = "Projects Calendar"
@@ -205,6 +269,58 @@ def chart(
                 if resolved_project:
                     title += f" - {resolved_project}"
                 render_wordcloud_chart(sessions, title=title, save_path=save_path)
+
+            elif type == "histogram":
+                title = "Session Length Distribution"
+                if resolved_project:
+                    title += f" - {resolved_project}"
+                render_histogram_chart(sessions, title=title, save_path=save_path)
+
+        # ===== Hierarchy-based charts (treemap, sunburst) =====
+        elif type in ("treemap", "sunburst"):
+            hierarchy_data = client.get_hierarchy(
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            if type == "treemap":
+                title = "Time Distribution (Treemap)"
+                render_treemap_chart(hierarchy_data, title=title, save_path=save_path)
+
+            elif type == "sunburst":
+                title = "Time Distribution (Sunburst)"
+                render_sunburst_chart(hierarchy_data, title=title, save_path=save_path)
+
+        # ===== Status chart =====
+        elif type == "status":
+            status_data = client.tally_by_status(context=resolved_context)
+            title = "Time by Project Status"
+            render_status_chart(status_data, title=title, save_path=save_path)
+
+        # ===== Context chart =====
+        elif type == "context":
+            context_data = client.tally_by_context(
+                start_date=start_date,
+                end_date=end_date,
+            )
+            title = "Time by Context"
+            render_context_chart(context_data, title=title, save_path=save_path)
+
+        # ===== Radar chart =====
+        elif type == "radar":
+            projects_data = client.get_projects_with_stats(
+                context=resolved_context,
+                tags=resolved_tags,
+            )
+            title = "Project Comparison (Radar)"
+            render_radar_chart(projects_data, title=title, save_path=save_path)
+
+        # ===== Tag bubble chart =====
+        elif type == "bubble":
+            tag_data = client.tally_by_tags()
+            title = "Tags Overview"
+            render_tag_bubble_chart(tag_data, title=title, save_path=save_path)
+
     except APIError as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort()

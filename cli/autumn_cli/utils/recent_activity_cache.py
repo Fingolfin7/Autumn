@@ -57,7 +57,7 @@ def load_cached_activity(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Act
         snap = ActivitySnapshot(info=dict(block.get("info") or {}), fetched_at=fetched_at)
         _mem_snapshot = snap
         return snap
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None
 
 

@@ -48,7 +48,7 @@ def cli(ctx: click.Context):
             health_msgs = check_reminders_health()
             for msg in health_msgs:
                 console.print(msg)
-        except Exception:
+        except (OSError, IOError, ImportError):
             pass
 
     if ctx.invoked_subcommand is None:
@@ -64,7 +64,7 @@ def cli(ctx: click.Context):
                 activity = client.get_recent_activity_snippet(
                     ttl_seconds=600, refresh=False
                 )
-            except Exception:
+            except APIError:
                 pass
 
             # Build contextual greeting (one line)
@@ -80,7 +80,7 @@ def cli(ctx: click.Context):
             greeting_line = g.line.format(username=f"[autumn.user]{username}[/]")
             console.print(greeting_line)
 
-        except Exception:
+        except APIError:
             click.echo("Autumn CLI")
             click.echo(
                 "Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started."
@@ -115,7 +115,7 @@ def setup(api_key: str, base_url: str):
     # Verify the configuration
     try:
         verify()
-    except:
+    except (APIError, click.Abort):
         click.echo(
             "\nWarning: Could not verify API key. Please check your credentials."
         )
@@ -132,7 +132,7 @@ def _warn_if_insecure_tls() -> None:
                 "This is insecure; prefer enabling verification when possible.",
                 err=True,
             )
-    except Exception:
+    except (ImportError, ValueError, TypeError):
         pass
 
 
@@ -186,7 +186,7 @@ def status():
             client = APIClient()
             client.get_timer_status()
             click.echo("  Connection: ✓ Working")
-        except:
+        except APIError:
             click.echo("  Connection: ✗ Failed")
 
 
@@ -224,7 +224,7 @@ def login(username: str, password: str, base_url: str):
         client = APIClient()
         me = client.get_cached_me(ttl_seconds=0, refresh=True).get("user", {})
         click.echo(f"✓ Logged in as {me.get('username') or username}.")
-    except Exception:
+    except APIError:
         click.echo("✓ Logged in.")
 
 

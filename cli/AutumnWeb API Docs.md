@@ -800,6 +800,156 @@ Tallies
 
 - GET /api/tally_by_subprojects/
 
+---
+
+## Chart Data Endpoints
+
+These endpoints provide aggregated data for the charts page visualizations.
+
+### Tally by Context
+
+**GET** `/api/tally_by_context/`
+
+Aggregate time by context.
+
+Query:
+- `start_date`, `end_date` (optional, format: `MM-DD-YYYY`)
+
+Response 200 OK:
+
+```json
+[
+  {"name": "Work", "total_time": 12500.5},
+  {"name": "Personal", "total_time": 3200.0}
+]
+```
+
+Note: `total_time` is in **minutes**.
+
+### Tally by Status
+
+**GET** `/api/tally_by_status/`
+
+Aggregate project count and total time by project status.
+
+Query:
+- `context` (optional, filter by context id)
+
+Response 200 OK:
+
+```json
+[
+  {"status": "active", "count": 5, "total_time": 15000.0},
+  {"status": "paused", "count": 2, "total_time": 3000.0},
+  {"status": "complete", "count": 10, "total_time": 45000.0},
+  {"status": "archived", "count": 3, "total_time": 8000.0}
+]
+```
+
+Note: `total_time` is in **minutes**.
+
+### Tally by Tags
+
+**GET** `/api/tally_by_tags/`
+
+Aggregate time and project count by tag.
+
+Response 200 OK:
+
+```json
+[
+  {
+    "name": "python",
+    "tag_id": 1,
+    "total_time": 12000.0,
+    "project_count": 3,
+    "color": "#3572A5"
+  },
+  {
+    "name": "frontend",
+    "tag_id": 2,
+    "total_time": 8000.0,
+    "project_count": 2,
+    "color": null
+  }
+]
+```
+
+Note: `total_time` is in **minutes**. `color` is the tag's color if set, otherwise `null`.
+
+### Hierarchy Data
+
+**GET** `/api/hierarchy/`
+
+Returns nested Context → Project → SubProject structure with time totals. Used for treemap and sunburst charts.
+
+Query:
+- `start_date`, `end_date` (optional, format: `MM-DD-YYYY`)
+
+Response 200 OK:
+
+```json
+{
+  "name": "All",
+  "children": [
+    {
+      "name": "Work",
+      "context_id": 1,
+      "children": [
+        {
+          "name": "Project A",
+          "project_id": 1,
+          "total_time": 6000.0,
+          "children": [
+            {"name": "SubProject X", "subproject_id": 1, "total_time": 3500.0},
+            {"name": "SubProject Y", "subproject_id": 2, "total_time": 2500.0}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Note:
+- `total_time` is in **minutes**
+- Only includes projects/subprojects with time in the specified date range
+- Projects with no sessions in range are omitted
+
+### Projects with Stats
+
+**GET** `/api/projects_with_stats/`
+
+Returns projects with additional statistics for radar chart visualization.
+
+Query:
+- `context` (optional, filter by context id)
+- `tags` (optional, filter by tag names)
+
+Response 200 OK:
+
+```json
+[
+  {
+    "name": "Project A",
+    "total_time": 12000.0,
+    "session_count": 45,
+    "subproject_count": 3,
+    "days_since_update": 2,
+    "status": "active"
+  },
+  {
+    "name": "Project B",
+    "total_time": 8000.0,
+    "session_count": 30,
+    "subproject_count": 1,
+    "days_since_update": 7,
+    "status": "paused"
+  }
+]
+```
+
+Note: `total_time` is in **minutes**.
 
 ---
 

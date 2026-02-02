@@ -31,7 +31,7 @@ def _is_int_string(value: str) -> bool:
     try:
         int(str(value).strip())
         return True
-    except Exception:
+    except (ValueError, TypeError):
         return False
 
 

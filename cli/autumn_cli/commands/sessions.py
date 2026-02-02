@@ -296,7 +296,7 @@ def track(project: Optional[str], subprojects: tuple, start: str, end: str, note
             try:
                 known_subs_res = client.list_subprojects(resolved_project)
                 known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
-            except Exception:
+            except APIError:
                 known_subs = []
             resolved_subs, sub_warnings = resolve_subproject_params(
                 subprojects=subprojects, known_subprojects=known_subs, project=resolved_project
@@ -402,7 +402,7 @@ def edit_session(
             try:
                 known_subs_res = client.list_subprojects(resolved_project)
                 known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
-            except Exception:
+            except APIError:
                 known_subs = []
             resolved_subs, sub_warnings = resolve_subproject_params(
                 subprojects=subprojects, known_subprojects=known_subs, project=resolved_project

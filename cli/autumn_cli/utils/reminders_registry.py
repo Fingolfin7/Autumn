@@ -68,7 +68,7 @@ def _is_pid_alive(pid: int) -> bool:
             return False
         except PermissionError:
             return True
-        except Exception:
+        except OSError:
             return True
 
     # Windows: use ctypes OpenProcess
@@ -91,7 +91,7 @@ def _is_pid_alive(pid: int) -> bool:
             return False
         close_handle(handle)
         return True
-    except Exception:
+    except (OSError, AttributeError, TypeError):
         return True
 
 
@@ -106,7 +106,7 @@ def _session_active(session_id: int | None) -> bool:
         from ..api_client import APIClient, APIError
 
         client = APIClient()
-    except Exception:
+    except (ImportError, APIError):
         # If we can't create a client, be conservative and assume active.
         return True
 
@@ -128,7 +128,7 @@ def _session_active(session_id: int | None) -> bool:
                             return bool(s.get("active"))
                         # If it's returned in the active list, treat as active.
                         return True
-                except Exception:
+                except (ValueError, TypeError):
                     continue
             # Not found in active list -> Inactive
             return False
@@ -141,18 +141,11 @@ def _session_active(session_id: int | None) -> bool:
             return one.get("end") in (None, "")
 
         return bool(st.get("active", 0))
-    except Exception as e:
+    except APIError as e:
         # If the backend raises for "session not found", prune.
-        try:
-            from ..api_client import APIError
-
-            if isinstance(e, APIError):
-                msg = str(e).lower()
-                if "not found" in msg:
-                    return False
-        except Exception:
-            pass
-
+        msg = str(e).lower()
+        if "not found" in msg:
+            return False
         # Otherwise, if we can't check, don't prune.
         return True
 
@@ -164,7 +157,7 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
         try:
             with open(REMINDERS_FILE, "r") as f:
                 raw_list = json.load(f)
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             raw_list = []
 
     # 2. Migration: Check config.yaml for legacy reminders
@@ -222,7 +215,7 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
             )
 
             entries.append(entry)
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             continue
 
     # De-duplicate: keep the newest per (pid, session_id) pair.
@@ -254,6 +247,8 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
                     continue
             except Exception:
                 # Can't check; keep and do not attempt session pruning.
+                # Note: broad exception is intentional - any failure to check PID
+                # should be conservative (keep the entry).
                 pid_check_uncertain = True
 
             # If PID check is uncertain, keep the entry (best-effort, conservative).
@@ -396,7 +391,7 @@ def check_reminders_health() -> List[str]:
         is_alive = False
         try:
             is_alive = _is_pid_alive(e.pid)
-        except Exception:
+        except (OSError, ProcessLookupError):
             is_alive = True  # Conservative
 
         if not is_alive:
@@ -415,7 +410,7 @@ def check_reminders_health() -> List[str]:
                     secs = parse_duration_to_seconds(e.remind_in)
                     created = datetime.fromisoformat(e.created_at)
                     fire_time_iso = (created + timedelta(seconds=secs)).isoformat()
-                except Exception:
+                except (ValueError, TypeError):
                     pass
 
             if fire_time_iso:
@@ -451,7 +446,7 @@ def check_reminders_health() -> List[str]:
                             # We just mark it so it gets pruned.
                             pass
 
-                except Exception:
+                except (ValueError, TypeError):
                     pass
 
             # If it wasn't strictly "missed" (no fire time found), but it's dead and not completed,
@@ -498,7 +493,7 @@ def check_reminders_health() -> List[str]:
                         messages.append(
                             f"[autumn.info]Respawned recurring reminder for project [autumn.project]{e.project}[/].[/]"
                         )
-                    except Exception as err:
+                    except (OSError, ValueError, TypeError) as err:
                         messages.append(
                             f"[autumn.error]Failed to respawn reminder for {e.project}: {err}[/]"
                         )
@@ -535,7 +530,7 @@ def kill_pid(pid: int) -> bool:
             return True
         except ProcessLookupError:
             return False
-        except Exception:
+        except (OSError, PermissionError):
             return False
 
     # Windows
@@ -547,5 +542,5 @@ def kill_pid(pid: int) -> bool:
             stderr=subprocess.DEVNULL,
         )
         return True
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return False

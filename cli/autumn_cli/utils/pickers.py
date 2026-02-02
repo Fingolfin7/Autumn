@@ -209,7 +209,7 @@ def pick_project(
             recent.append(activity["today_project"])
         if activity.get("most_frequent_project") and activity["most_frequent_project"] not in recent:
             recent.append(activity["most_frequent_project"])
-    except Exception:
+    except (KeyError, TypeError):
         pass
 
     return pick_from_names(
@@ -245,7 +245,7 @@ def pick_subproject(
             return None
 
         return pick_from_names(label=label, names=names)
-    except Exception:
+    except (KeyError, TypeError):
         return None
 
 

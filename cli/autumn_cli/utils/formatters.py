@@ -30,7 +30,7 @@ def parse_utc_to_local(iso_string: str) -> Optional[datetime]:
         dt_utc = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
         # Convert to local timezone
         return dt_utc.astimezone()
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -45,7 +45,7 @@ def format_duration_minutes(minutes: float) -> str:
 
     try:
         td = timedelta(minutes=float(minutes or 0))
-    except Exception:
+    except (ValueError, TypeError):
         td = timedelta(minutes=0)
 
     days = td.days
@@ -129,7 +129,7 @@ def format_log_date_header(iso_date_or_datetime: str) -> str:
         part = iso_date_or_datetime.split("T", 1)[0]
         dt = datetime.fromisoformat(part)
         return dt.strftime("%A %d %B %Y")
-    except Exception:
+    except (ValueError, TypeError, IndexError):
         return iso_date_or_datetime
 
 
@@ -140,7 +140,7 @@ def format_day_total_minutes(total_minutes: float) -> str:
     """
     try:
         td = timedelta(minutes=float(total_minutes or 0))
-    except Exception:
+    except (ValueError, TypeError):
         td = timedelta(minutes=0)
 
     seconds = int(td.total_seconds())

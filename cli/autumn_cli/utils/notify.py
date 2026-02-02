@@ -65,7 +65,7 @@ def send_notification(*, title: str, message: str, subtitle: Optional[str] = Non
                 icon_path = _get_asset_path("autumn_icon.ico")
                 if not icon_path.exists():
                     icon_path = None
-            except Exception:
+            except (OSError, FileNotFoundError):
                 icon_path = None
 
         kwargs = {"title": str(title), "message": str(message), "app_name": "Autumn"}
@@ -148,7 +148,7 @@ def _ensure_terminal_notifier_available(*, auto_install: bool = True) -> tuple[s
             "Failed to install terminal-notifier via Homebrew. "
             "Try running manually: brew install terminal-notifier\n" + err.strip(),
         )
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         return (
             None,
             "Failed to install terminal-notifier via Homebrew. "
@@ -203,7 +203,7 @@ def _notify_macos(*, title: str, message: str, subtitle: Optional[str]) -> Notif
             # Most reliable: shows an Autumn image thumbnail in the notification.
             if str(get_config_value("notify.macos_use_content_image", True)).lower() not in ("0", "false", "no", "off"):
                 cmd.extend(["-contentImage", str(icon_path)])
-    except Exception:
+    except (OSError, FileNotFoundError):
         pass
 
     # Sender is optional because forcing it can cause macOS to suppress notifications.
@@ -264,7 +264,7 @@ def _notify_windows(*, title: str, message: str) -> NotifyResult:
         icon_path = _get_asset_path("autumn_icon.ico")
         if not icon_path.exists():
             icon_path = None
-    except Exception:
+    except (OSError, FileNotFoundError):
         icon_path = None
 
     # Use Windows 10+ toast notification APIs.

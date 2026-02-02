@@ -34,7 +34,7 @@ def load_config() -> dict:
             if not isinstance(data, dict):
                 return {}
             return data
-    except Exception:
+    except (OSError, yaml.YAMLError):
         return {}
 
 
@@ -208,7 +208,7 @@ def get_greeting_general_weight() -> float:
     config = load_config()
     try:
         return _clamp01(config.get("greeting_general_weight", DEFAULT_GREETING_GENERAL_WEIGHT))
-    except Exception:
+    except (ValueError, TypeError):
         return DEFAULT_GREETING_GENERAL_WEIGHT
 
 
@@ -221,7 +221,7 @@ def get_greeting_activity_weight() -> float:
     config = load_config()
     try:
         return _clamp01(config.get("greeting_activity_weight", DEFAULT_GREETING_ACTIVITY_WEIGHT))
-    except Exception:
+    except (ValueError, TypeError):
         return DEFAULT_GREETING_ACTIVITY_WEIGHT
 
 
@@ -234,7 +234,7 @@ def get_greeting_moon_cameo_weight() -> float:
     config = load_config()
     try:
         return _clamp01(config.get("greeting_moon_cameo_weight", DEFAULT_GREETING_MOON_CAMEO_WEIGHT))
-    except Exception:
+    except (ValueError, TypeError):
         return DEFAULT_GREETING_MOON_CAMEO_WEIGHT
 
 
@@ -290,12 +290,12 @@ def get_insecure() -> bool:
         tls = config.get("tls")
         if isinstance(tls, dict) and "insecure" in tls:
             return bool(tls.get("insecure", False))
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
     # Back-compat: top-level insecure
     try:
         return bool(config.get("insecure", False))
-    except Exception:
+    except (ValueError, TypeError):
         return False
 

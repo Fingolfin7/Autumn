@@ -1,5 +1,6 @@
 """API client for communicating with AutumnWeb API."""
 
+import json
 import requests
 from typing import Optional, Dict, List, Any
 from .config import get_api_key, get_base_url
@@ -25,7 +26,7 @@ class APIClient:
             from .config import get_insecure
 
             self._verify = not bool(get_insecure())
-        except Exception:
+        except (ImportError, ValueError, TypeError):
             self._verify = True
 
         # If we're explicitly running insecure, hide urllib3's noisy warning.
@@ -37,7 +38,7 @@ class APIClient:
                 from urllib3.exceptions import InsecureRequestWarning
 
                 warnings.simplefilter("ignore", InsecureRequestWarning)
-            except Exception:
+            except ImportError:
                 pass
 
         if not self.api_key:
@@ -83,7 +84,7 @@ class APIClient:
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
         except requests.exceptions.RequestException as e:
             # Keep network errors readable; urllib3 can be very verbose.
@@ -92,7 +93,7 @@ class APIClient:
                 from urllib.parse import urlparse
 
                 host = urlparse(url).hostname
-            except Exception:
+            except (ValueError, AttributeError):
                 host = None
 
             msg = str(e)
@@ -124,7 +125,7 @@ class APIClient:
             try:
                 data = resp.json()
                 detail = data.get("detail") or data.get("error") or str(data)
-            except Exception:
+            except (json.JSONDecodeError, ValueError):
                 detail = resp.text
             raise APIError(f"Login failed: {detail}")
 
@@ -159,7 +160,7 @@ class APIClient:
         }
         try:
             save_cached_user(user)
-        except Exception:
+        except (OSError, IOError):
             pass
         return {"user": user, "cached": False}
 
@@ -231,7 +232,7 @@ class APIClient:
                 try:
                     end_date_only = end.split("T")[0]
                     session_dates.add(end_date_only)
-                except Exception:
+                except (AttributeError, IndexError):
                     pass
 
             # Overall last
@@ -241,7 +242,7 @@ class APIClient:
                 # Capture the last session's duration
                 try:
                     last_session_minutes = float(dur) if dur is not None else None
-                except Exception:
+                except (ValueError, TypeError):
                     last_session_minutes = None
 
             # Today's last
@@ -275,7 +276,7 @@ class APIClient:
 
         try:
             save_cached_activity(info)
-        except Exception:
+        except (OSError, IOError):
             pass
 
         return {**info, "cached": False}
@@ -557,7 +558,7 @@ class APIClient:
 
         try:
             save_cached_snapshot(contexts, tags)
-        except Exception:
+        except (OSError, IOError):
             pass
 
         return {"contexts": contexts, "tags": tags, "cached": False}
@@ -595,7 +596,7 @@ class APIClient:
 
         try:
             save_cached_projects(projects)
-        except Exception:
+        except (OSError, IOError):
             pass
 
         return {"projects": projects, "cached": False}
@@ -668,7 +669,7 @@ class APIClient:
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
 
     def delete_subproject(self, project: str, subproject: str) -> Dict:
@@ -697,7 +698,7 @@ class APIClient:
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
 
     # Export
@@ -853,3 +854,58 @@ class APIClient:
 
         params = {"compact": str(compact).lower()}
         return self._request("PATCH", f"/api/session/{session_id}/", params=params, json=data)
+
+    # Chart data endpoints
+
+    def tally_by_context(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Dict]:
+        """Get time totals aggregated by context."""
+        params = {}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        return self._request("GET", "/api/tally_by_context/", params=params)
+
+    def tally_by_status(
+        self,
+        context: Optional[str] = None,
+    ) -> List[Dict]:
+        """Get project count and time totals by status."""
+        params = {}
+        if context:
+            params["context"] = context
+        return self._request("GET", "/api/tally_by_status/", params=params)
+
+    def tally_by_tags(self) -> List[Dict]:
+        """Get time and project count aggregated by tag."""
+        return self._request("GET", "/api/tally_by_tags/")
+
+    def get_hierarchy(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict:
+        """Get nested Context → Project → Subproject hierarchy with time totals."""
+        params = {}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        return self._request("GET", "/api/hierarchy/", params=params)
+
+    def get_projects_with_stats(
+        self,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> List[Dict]:
+        """Get projects with stats for radar chart visualization."""
+        params = {}
+        if context:
+            params["context"] = context
+        if tags:
+            params["tags"] = ",".join(tags)
+        return self._request("GET", "/api/projects_with_stats/", params=params)

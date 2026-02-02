@@ -70,7 +70,7 @@ def load_cached_snapshot(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Met
         )
         _mem_snapshot = snap
         return snap
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None
 
 

@@ -1,134 +1,15 @@
-"""Chart rendering utilities using matplotlib and seaborn."""
+"""Time series chart types: scatter, line, area, cumulative, heatmap, calendar."""
 
+from typing import List, Dict, Optional
+from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any
 import seaborn as sns
 import pandas as pd
 import numpy as np
 
-# Import our timezone-aware parser
-from .formatters import parse_utc_to_local
-
-# Set style
-sns.set_style("whitegrid")
-try:
-    plt.style.use("seaborn-v0_8-darkgrid")
-except OSError:
-    # Fallback for older matplotlib versions
-    try:
-        plt.style.use("seaborn-darkgrid")
-    except OSError:
-        # Final fallback
-        pass
-
-
-def generate_color(index: int, total: int) -> tuple:
-    """Generate HSL-like color similar to webapp (converted to RGB).
-
-    Python's stdlib uses HLS (hue, lightness, saturation), not HSL.
-    """
-    import colorsys
-
-    hue = (index * 360.0) / max(total, 1)
-    # Old code used HSL with s=1.0, l=0.7.
-    # In colorsys.hls_to_rgb: (h, l, s)
-    r, g, b = colorsys.hls_to_rgb(hue / 360.0, 0.7, 1.0)
-    return int(r * 255), int(g * 255), int(b * 255)
-
-
-def render_pie_chart(
-    data: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
-):
-    """Render a pie chart from project/subproject totals."""
-    if not data:
-        print("No data to display.")
-        return
-
-    labels = [item["name"] for item in data]
-    values = [item["total_time"] / 60.0 for item in data]  # Convert minutes to hours
-
-    colors = [generate_color(i, len(data)) for i in range(len(data))]
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    wedges, texts, autotexts = ax.pie(
-        values,
-        labels=labels,
-        autopct="%1.1f%%",
-        colors=[tuple(c / 255.0 for c in color) for color in colors],
-        startangle=90,
-    )
-
-    # Improve text readability
-    for autotext in autotexts:
-        autotext.set_color("white")
-        autotext.set_fontweight("bold")
-
-    ax.set_title(title or "Project Time Distribution", fontsize=14, fontweight="bold")
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Chart saved to {save_path}")
-    else:
-        plt.show()
-
-    plt.close()
-
-
-def render_bar_chart(
-    data: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
-):
-    """Render a horizontal bar chart from project/subproject totals."""
-    if not data:
-        print("No data to display.")
-        return
-
-    # Sort by value for better visualization
-    sorted_data = sorted(data, key=lambda x: x["total_time"])
-
-    labels = [item["name"] for item in sorted_data]
-    values = [
-        item["total_time"] / 60.0 for item in sorted_data
-    ]  # Convert minutes to hours
-
-    colors = [generate_color(i, len(sorted_data)) for i in range(len(sorted_data))]
-
-    fig, ax = plt.subplots(figsize=(10, max(6, len(data) * 0.5)))
-
-    bars = ax.barh(
-        labels, values, color=[tuple(c / 255.0 for c in color) for color in colors]
-    )
-
-    # Add value labels on bars
-    for i, (bar, val) in enumerate(zip(bars, values)):
-        width = bar.get_width()
-        ax.text(
-            width,
-            bar.get_y() + bar.get_height() / 2,
-            f" {val:.2f}h",
-            ha="left",
-            va="center",
-            fontweight="bold",
-        )
-
-    ax.set_xlabel("Total Time (hours)", fontsize=12)
-    ax.set_title(title or "Project Totals", fontsize=14, fontweight="bold")
-    ax.grid(axis="x", alpha=0.3)
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Chart saved to {save_path}")
-    else:
-        plt.show()
-
-    plt.close()
+from .core import generate_color, parse_utc_to_local
 
 
 def render_scatter_chart(
@@ -198,7 +79,7 @@ def render_scatter_chart(
                     "project": display_group,  # Use display_group as the 'project' key for coloring
                 }
             )
-        except (ValueError, AttributeError) as e:
+        except (ValueError, AttributeError):
             # Skip invalid sessions
             continue
 
@@ -231,6 +112,138 @@ def render_scatter_chart(
     ax.set_xlabel("Date", fontsize=12)
     ax.set_ylabel("Duration (hours)", fontsize=12)
     ax.set_title(title or "Session Duration Over Time", fontsize=14, fontweight="bold")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    ax.grid(True, alpha=0.3)
+
+    # Format x-axis dates
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.xticks(rotation=45)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Chart saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+def render_line_chart(
+    sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
+):
+    """Render a line chart showing aggregated daily session duration over time."""
+    if not sessions:
+        print("No data to display.")
+        return
+
+    # Parse session data
+    session_points = []
+
+    # Pre-scan to check if we have a single project context
+    unique_projects = set()
+    for s in sessions:
+        p = s.get("project") or s.get("p", "Unknown")
+        unique_projects.add(p)
+
+    use_subproject = len(unique_projects) == 1 or (title and " - " in title)
+
+    for s in sessions:
+        # Handle both compact and full formats
+        start_time_str = s.get("start_time") or s.get("start", "")
+        end_time_str = s.get("end_time") or s.get("end", "")
+
+        if not start_time_str or not end_time_str:
+            continue  # Skip sessions without end time
+
+        try:
+            # Convert UTC times to local timezone
+            start_time = parse_utc_to_local(start_time_str)
+            end_time = parse_utc_to_local(end_time_str)
+
+            if not start_time or not end_time:
+                continue
+
+            # Calculate duration - prefer provided duration if available, otherwise compute
+            duration_minutes = (
+                s.get("duration_minutes") or s.get("duration") or s.get("dur")
+            )
+            if duration_minutes is not None:
+                duration_hours = duration_minutes / 60.0
+            else:
+                duration_hours = (end_time - start_time).total_seconds() / 3600.0
+
+            project = s.get("project") or s.get("p", "Unknown")
+
+            # Determine display group (Project or Subproject)
+            if use_subproject:
+                subs = s.get("subprojects")
+                if subs and isinstance(subs, list) and len(subs) > 0:
+                    display_group = subs[0]
+                elif subs and isinstance(subs, str):
+                    display_group = subs
+                else:
+                    display_group = "No Subproject"
+            else:
+                display_group = project
+
+            # Use date only (not datetime) for aggregation
+            session_date = end_time.date()
+
+            session_points.append(
+                {
+                    "date": session_date,
+                    "duration": duration_hours,
+                    "project": display_group,
+                }
+            )
+        except (ValueError, AttributeError):
+            continue
+
+    if not session_points:
+        print("No valid session data to display.")
+        return
+
+    # Aggregate by date and project
+    aggregated = {}
+    for point in session_points:
+        proj = point["project"]
+        date = point["date"]
+        if proj not in aggregated:
+            aggregated[proj] = {}
+        if date not in aggregated[proj]:
+            aggregated[proj][date] = 0.0
+        aggregated[proj][date] += point["duration"]
+
+    # Sort projects by name
+    sorted_projects = sorted(aggregated.items())
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Plot each project with different color
+    for i, (project_name, date_data) in enumerate(sorted_projects):
+        color = generate_color(i, len(sorted_projects))
+        # Sort dates for proper line connection
+        sorted_dates = sorted(date_data.keys())
+        dates = [datetime.combine(d, datetime.min.time()) for d in sorted_dates]
+        durations = [date_data[d] for d in sorted_dates]
+
+        ax.plot(
+            dates,
+            durations,
+            label=project_name,
+            marker="o",
+            markersize=4,
+            linewidth=2,
+            alpha=0.8,
+            color=tuple(c / 255.0 for c in color),
+        )
+
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_ylabel("Duration (hours)", fontsize=12)
+    ax.set_title(title or "Daily Session Duration Over Time", fontsize=14, fontweight="bold")
     ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
     ax.grid(True, alpha=0.3)
 
@@ -789,55 +802,6 @@ def render_calendar_chart(
     plt.close()
 
 
-def render_wordcloud_chart(
-    sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
-):
-    """Render a wordcloud from session notes."""
-    try:
-        from wordcloud import WordCloud
-    except ImportError:
-        print("Error: wordcloud library is required for wordcloud charts.")
-        print("Install it with: pip install wordcloud")
-        return
-
-    if not sessions:
-        print("No data to display.")
-        return
-
-    # Extract notes from sessions
-    notes_text = " ".join([s.get("note", "") or "" for s in sessions if s.get("note")])
-
-    if not notes_text.strip():
-        print("No notes found in sessions.")
-        return
-
-    # Create wordcloud
-    wordcloud = WordCloud(
-        width=800,
-        height=400,
-        background_color="white",
-        max_words=100,
-        colormap="viridis",
-    ).generate(notes_text)
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.imshow(wordcloud, interpolation="bilinear")
-    ax.axis("off")
-    ax.set_title(
-        title or "Session Notes Wordcloud", fontsize=14, fontweight="bold", pad=20
-    )
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Chart saved to {save_path}")
-    else:
-        plt.show()
-
-    plt.close()
-
-
 def render_heatmap(
     sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
 ):
@@ -908,6 +872,219 @@ def render_heatmap(
     ax.set_title(
         title or "Activity Heatmap (Hours by Day/Hour)", fontsize=14, fontweight="bold"
     )
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Chart saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+def render_stacked_area_chart(
+    sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
+):
+    """Render a stacked area chart showing cumulative daily time across projects."""
+    if not sessions:
+        print("No data to display.")
+        return
+
+    # Parse session data
+    session_points = []
+
+    # Pre-scan to check if we have a single project context
+    unique_projects = set()
+    for s in sessions:
+        p = s.get("project") or s.get("p", "Unknown")
+        unique_projects.add(p)
+
+    use_subproject = len(unique_projects) == 1 or (title and " - " in title)
+
+    for s in sessions:
+        start_time_str = s.get("start_time") or s.get("start", "")
+        end_time_str = s.get("end_time") or s.get("end", "")
+
+        if not start_time_str or not end_time_str:
+            continue
+
+        try:
+            start_time = parse_utc_to_local(start_time_str)
+            end_time = parse_utc_to_local(end_time_str)
+
+            if not start_time or not end_time:
+                continue
+
+            duration_minutes = (
+                s.get("duration_minutes") or s.get("duration") or s.get("dur")
+            )
+            if duration_minutes is not None:
+                duration_hours = duration_minutes / 60.0
+            else:
+                duration_hours = (end_time - start_time).total_seconds() / 3600.0
+
+            project = s.get("project") or s.get("p", "Unknown")
+
+            if use_subproject:
+                subs = s.get("subprojects")
+                if subs and isinstance(subs, list) and len(subs) > 0:
+                    display_group = subs[0]
+                elif subs and isinstance(subs, str):
+                    display_group = subs
+                else:
+                    display_group = "No Subproject"
+            else:
+                display_group = project
+
+            session_date = end_time.date()
+
+            session_points.append(
+                {
+                    "date": session_date,
+                    "duration": duration_hours,
+                    "project": display_group,
+                }
+            )
+        except (ValueError, AttributeError):
+            continue
+
+    if not session_points:
+        print("No valid session data to display.")
+        return
+
+    # Create DataFrame for easier manipulation
+    df = pd.DataFrame(session_points)
+
+    # Pivot to get dates as index, projects as columns
+    pivot_df = df.pivot_table(
+        index="date", columns="project", values="duration", aggfunc="sum", fill_value=0
+    )
+    pivot_df = pivot_df.sort_index()
+
+    # Create full date range to fill gaps
+    if len(pivot_df) > 0:
+        full_range = pd.date_range(start=pivot_df.index.min(), end=pivot_df.index.max(), freq="D")
+        pivot_df = pivot_df.reindex(full_range, fill_value=0)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Generate colors for each project
+    projects = pivot_df.columns.tolist()
+    colors = [tuple(c / 255.0 for c in generate_color(i, len(projects))) for i in range(len(projects))]
+
+    # Plot stacked area
+    ax.stackplot(pivot_df.index, pivot_df.T.values, labels=projects, colors=colors, alpha=0.8)
+
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_ylabel("Duration (hours)", fontsize=12)
+    ax.set_title(title or "Stacked Daily Duration Over Time", fontsize=14, fontweight="bold")
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    ax.grid(True, alpha=0.3)
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.xticks(rotation=45)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Chart saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+def render_cumulative_chart(
+    sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
+):
+    """Render a cumulative (running total) chart of hours over time."""
+    if not sessions:
+        print("No data to display.")
+        return
+
+    # Parse session data
+    session_points = []
+
+    for s in sessions:
+        start_time_str = s.get("start_time") or s.get("start", "")
+        end_time_str = s.get("end_time") or s.get("end", "")
+
+        if not start_time_str or not end_time_str:
+            continue
+
+        try:
+            end_time = parse_utc_to_local(end_time_str)
+            start_time = parse_utc_to_local(start_time_str)
+
+            if not end_time or not start_time:
+                continue
+
+            duration_minutes = (
+                s.get("duration_minutes") or s.get("duration") or s.get("dur")
+            )
+            if duration_minutes is not None:
+                duration_hours = duration_minutes / 60.0
+            else:
+                duration_hours = (end_time - start_time).total_seconds() / 3600.0
+
+            session_date = end_time.date()
+
+            session_points.append(
+                {
+                    "date": session_date,
+                    "duration": duration_hours,
+                }
+            )
+        except (ValueError, AttributeError):
+            continue
+
+    if not session_points:
+        print("No valid session data to display.")
+        return
+
+    # Aggregate by date
+    df = pd.DataFrame(session_points)
+    daily = df.groupby("date")["duration"].sum().sort_index()
+
+    # Fill date gaps
+    if len(daily) > 0:
+        full_range = pd.date_range(start=daily.index.min(), end=daily.index.max(), freq="D")
+        daily = daily.reindex(full_range, fill_value=0)
+
+    # Calculate cumulative sum
+    cumulative = daily.cumsum()
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Plot cumulative line with fill
+    ax.fill_between(cumulative.index, cumulative.values, alpha=0.3, color="steelblue")
+    ax.plot(cumulative.index, cumulative.values, linewidth=2, color="steelblue")
+
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_ylabel("Cumulative Hours", fontsize=12)
+    ax.set_title(title or "Cumulative Time Tracked", fontsize=14, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.xticks(rotation=45)
+
+    # Add total annotation
+    if len(cumulative) > 0:
+        total_hours = cumulative.iloc[-1]
+        ax.annotate(
+            f"Total: {total_hours:.1f}h",
+            xy=(cumulative.index[-1], total_hours),
+            xytext=(10, 10),
+            textcoords="offset points",
+            fontsize=12,
+            fontweight="bold",
+            bbox=dict(boxstyle="round", fc="white", ec="gray", alpha=0.9),
+        )
 
     plt.tight_layout()
 

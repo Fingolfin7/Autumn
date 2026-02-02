@@ -113,22 +113,7 @@ def start(
         except ValueError as e:
             raise click.BadParameter(str(e), param_hint="--remind-at")
 
-    if remind_in_seconds is not None and remind_every_seconds is not None:
-        pass # removed check that prevented both, actually they are usually mutually exclusive in daemon Plan logic?
-        # Daemon plan says: 
-        # if plan.remind_in_seconds is not None and plan.remind_every_seconds is not None:
-        #     raise click.ClickException("Use either --remind-in or --remind-every")
-        # Ah, the daemon currently enforces exclusivity.
-        # But `remind-every` logic in daemon is:
-        # if next_every is not None ...
-        # if next_remind is not None ...
-        # They run independently.
-        # But the daemon *constructor* raises exception if both are set!
-        # I should probably relax that check in the daemon if I want to allow both.
-        # But for now, let's stick to the existing behavior: user chooses ONE mode.
-        pass
-
-    # Re-verify exclusivity if the daemon demands it.
+    # Daemon enforces exclusivity: user must choose ONE reminder mode
     if remind_in_seconds is not None and remind_every_seconds is not None:
          raise click.BadParameter("Use either --remind-in/--remind-at or --remind-every (daemon limitation)")
 
@@ -175,7 +160,7 @@ def start(
             try:
                 known_subs_res = client.list_subprojects(resolved_project)
                 known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
-            except Exception:
+            except APIError:
                 known_subs = []
             resolved_subs, sub_warnings = resolve_subproject_params(
                 subprojects=subprojects, known_subprojects=known_subs, project=resolved_project
@@ -251,7 +236,7 @@ def start(
                     try:
                         if int(one.get("id")) != int(session_id):
                             return False
-                    except Exception:
+                    except (ValueError, TypeError):
                         # If we can't compare ids, fall back to active flag
                         pass
 
@@ -273,14 +258,14 @@ def start(
                                 if "active" in s:
                                     return bool(s.get("active"))
                                 return True
-                        except Exception:
+                        except (ValueError, TypeError):
                             continue
                     return False
 
                 # Last-resort fallback
                 return bool(st.get("active", 0))
 
-            except Exception:
+            except APIError:
                 # If the check fails, be conservative and keep running.
                 return True
 
@@ -305,12 +290,12 @@ def start(
                             if sid is not None and int(sid) == int(session_id):
                                 chosen = s
                                 break
-                        except Exception:
+                        except (ValueError, TypeError):
                             continue
                     s0 = chosen or sessions[0]
                     mins = s0.get("elapsed") or s0.get("dur") or 0
                     return format_duration_minutes(mins)
-            except Exception:
+            except APIError:
                 pass
             return "?"
 
@@ -342,7 +327,7 @@ def start(
             def _auto_stop() -> None:
                 try:
                     APIClient().stop_timer(session_id=session_id, note=None)
-                except Exception:
+                except APIError:
                     # If stopping fails, we still try to notify.
                     pass
                 send_notification(title=notify_title, message=f"Auto-stopped timer: {resolved_project}")
@@ -367,7 +352,7 @@ def start(
                     for t in tasks:
                         try:
                             t.cancel()
-                        except Exception:
+                        except (AttributeError, RuntimeError):
                             pass
                     console.print("[autumn.muted]Timer ended. Reminders stopped.[/]")
                     return
@@ -376,7 +361,7 @@ def start(
             for t in tasks:
                 try:
                     t.cancel()
-                except Exception:
+                except (AttributeError, RuntimeError):
                     pass
             console.print("[autumn.muted]Reminder process stopped.[/]")
 

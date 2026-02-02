@@ -58,7 +58,7 @@ def load_cached_user(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[UserSna
         snap = UserSnapshot(user=dict(block.get("user") or {}), fetched_at=fetched_at)
         _mem_snapshot = snap
         return snap
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         return None
 
 

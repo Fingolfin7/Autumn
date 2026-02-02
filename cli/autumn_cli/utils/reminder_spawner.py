@@ -41,13 +41,13 @@ def spawn_reminder(
         try:
             secs = parse_duration_to_seconds(remind_in)
             next_fire_at = (datetime.now() + timedelta(seconds=secs)).isoformat()
-        except Exception:
+        except ValueError:
             pass
     elif remind_every:
         try:
             secs = parse_duration_to_seconds(remind_every)
             next_fire_at = (datetime.now() + timedelta(seconds=secs)).isoformat()
-        except Exception:
+        except ValueError:
             pass
 
     args = [
@@ -90,7 +90,7 @@ def spawn_reminder(
             status="pending",
         )
 
-    except Exception:
+    except (OSError, IOError):
         pass
 
     if not quiet:
