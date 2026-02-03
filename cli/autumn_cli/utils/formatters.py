@@ -53,20 +53,20 @@ def format_duration_minutes(minutes: float) -> str:
     hours, rem = divmod(seconds, 3600)
     mins, secs = divmod(rem, 60)
 
-    # If we have days, use the verbose day format (matching legacy td_str)
     if days > 0:
-        plural_form = lambda counter: "s"[: counter ^ 1]
+        # plural_form = lambda counter: "s"[: counter ^ 1]
+        #
+        # parts = []
+        # parts.append(f"{days} day{plural_form(days)}")
+        # if hours > 0:
+        #     parts.append(f"{hours} hour{plural_form(hours)}")
+        # if mins > 0:
+        #     parts.append(f"{mins} minute{plural_form(mins)}")
+        # if secs > 0:
+        #     parts.append(f"{secs} second{plural_form(secs)}")
 
-        parts = []
-        parts.append(f"{days} day{plural_form(days)}")
-        if hours > 0:
-            parts.append(f"{hours} hour{plural_form(hours)}")
-        if mins > 0:
-            parts.append(f"{mins} minute{plural_form(mins)}")
-        if secs > 0:
-            parts.append(f"{secs} second{plural_form(secs)}")
-
-        return " ".join(parts)
+        # return " ".join(parts)
+        return f"{days:02d}d {hours:02d}h"
 
     # Otherwise use compact format
     if hours > 0:
