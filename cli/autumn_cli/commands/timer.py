@@ -16,6 +16,23 @@ from ..utils.reminders_registry import add_entry
 from ..utils.resolvers import resolve_project_param, resolve_subproject_params
 
 
+def _format_subs_bracketed(subs: list[str]) -> str:
+    if not subs:
+        return "[]"
+    inner = ", ".join([f"[autumn.subproject]{s}[/]" for s in subs])
+    return f"[{inner}]"
+
+
+def _format_project_with_subs(project: str, subs: list[str]) -> str:
+    return f"[autumn.project]{project}[/] {_format_subs_bracketed(subs)}"
+
+
+def _format_session_id_line(session_id: Optional[int]) -> str:
+    if session_id is None:
+        return "Session ID: [autumn.muted]unknown[/]"
+    return f"Session ID: #[autumn.id]{session_id}[/]"
+
+
 
 @click.command()
 @click.argument("project", required=False)
@@ -177,15 +194,13 @@ def start(
 
         session = result.get("session", {})
         session_id = session.get("id")
+        subs = session.get("subs") or session.get("subprojects") or []
 
         console.print("[autumn.ok]Timer started.[/]", highlight=True)
-        console.print(f"[autumn.label]Project:[/] [autumn.project]{resolved_project}[/]")
-        subs = session.get("subs") or session.get("subprojects") or []
-        if subs:
-            console.print(f"[autumn.label]Subprojects:[/] [autumn.subproject]{', '.join(subs)}[/]")
+        console.print(f"Started {_format_project_with_subs(resolved_project, list(subs))}")
+        console.print(_format_session_id_line(session_id))
         if session.get("note"):
             console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
-        console.print(f"[autumn.label]Session ID:[/] [autumn.id]{session_id}[/]")
 
 
         # Nothing time-based requested.
@@ -383,11 +398,16 @@ def stop(session_id: Optional[int], project: Optional[str], note: Optional[str])
         if result.get("ok"):
             session = result.get("session", {})
             duration = result.get("duration", session.get("elapsed", 0))
+            sess_project = session.get("p") or session.get("project") or project or ""
+            subs = session.get("subs") or session.get("subprojects") or []
+            sid = session.get("id") or session_id
+
             console.print("[autumn.ok]Timer stopped.[/]", highlight=True)
-            console.print(f"[autumn.label]Duration:[/] [autumn.duration]{format_duration_minutes(duration)}[/]")
             console.print(
-                f"[autumn.label]Project:[/] [autumn.project]{session.get('p') or session.get('project') or project or ''}[/]"
+                f"Stopped {_format_project_with_subs(sess_project, list(subs))}, "
+                f"[autumn.duration]{format_duration_minutes(duration)}[/]"
             )
+            console.print(_format_session_id_line(sid))
             if session.get("note"):
                 console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
 

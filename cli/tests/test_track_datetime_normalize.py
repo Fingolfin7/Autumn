@@ -6,6 +6,7 @@ import datetime as _dt
 import pytest
 
 from autumn_cli.commands.sessions import _normalize_datetime
+from autumn_cli.commands.sessions import _normalize_track_window
 
 
 def _has_tz(s: str) -> bool:
@@ -70,3 +71,32 @@ def test_normalize_datetime_now_offset_minutes():
 def test_normalize_datetime_now_offset_rejects_bad_format():
     with pytest.raises(ValueError):
         _normalize_datetime("now-5x")
+
+
+def test_normalize_track_window_time_only_uses_same_day(monkeypatch):
+    class _FakeDateTime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            # After 15:39; previous behavior rolled to tomorrow.
+            return cls(2026, 2, 6, 18, 0, 0)
+
+    monkeypatch.setattr("autumn_cli.commands.sessions.datetime", _FakeDateTime)
+
+    start, end = _normalize_track_window("15:00", "15:39")
+
+    assert start == "2026-02-06 15:00:00"
+    assert end == "2026-02-06 15:39:00"
+
+
+def test_normalize_track_window_time_only_crosses_midnight(monkeypatch):
+    class _FakeDateTime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 2, 6, 12, 0, 0)
+
+    monkeypatch.setattr("autumn_cli.commands.sessions.datetime", _FakeDateTime)
+
+    start, end = _normalize_track_window("23:50", "00:10")
+
+    assert start == "2026-02-06 23:50:00"
+    assert end == "2026-02-07 00:10:00"

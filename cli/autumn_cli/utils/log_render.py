@@ -267,7 +267,7 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
     lines: List[str] = []
     for s in sessions_list:
         sid = s.get("id")
-        sid_suffix = f"\nSession ID: #{sid}" if sid is not None else ""
+        sid_suffix = f"\nSession ID: #[autumn.id]{sid}[/]" if sid is not None else ""
 
         project = _session_project(s)
         subs = _session_subs(s)

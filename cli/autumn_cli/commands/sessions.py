@@ -11,6 +11,23 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve
 from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
 
 
+def _format_subs_bracketed(subs: list[str]) -> str:
+    if not subs:
+        return "[]"
+    inner = ", ".join([f"[autumn.subproject]{s}[/]" for s in subs])
+    return f"[{inner}]"
+
+
+def _format_project_with_subs(project: str, subs: list[str]) -> str:
+    return f"[autumn.project]{project}[/] {_format_subs_bracketed(subs)}"
+
+
+def _format_session_id_line(session_id: Optional[int]) -> str:
+    if session_id is None:
+        return "Session ID: [autumn.muted]unknown[/]"
+    return f"Session ID: #[autumn.id]{session_id}[/]"
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.option(
@@ -261,8 +278,7 @@ def log_search(
 def track(project: Optional[str], subprojects: tuple, start: str, end: str, note: Optional[str], pick: bool):
     """Track a completed session (manually log time)."""
     try:
-        start_iso = _normalize_datetime(start)
-        end_iso = _normalize_datetime(end)
+        start_iso, end_iso = _normalize_track_window(start, end)
 
         client = APIClient()
 
@@ -310,10 +326,13 @@ def track(project: Optional[str], subprojects: tuple, start: str, end: str, note
         if result.get("ok"):
             session = result.get("session", {})
             duration = session.get("elapsed") or session.get("duration_minutes", 0)
+            subs = session.get("subs") or session.get("subprojects") or subprojects_list or []
             console.print("[autumn.ok]Session tracked.[/]")
-            console.print(f"[autumn.label]ID:[/] [autumn.id]{session.get('id')}[/]")
-            console.print(f"[autumn.label]Project:[/] [autumn.project]{resolved_project}[/]")
-            console.print(f"[autumn.label]Duration:[/] [autumn.duration]{duration} minutes[/]")
+            console.print(
+                f"Tracked {_format_project_with_subs(resolved_project, list(subs))}, "
+                f"[autumn.duration]{duration} minutes[/]"
+            )
+            console.print(_format_session_id_line(session.get("id")))
 
         else:
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
@@ -345,6 +364,47 @@ def _normalize_datetime(dt_str: str) -> str:
 
     # Convert to server format
     return format_server_datetime(user_dt.dt)
+
+
+def _normalize_track_window(start_raw: str, end_raw: str) -> tuple[str, str]:
+    """Normalize track start/end with same-day semantics for time-only inputs.
+
+    If both values are time-only (for example `15:00` and `15:39`), anchor both
+    to the current local date. If end is earlier than start, treat it as a
+    cross-midnight range and roll end forward by one day.
+
+    For all other inputs (absolute datetimes, keywords, offsets), preserve the
+    existing parser behavior.
+    """
+    start_time = _parse_time_only(start_raw)
+    end_time = _parse_time_only(end_raw)
+
+    if start_time and end_time:
+        now_local = datetime.now().astimezone().replace(tzinfo=None)
+        start_dt = datetime.combine(now_local.date(), start_time)
+        end_dt = datetime.combine(now_local.date(), end_time)
+
+        if end_dt < start_dt:
+            end_dt += timedelta(days=1)
+
+        return format_server_datetime(start_dt), format_server_datetime(end_dt)
+
+    return _normalize_datetime(start_raw), _normalize_datetime(end_raw)
+
+
+def _parse_time_only(raw: str):
+    """Parse time-only inputs like `15:00`, `15:00:05`, `3:00PM`, `3PM`."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+
+    for fmt in ("%H:%M:%S", "%H:%M", "%I:%M%p", "%I%p"):
+        try:
+            return datetime.strptime(s, fmt).time()
+        except ValueError:
+            continue
+
+    return None
 
 
 @click.command("edit")
