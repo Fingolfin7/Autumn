@@ -106,7 +106,7 @@ def cli(ctx: click.Context):
 
                 console.print(f"[dim]{top}[/]")
                 # NOTE: The extra space before the right border is intentional.
-                console.print(f"[dim]│[/]{title_line}[dim] │[/]")
+                console.print(f"[dim]│[/]{title_line}[dim]│[/]")
                 console.print(f"[dim]│[/]{greeting_line}[dim]│[/]")
                 console.print(f"[dim]{bottom}[/]")
 
@@ -126,7 +126,7 @@ def cli(ctx: click.Context):
                 msg_line = pad_right_markup(msg_line, content_width, console=console)
 
                 console.print(f"[dim]┌{'─' * content_width}┐[/]")
-                console.print(f"[dim]│[/]{title_line}[dim] │[/]")
+                console.print(f"[dim]│[/]{title_line}[dim]│[/]")
                 console.print(f"[dim]│[/]{msg_line}[dim]│[/]")
                 console.print(f"[dim]└{'─' * content_width}┘[/]")
             else:
