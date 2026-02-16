@@ -5,6 +5,7 @@ from datetime import datetime
 
 from .utils.console import console
 from .utils.greetings import build_greeting
+from .utils.banner import cell_len, pad_right, cell_len_markup, pad_right_markup
 from .config import (
     get_api_key,
     get_base_url,
@@ -53,12 +54,6 @@ def cli(ctx: click.Context):
             pass
 
     if ctx.invoked_subcommand is None:
-        # Show ASCII banner if enabled
-        if get_banner_enabled():
-            console.print("[dim]┌─────────────┐[/]")
-            console.print("[dim]│[/]  🍁 [bold]autumn[/]  [dim] │[/]")
-            console.print("[dim]└─────────────┘[/]")
-
         try:
             client = APIClient()
             me = client.get_cached_me(ttl_seconds=3600, refresh=False).get("user", {})
@@ -83,15 +78,60 @@ def cli(ctx: click.Context):
                 moon_weight=get_greeting_moon_cameo_weight(),
             )
 
-            # Print greeting with username inserted (styled)
-            greeting_line = g.line.format(username=f"[autumn.user]{username}[/]")
-            console.print(greeting_line)
+            # Build greeting text (plain, for width calculation)
+            greeting_plain = g.line.format(username=username)
+            greeting_styled = g.line.format(username=f"[autumn.user]{username}[/]")
+
+            # Show ASCII banner with greeting inside if enabled
+            if get_banner_enabled():
+                title_text = "autumn"
+                title_styled = f"🍁 [bold]{title_text}[/]"
+
+                title_line = "  " + title_styled
+                greeting_line = "  " + greeting_styled
+
+                # Derive box width from the *rendered* (markup) lines.
+                content_width = max(
+                    cell_len_markup(title_line, console=console),
+                    cell_len_markup(greeting_line, console=console),
+                ) + 2  # a little breathing room on the right
+
+                top = f"┌{'─' * content_width}┐"
+                bottom = f"└{'─' * content_width}┘"
+
+                title_line = pad_right_markup(title_line, content_width, console=console)
+                greeting_line = pad_right_markup(greeting_line, content_width, console=console)
+
+                console.print(f"[dim]{top}[/]")
+                console.print(f"[dim]│[/]{title_line}[dim] │[/]")
+                console.print(f"[dim]│[/]{greeting_line}[dim]│[/]")
+                console.print(f"[dim]{bottom}[/]")
+            else:
+                console.print(greeting_styled)
 
         except APIError:
-            click.echo("Autumn CLI")
-            click.echo(
-                "Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started."
-            )
+            # Fallback when not authenticated
+            if get_banner_enabled():
+                title_line = "  🍁 [bold]autumn[/]"
+                msg_line = "  Run `autumn auth login` to get started."
+
+                content_width = max(
+                    cell_len_markup(title_line, console=console),
+                    cell_len_markup(msg_line, console=console),
+                ) + 2
+
+                title_line = pad_right_markup(title_line, content_width, console=console)
+                msg_line = pad_right_markup(msg_line, content_width, console=console)
+
+                console.print(f"[dim]┌{'─' * content_width}┐[/]")
+                console.print(f"[dim]│[/]{title_line}[dim] │[/]")
+                console.print(f"[dim]│[/]{msg_line}[dim]│[/]")
+                console.print(f"[dim]└{'─' * content_width}┘[/]")
+            else:
+                click.echo("Autumn CLI")
+                click.echo(
+                    "Run `autumn auth setup` (API key) or `autumn auth login` (password) to get started."
+                )
 
 
 @cli.group()
