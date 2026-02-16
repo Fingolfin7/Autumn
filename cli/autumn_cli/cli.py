@@ -5,7 +5,7 @@ from datetime import datetime
 
 from .utils.console import console
 from .utils.greetings import build_greeting
-from .utils.banner import cell_len, pad_right, cell_len_markup, pad_right_markup
+from .utils.banner import cell_len_markup, pad_right_markup
 from .config import (
     get_api_key,
     get_base_url,
@@ -87,14 +87,16 @@ def cli(ctx: click.Context):
                 title_text = "autumn"
                 title_styled = f"🍁 [bold]{title_text}[/]"
 
+                # Include left padding in the measured content.
                 title_line = "  " + title_styled
                 greeting_line = "  " + greeting_styled
 
                 # Derive box width from the *rendered* (markup) lines.
-                content_width = max(
+                measured_width = max(
                     cell_len_markup(title_line, console=console),
                     cell_len_markup(greeting_line, console=console),
-                ) + 2  # a little breathing room on the right
+                )
+                content_width = measured_width
 
                 top = f"┌{'─' * content_width}┐"
                 bottom = f"└{'─' * content_width}┘"
@@ -103,11 +105,10 @@ def cli(ctx: click.Context):
                 greeting_line = pad_right_markup(greeting_line, content_width, console=console)
 
                 console.print(f"[dim]{top}[/]")
+                # NOTE: The extra space before the right border is intentional.
                 console.print(f"[dim]│[/]{title_line}[dim] │[/]")
                 console.print(f"[dim]│[/]{greeting_line}[dim]│[/]")
                 console.print(f"[dim]{bottom}[/]")
-            else:
-                console.print(greeting_styled)
 
         except APIError:
             # Fallback when not authenticated
@@ -115,10 +116,11 @@ def cli(ctx: click.Context):
                 title_line = "  🍁 [bold]autumn[/]"
                 msg_line = "  Run `autumn auth login` to get started."
 
-                content_width = max(
+                measured_width = max(
                     cell_len_markup(title_line, console=console),
                     cell_len_markup(msg_line, console=console),
-                ) + 2
+                )
+                content_width = measured_width
 
                 title_line = pad_right_markup(title_line, content_width, console=console)
                 msg_line = pad_right_markup(msg_line, content_width, console=console)
