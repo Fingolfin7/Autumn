@@ -15,6 +15,7 @@ from .config import (
     get_greeting_general_weight,
     get_greeting_activity_weight,
     get_greeting_moon_cameo_weight,
+    get_banner_enabled,
 )
 from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
@@ -52,6 +53,12 @@ def cli(ctx: click.Context):
             pass
 
     if ctx.invoked_subcommand is None:
+        # Show ASCII banner if enabled
+        if get_banner_enabled():
+            console.print("[dim]┌─────────────┐[/]")
+            console.print("[dim]│[/]  🍁 [bold]autumn[/]  [dim] │[/]")
+            console.print("[dim]└─────────────┘[/]")
+
         try:
             client = APIClient()
             me = client.get_cached_me(ttl_seconds=3600, refresh=False).get("user", {})

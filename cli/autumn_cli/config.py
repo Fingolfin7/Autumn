@@ -269,6 +269,27 @@ def set_config_value(key: str, value: Any) -> None:
     save_config(cfg)
 
 
+def get_banner_enabled() -> bool:
+    """Whether to show the ASCII art banner when running `autumn` with no subcommand.
+
+    Controlled by config.yaml key `ui.banner: true/false`.
+    Default: True
+    """
+    config = load_config() or {}
+    try:
+        ui = config.get("ui")
+        if isinstance(ui, dict) and "banner" in ui:
+            return bool(ui.get("banner", True))
+    except (ValueError, TypeError):
+        pass
+    return True
+
+
+def set_banner_enabled(value: bool) -> None:
+    """Enable or disable the ASCII art banner."""
+    set_config_value("ui.banner", bool(value))
+
+
 def get_insecure() -> bool:
     """Whether to disable TLS certificate verification for API calls.
 
