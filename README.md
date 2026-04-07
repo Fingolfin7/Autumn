@@ -30,6 +30,15 @@ Or from the AutumnWeb root directory:
 uv pip install -e ./cli
 ```
 
+### Running tests
+
+`pytest` is tracked in the CLI's dev dependency group.
+
+```bash
+cd cli
+uv run --group dev python -m pytest
+```
+
 ## Getting Started
 
 ### 1) Authenticate
@@ -366,7 +375,7 @@ Subproject aliases are **project-scoped** — the alias `fe` can map to differen
 
 ## Troubleshooting
 
-- **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, ensure `terminal-notifier` is installed (the CLI tries to auto-install via Homebrew).
+- **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, Autumn uses `terminal-notifier`; if it is missing, the CLI will explicitly try `brew install terminal-notifier` on first use.
 - **SSL Errors?** If using a self-signed cert, set `autumn config set tls.insecure true`.
 - **Outdated Data?** Run `autumn meta refresh` to sync projects, tags, and contexts.
 - **Incorrect Totals?** Run `autumn audit` to recompute all project/subproject totals from session data.

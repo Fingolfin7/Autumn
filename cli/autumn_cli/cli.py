@@ -38,7 +38,7 @@ from .commands.alias_cmd import alias
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(version="0.1.0")
+@click.version_option(version="1.0.0")
 @click.pass_context
 def cli(ctx: click.Context):
     """Autumn CLI - Command-line interface for AutumnWeb."""

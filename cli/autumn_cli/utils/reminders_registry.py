@@ -46,6 +46,44 @@ def _now_iso() -> str:
     return datetime.now().isoformat()
 
 
+def _serialize_entries(entries: List[ReminderEntry]) -> list[dict]:
+    return [
+        {
+            "pid": e.pid,
+            "session_id": e.session_id,
+            "project": e.project,
+            "created_at": e.created_at,
+            "mode": e.mode,
+            "status": e.status,
+            "remind_in": e.remind_in,
+            "remind_every": e.remind_every,
+            "auto_stop_for": e.auto_stop_for,
+            "remind_poll": e.remind_poll,
+            "next_fire_at": e.next_fire_at,
+            "remind_message": e.remind_message,
+            "notify_title": e.notify_title,
+        }
+        for e in entries
+    ]
+
+
+def _load_raw_entries() -> tuple[list, bool]:
+    """Load raw reminder entries from file when available, else from config."""
+    if REMINDERS_FILE.exists():
+        try:
+            with open(REMINDERS_FILE, "r") as f:
+                data = json.load(f)
+            return (data if isinstance(data, list) else []), True
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    cfg = load_config() or {}
+    legacy = cfg.get("reminders")
+    if isinstance(legacy, list):
+        return list(legacy), False
+    return [], False
+
+
 def _is_pid_alive(pid: int) -> bool:
     """Best-effort PID liveness check.
 
@@ -151,20 +189,14 @@ def _session_active(session_id: int | None) -> bool:
 
 
 def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
-    # 1. Load from reminders.json if exists
-    raw_list = []
-    if REMINDERS_FILE.exists():
-        try:
-            with open(REMINDERS_FILE, "r") as f:
-                raw_list = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            raw_list = []
+    # 1. Load from reminders.json when possible; otherwise fall back to config.
+    raw_list, loaded_from_file = _load_raw_entries()
 
     # 2. Migration: Check config.yaml for legacy reminders
     cfg = load_config() or {}
     legacy_reminders = cfg.get("reminders")
     migrated = False
-    if legacy_reminders and isinstance(legacy_reminders, list):
+    if loaded_from_file and legacy_reminders and isinstance(legacy_reminders, list):
         # Merge legacy into raw_list (avoid duplicates later)
         raw_list.extend(legacy_reminders)
         # Clear legacy and save config
@@ -270,29 +302,26 @@ def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
 
 
 def save_entries(entries: List[ReminderEntry]) -> None:
-    # Ensure config directory exists
-    REMINDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = _serialize_entries(entries)
 
-    data = [
-        {
-            "pid": e.pid,
-            "session_id": e.session_id,
-            "project": e.project,
-            "created_at": e.created_at,
-            "mode": e.mode,
-            "status": e.status,
-            "remind_in": e.remind_in,
-            "remind_every": e.remind_every,
-            "auto_stop_for": e.auto_stop_for,
-            "remind_poll": e.remind_poll,
-            "next_fire_at": e.next_fire_at,
-            "remind_message": e.remind_message,
-            "notify_title": e.notify_title,
-        }
-        for e in entries
-    ]
-    with open(REMINDERS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    try:
+        REMINDERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(REMINDERS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+
+        # Clear legacy config copy once file-backed storage succeeds.
+        cfg = load_config() or {}
+        if "reminders" in cfg:
+            cfg.pop("reminders", None)
+            save_config(cfg)
+        return
+    except OSError:
+        pass
+
+    # Fall back to config-backed storage when the file path isn't writable.
+    cfg = load_config() or {}
+    cfg["reminders"] = data
+    save_config(cfg)
 
 
 def add_entry(
