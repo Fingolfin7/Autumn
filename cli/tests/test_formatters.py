@@ -48,6 +48,26 @@ def test_logs_match_old_style_and_include_notes():
     assert "[Sub1]" in rendered
 
 
+def test_logs_can_include_session_ids_when_requested():
+    sessions = [
+        {
+            "id": 42,
+            "project": "Project A",
+            "subprojects": [],
+            "start_time": "2026-01-01T10:00:00",
+            "end_time": "2026-01-01T11:00:00",
+            "duration_minutes": 60,
+            "note": "",
+        }
+    ]
+
+    with _plain_console.capture() as capture:
+        _plain_console.print(render_sessions_list(sessions, show_ids=True))
+    rendered = capture.get()
+
+    assert "#42" in rendered
+
+
 def test_status_matches_old_style_without_end_and_with_duration():
     active_sessions = [
         {
