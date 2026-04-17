@@ -73,6 +73,13 @@ Options:
 ```bash
 autumn auth status
 autumn auth verify
+autumn auth accounts
+```
+
+If you log into multiple accounts against the same AutumnWeb instance, you can switch between them quickly:
+
+```bash
+autumn auth switch alice
 ```
 
 ### 3) Say hi
@@ -112,6 +119,8 @@ autumn
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
 | **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
 | **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
+| **Auth** | `autumn auth accounts` | List saved accounts | — |
+| | `autumn auth switch <account>` | Switch active account | — |
 | | `autumn alias` | Manage aliases | `add`, `list`, `remove` |
 | **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 

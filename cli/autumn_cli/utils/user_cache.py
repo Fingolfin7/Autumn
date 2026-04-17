@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from ..config import load_config, save_config
+from ..config import load_account_cache, save_account_cache, clear_account_cache
 
 
 DEFAULT_TTL_SECONDS = 3600  # 1 hour
@@ -41,8 +41,7 @@ def load_cached_user(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[UserSna
     if _mem_snapshot is not None and _is_fresh(_mem_snapshot.fetched_at, ttl_seconds):
         return _mem_snapshot
 
-    cfg = load_config() or {}
-    block = cfg.get("user_cache") or {}
+    block = load_account_cache("user_cache") or {}
 
     try:
         fetched_at_s = block.get("fetched_at")
@@ -68,20 +67,14 @@ def save_cached_user(user: Dict[str, Any]) -> None:
     snap = UserSnapshot(user=user, fetched_at=_now())
     _mem_snapshot = snap
 
-    cfg = load_config() or {}
-    cfg["user_cache"] = {
+    save_account_cache("user_cache", {
         "fetched_at": snap.fetched_at.isoformat(),
         "user": user,
-    }
-    save_config(cfg)
+    })
 
 
 def clear_cached_user() -> None:
     global _mem_snapshot
     _mem_snapshot = None
 
-    cfg = load_config() or {}
-    if "user_cache" in cfg:
-        cfg.pop("user_cache", None)
-        save_config(cfg)
-
+    clear_account_cache("user_cache")

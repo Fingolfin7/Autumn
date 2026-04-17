@@ -13,11 +13,27 @@ CONFIG_FILE = CONFIG_DIR / "config.yaml"
 DEFAULT_GREETING_GENERAL_WEIGHT = 0.4
 DEFAULT_GREETING_ACTIVITY_WEIGHT = 0.4
 DEFAULT_GREETING_MOON_CAMEO_WEIGHT = 0.2
+ACCOUNTS_KEY = "accounts"
+ACTIVE_ACCOUNT_KEY = "active_account"
+ACCOUNT_CACHES_KEY = "account_caches"
+ACCOUNT_ALIASES_KEY = "account_aliases"
+LEGACY_CACHE_KEYS = (
+    "user_cache",
+    "activity_cache",
+    "meta_cache",
+    "projects_cache",
+)
 
 
 def ensure_config_dir():
     """Create config directory if it doesn't exist."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _write_config_file(config: dict) -> None:
+    ensure_config_dir()
+    with open(CONFIG_FILE, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
 
 
 def load_config() -> dict:
@@ -33,6 +49,9 @@ def load_config() -> dict:
             # If config is corrupted (e.g. YAML root is a list), repair by resetting.
             if not isinstance(data, dict):
                 return {}
+            data, changed = _migrate_legacy_config(data)
+            if changed:
+                _write_config_file(data)
             return data
     except (OSError, yaml.YAMLError):
         return {}
@@ -40,10 +59,393 @@ def load_config() -> dict:
 
 def save_config(config: dict):
     """Save configuration to file."""
-    ensure_config_dir()
-    
-    with open(CONFIG_FILE, "w") as f:
-        yaml.dump(config, f, default_flow_style=False)
+    _write_config_file(config)
+
+
+def _sanitize_account_name(name: str) -> str:
+    cleaned = str(name or "").strip()
+    if not cleaned:
+        raise ValueError("Account name cannot be empty.")
+    return cleaned
+
+
+def _accounts_block(config: Optional[dict] = None) -> dict:
+    cfg = config if config is not None else (load_config() or {})
+    accounts = cfg.get(ACCOUNTS_KEY)
+    return accounts if isinstance(accounts, dict) else {}
+
+
+def _account_caches_block(config: Optional[dict] = None) -> dict:
+    cfg = config if config is not None else (load_config() or {})
+    caches = cfg.get(ACCOUNT_CACHES_KEY)
+    return caches if isinstance(caches, dict) else {}
+
+
+def _account_aliases_block(config: Optional[dict] = None) -> dict:
+    cfg = config if config is not None else (load_config() or {})
+    aliases = cfg.get(ACCOUNT_ALIASES_KEY)
+    return aliases if isinstance(aliases, dict) else {}
+
+
+def _account_entry_from_legacy(config: dict) -> Optional[tuple[str, dict[str, Any]]]:
+    api_key = str(config.get("api_key") or "").strip()
+    if not api_key:
+        return None
+
+    user_cache = config.get("user_cache")
+    user = user_cache.get("user") if isinstance(user_cache, dict) else {}
+    if not isinstance(user, dict):
+        user = {}
+
+    name = _sanitize_account_name(
+        derive_account_name(
+            username=user.get("username"),
+            email=user.get("email"),
+            base_url=str(config.get("base_url") or "http://localhost:8000"),
+        )
+    )
+
+    entry: dict[str, Any] = {"api_key": api_key}
+    if user.get("id") is not None:
+        entry["user_id"] = user.get("id")
+    if user.get("username"):
+        entry["username"] = user.get("username")
+    if user.get("email"):
+        entry["email"] = user.get("email")
+    if user.get("first_name"):
+        entry["first_name"] = user.get("first_name")
+    if user.get("last_name"):
+        entry["last_name"] = user.get("last_name")
+    return name, entry
+
+
+def _merge_nested_dicts(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_nested_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _migrate_legacy_config(config: dict) -> tuple[dict, bool]:
+    cfg = dict(config or {})
+    changed = False
+
+    accounts = _accounts_block(cfg)
+    active_name = cfg.get(ACTIVE_ACCOUNT_KEY)
+    if active_name not in accounts:
+        legacy_account = _account_entry_from_legacy(cfg)
+        if legacy_account is not None:
+            migrated_name, migrated_entry = legacy_account
+            accounts[migrated_name] = _merge_nested_dicts(accounts.get(migrated_name, {}), migrated_entry)
+            cfg[ACCOUNTS_KEY] = accounts
+            cfg[ACTIVE_ACCOUNT_KEY] = migrated_name
+            active_name = migrated_name
+            changed = True
+
+    if active_name in accounts:
+        legacy_account = _account_entry_from_legacy(cfg)
+        active_entry = accounts.get(active_name) or {}
+        if legacy_account is not None:
+            migrated_name, migrated_entry = legacy_account
+            should_rename = (
+                active_name != migrated_name
+                and migrated_name not in accounts
+                and not active_entry.get("username")
+                and not active_entry.get("email")
+            )
+            if should_rename:
+                accounts[migrated_name] = _merge_nested_dicts(active_entry, migrated_entry)
+                accounts.pop(active_name, None)
+
+                caches = _account_caches_block(cfg)
+                if active_name in caches:
+                    caches[migrated_name] = caches.pop(active_name)
+                    cfg[ACCOUNT_CACHES_KEY] = caches
+
+                aliases = _account_aliases_block(cfg)
+                if active_name in aliases:
+                    aliases[migrated_name] = aliases.pop(active_name)
+                    cfg[ACCOUNT_ALIASES_KEY] = aliases
+
+                cfg[ACCOUNTS_KEY] = accounts
+                cfg[ACTIVE_ACCOUNT_KEY] = migrated_name
+                active_name = migrated_name
+                changed = True
+
+    if active_name in accounts:
+        caches = _account_caches_block(cfg)
+        scoped_caches = caches.get(active_name)
+        if not isinstance(scoped_caches, dict):
+            scoped_caches = {}
+        for cache_key in LEGACY_CACHE_KEYS:
+            legacy_block = cfg.get(cache_key)
+            if isinstance(legacy_block, dict):
+                if cache_key not in scoped_caches:
+                    scoped_caches[cache_key] = legacy_block
+                cfg.pop(cache_key, None)
+                changed = True
+        if scoped_caches:
+            caches[active_name] = scoped_caches
+            cfg[ACCOUNT_CACHES_KEY] = caches
+
+        legacy_aliases = cfg.get("aliases")
+        if isinstance(legacy_aliases, dict):
+            alias_map = _account_aliases_block(cfg)
+            scoped_aliases = alias_map.get(active_name)
+            if not isinstance(scoped_aliases, dict):
+                scoped_aliases = {}
+            alias_map[active_name] = _merge_nested_dicts(scoped_aliases, legacy_aliases)
+            cfg[ACCOUNT_ALIASES_KEY] = alias_map
+            cfg.pop("aliases", None)
+            changed = True
+
+    cfg = _sync_active_account_fields(cfg)
+    return cfg, changed
+
+
+def _sync_active_account_fields(config: dict) -> dict:
+    """Mirror the active account token into the top-level auth key."""
+    accounts = _accounts_block(config)
+    active_name = config.get(ACTIVE_ACCOUNT_KEY)
+    active = accounts.get(active_name) if active_name else None
+
+    if isinstance(active, dict):
+        api_key = str(active.get("api_key") or "").strip()
+        if api_key:
+            config["api_key"] = api_key
+        else:
+            config.pop("api_key", None)
+    elif accounts:
+        config.pop("api_key", None)
+
+    if not str(config.get("base_url") or "").strip():
+        config["base_url"] = "http://localhost:8000"
+
+    return config
+
+
+def derive_account_name(*, username: Optional[str], email: Optional[str], base_url: str) -> str:
+    identity = (username or email or "account").strip() or "account"
+    return identity
+
+
+def get_accounts() -> dict[str, dict[str, Any]]:
+    """Return saved accounts keyed by account name."""
+    return dict(_accounts_block())
+
+
+def get_active_account_name() -> Optional[str]:
+    """Return the active saved account name, if any."""
+    config = load_config() or {}
+    accounts = _accounts_block(config)
+    active_name = config.get(ACTIVE_ACCOUNT_KEY)
+    if active_name in accounts:
+        return active_name
+    return None
+
+
+def get_active_account() -> Optional[dict[str, Any]]:
+    """Return the active saved account, if any."""
+    active_name = get_active_account_name()
+    if not active_name:
+        return None
+    return get_accounts().get(active_name)
+
+
+def get_active_cache_scope(config: Optional[dict] = None) -> Optional[str]:
+    """Return the cache namespace key for the active saved account."""
+    cfg = config if config is not None else (load_config() or {})
+    accounts = _accounts_block(cfg)
+    active_name = cfg.get(ACTIVE_ACCOUNT_KEY)
+    if active_name in accounts:
+        return active_name
+    return None
+
+
+def load_account_cache(cache_key: str) -> Optional[dict[str, Any]]:
+    """Load a cache block for the active account."""
+    cfg = load_config() or {}
+    scope = get_active_cache_scope(cfg)
+    caches = _account_caches_block(cfg)
+
+    if scope and isinstance(caches.get(scope), dict):
+        scoped_block = caches[scope].get(cache_key)
+        if isinstance(scoped_block, dict):
+            return dict(scoped_block)
+
+    return None
+
+
+def save_account_cache(cache_key: str, value: dict[str, Any]) -> None:
+    """Save a cache block for the active account."""
+    cfg = load_config() or {}
+    scope = get_active_cache_scope(cfg)
+    if not scope:
+        return
+
+    caches = _account_caches_block(cfg)
+    scoped = caches.get(scope)
+    if not isinstance(scoped, dict):
+        scoped = {}
+    scoped[cache_key] = dict(value)
+    caches[scope] = scoped
+    cfg[ACCOUNT_CACHES_KEY] = caches
+
+    save_config(cfg)
+
+
+def clear_account_cache(cache_key: str) -> None:
+    """Clear a cache block for the active account."""
+    cfg = load_config() or {}
+    scope = get_active_cache_scope(cfg)
+    changed = False
+
+    if scope:
+        caches = _account_caches_block(cfg)
+        scoped = caches.get(scope)
+        if isinstance(scoped, dict) and cache_key in scoped:
+            scoped.pop(cache_key, None)
+            changed = True
+            if scoped:
+                caches[scope] = scoped
+            else:
+                caches.pop(scope, None)
+            if caches:
+                cfg[ACCOUNT_CACHES_KEY] = caches
+            else:
+                cfg.pop(ACCOUNT_CACHES_KEY, None)
+
+    if changed:
+        save_config(cfg)
+
+
+def get_account_aliases() -> dict[str, Any]:
+    """Get aliases for the active account."""
+    cfg = load_config() or {}
+    scope = get_active_cache_scope(cfg)
+    if not scope:
+        return {}
+    aliases = _account_aliases_block(cfg).get(scope)
+    return dict(aliases) if isinstance(aliases, dict) else {}
+
+
+def set_account_aliases(aliases: dict[str, Any]) -> None:
+    """Replace aliases for the active account."""
+    cfg = load_config() or {}
+    scope = get_active_cache_scope(cfg)
+    if not scope:
+        return
+    alias_map = _account_aliases_block(cfg)
+    alias_map[scope] = dict(aliases or {})
+    cfg[ACCOUNT_ALIASES_KEY] = alias_map
+    save_config(cfg)
+
+
+def save_account(
+    *,
+    account_name: str,
+    api_key: str,
+    user: Optional[dict[str, Any]] = None,
+    make_active: bool = True,
+) -> str:
+    """Save or update a named account and optionally make it active."""
+    name = _sanitize_account_name(account_name)
+    config = load_config() or {}
+    accounts = _accounts_block(config)
+
+    entry: dict[str, Any] = {
+        "api_key": api_key,
+    }
+    if isinstance(user, dict):
+        if user.get("id") is not None:
+            entry["user_id"] = user.get("id")
+        if user.get("username"):
+            entry["username"] = user.get("username")
+        if user.get("email"):
+            entry["email"] = user.get("email")
+        if user.get("first_name"):
+            entry["first_name"] = user.get("first_name")
+        if user.get("last_name"):
+            entry["last_name"] = user.get("last_name")
+
+    accounts[name] = entry
+    config[ACCOUNTS_KEY] = accounts
+    if make_active:
+        config[ACTIVE_ACCOUNT_KEY] = name
+
+    config, _ = _migrate_legacy_config(config)
+    save_config(_sync_active_account_fields(config))
+    return name
+
+
+def switch_account(account_name: str) -> dict[str, Any]:
+    """Switch the active account to a saved account."""
+    name = _sanitize_account_name(account_name)
+    config = load_config() or {}
+    accounts = _accounts_block(config)
+    if name not in accounts:
+        raise KeyError(name)
+
+    config[ACTIVE_ACCOUNT_KEY] = name
+    save_config(_sync_active_account_fields(config))
+    return dict(accounts[name])
+
+
+def remove_account(account_name: str) -> bool:
+    """Remove a saved account. Returns True if it existed."""
+    name = _sanitize_account_name(account_name)
+    config = load_config() or {}
+    accounts = _accounts_block(config)
+    if name not in accounts:
+        return False
+
+    accounts.pop(name, None)
+    caches = _account_caches_block(config)
+    if name in caches:
+        caches.pop(name, None)
+        if caches:
+            config[ACCOUNT_CACHES_KEY] = caches
+        else:
+            config.pop(ACCOUNT_CACHES_KEY, None)
+
+    aliases = _account_aliases_block(config)
+    if name in aliases:
+        aliases.pop(name, None)
+        if aliases:
+            config[ACCOUNT_ALIASES_KEY] = aliases
+        else:
+            config.pop(ACCOUNT_ALIASES_KEY, None)
+
+    if accounts:
+        config[ACCOUNTS_KEY] = accounts
+    else:
+        config.pop(ACCOUNTS_KEY, None)
+
+    if config.get(ACTIVE_ACCOUNT_KEY) == name:
+        config[ACTIVE_ACCOUNT_KEY] = next(iter(accounts), None)
+        if config[ACTIVE_ACCOUNT_KEY] is None:
+            config.pop(ACTIVE_ACCOUNT_KEY, None)
+
+    save_config(_sync_active_account_fields(config))
+    return True
+
+
+def list_accounts() -> list[dict[str, Any]]:
+    """Return saved accounts for display, active account first."""
+    accounts = get_accounts()
+    active_name = get_active_account_name()
+    rows: list[dict[str, Any]] = []
+    for name, entry in accounts.items():
+        row = dict(entry)
+        row["name"] = name
+        row["active"] = name == active_name
+        rows.append(row)
+
+    rows.sort(key=lambda item: (not item["active"], item["name"].lower()))
+    return rows
 
 
 def get_api_key() -> Optional[str]:
@@ -55,6 +457,9 @@ def get_api_key() -> Optional[str]:
     
     # Fall back to config file
     config = load_config()
+    active = get_active_account()
+    if isinstance(active, dict) and active.get("api_key"):
+        return active.get("api_key")
     return config.get("api_key")
 
 
@@ -73,15 +478,20 @@ def get_base_url() -> str:
 def set_api_key(api_key: str):
     """Set API key in config file."""
     config = load_config()
+    active_name = config.get(ACTIVE_ACCOUNT_KEY)
+    accounts = _accounts_block(config)
+    if active_name in accounts and isinstance(accounts.get(active_name), dict):
+        accounts[active_name]["api_key"] = api_key
+        config[ACCOUNTS_KEY] = accounts
     config["api_key"] = api_key
-    save_config(config)
+    save_config(_sync_active_account_fields(config))
 
 
 def set_base_url(base_url: str):
     """Set base URL in config file."""
     config = load_config()
     config["base_url"] = base_url.rstrip("/")
-    save_config(config)
+    save_config(_sync_active_account_fields(config))
 
 
 def _clamp01(value: float) -> float:
@@ -319,4 +729,3 @@ def get_insecure() -> bool:
         return bool(config.get("insecure", False))
     except (ValueError, TypeError):
         return False
-
