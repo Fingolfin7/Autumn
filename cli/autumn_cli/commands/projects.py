@@ -49,7 +49,10 @@ def projects_list(
             # When searching, status filter is optional (pass None for "all")
             search_status = None if status == "all" else status
             result = client.search_projects(search, status=search_status)
-            projects = result.get("projects", [])
+            if isinstance(result, list):
+                projects = result
+            else:
+                projects = result.get("projects", [])
 
             if not projects:
                 console.print(f"[dim]No projects found matching '{search}'.[/]")
@@ -152,7 +155,10 @@ def subprojects(project: str, desc: bool, search: Optional[str]):
         # If search is provided, use the search endpoint
         if search:
             result = client.search_subprojects(resolved_project, search)
-            subs = result.get("subprojects", [])
+            if isinstance(result, list):
+                subs = result
+            else:
+                subs = result.get("subprojects", [])
 
             if not subs:
                 console.print(f"[dim]No subprojects found matching '{search}' in {resolved_project}.[/]")
