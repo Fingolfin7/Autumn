@@ -33,6 +33,15 @@ def _redact(cfg: dict) -> dict:
     cfg = dict(cfg or {})
     if "api_key" in cfg and cfg["api_key"]:
         cfg["api_key"] = "***"
+    accounts = cfg.get("accounts")
+    if isinstance(accounts, dict):
+        redacted_accounts = {}
+        for name, entry in accounts.items():
+            redacted_entry = dict(entry or {})
+            if redacted_entry.get("api_key"):
+                redacted_entry["api_key"] = "***"
+            redacted_accounts[name] = redacted_entry
+        cfg["accounts"] = redacted_accounts
     return cfg
 
 

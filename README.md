@@ -30,6 +30,15 @@ Or from the AutumnWeb root directory:
 uv pip install -e ./cli
 ```
 
+### Running tests
+
+`pytest` is tracked in the CLI's dev dependency group.
+
+```bash
+cd cli
+uv run --group dev python -m pytest
+```
+
 ## Getting Started
 
 ### 1) Authenticate
@@ -64,6 +73,13 @@ Options:
 ```bash
 autumn auth status
 autumn auth verify
+autumn auth accounts
+```
+
+If you log into multiple accounts against the same AutumnWeb instance, you can switch between them quickly:
+
+```bash
+autumn auth switch alice
 ```
 
 ### 3) Say hi
@@ -103,6 +119,8 @@ autumn
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
 | **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
 | **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
+| **Auth** | `autumn auth accounts` | List saved accounts | — |
+| | `autumn auth switch <account>` | Switch active account | — |
 | | `autumn alias` | Manage aliases | `add`, `list`, `remove` |
 | **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 
@@ -366,7 +384,7 @@ Subproject aliases are **project-scoped** — the alias `fe` can map to differen
 
 ## Troubleshooting
 
-- **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, ensure `terminal-notifier` is installed (the CLI tries to auto-install via Homebrew).
+- **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, Autumn uses `terminal-notifier`; if it is missing, the CLI will explicitly try `brew install terminal-notifier` on first use.
 - **SSL Errors?** If using a self-signed cert, set `autumn config set tls.insecure true`.
 - **Outdated Data?** Run `autumn meta refresh` to sync projects, tags, and contexts.
 - **Incorrect Totals?** Run `autumn audit` to recompute all project/subproject totals from session data.

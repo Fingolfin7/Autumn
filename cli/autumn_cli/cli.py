@@ -13,6 +13,12 @@ from .config import (
     set_base_url,
     load_config,
     save_config,
+    save_account,
+    list_accounts,
+    switch_account as switch_saved_account,
+    remove_account,
+    get_active_account_name,
+    derive_account_name,
     get_greeting_general_weight,
     get_greeting_activity_weight,
     get_greeting_moon_cameo_weight,
@@ -38,7 +44,7 @@ from .commands.alias_cmd import alias
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(version="0.1.0")
+@click.version_option(version="1.0.0")
 @click.pass_context
 def cli(ctx: click.Context):
     """Autumn CLI - Command-line interface for AutumnWeb."""
@@ -155,11 +161,32 @@ def setup(api_key: str, base_url: str):
     if not base_url:
         base_url = click.prompt("Base URL", default="http://localhost:8000")
 
-    set_api_key(api_key)
     set_base_url(base_url)
+    set_api_key(api_key)
+
+    account_name = None
+    try:
+        client = APIClient(api_key=api_key, base_url=base_url)
+        me = client.get_cached_me(ttl_seconds=0, refresh=True).get("user", {})
+        account_name = save_account(
+            account_name=derive_account_name(
+                username=me.get("username"),
+                email=me.get("email"),
+                base_url=base_url,
+            ),
+            api_key=api_key,
+            user=me,
+            make_active=True,
+        )
+        _clear_auth_caches()
+    except APIError:
+        pass
+
     click.echo("Configuration saved successfully!")
     click.echo(f"Base URL: {base_url}")
     click.echo("API key saved (hidden)")
+    if account_name:
+        click.echo(f"Saved account: {account_name}")
 
     # Verify the configuration
     try:
@@ -183,6 +210,18 @@ def _warn_if_insecure_tls() -> None:
             )
     except (ImportError, ValueError, TypeError):
         pass
+
+
+def _clear_auth_caches() -> None:
+    from .utils.meta_cache import clear_cached_snapshot
+    from .utils.projects_cache import clear_cached_projects
+    from .utils.user_cache import clear_cached_user
+    from .utils.recent_activity_cache import clear_cached_activity
+
+    clear_cached_snapshot()
+    clear_cached_projects()
+    clear_cached_user()
+    clear_cached_activity()
 
 
 @auth.command()
@@ -224,10 +263,14 @@ def status():
 
     click.echo("Configuration:")
     click.echo(f"  Base URL: {base_url}")
+    active_account = get_active_account_name()
+    if active_account:
+        click.echo(f"  Active account: {active_account}")
     if api_key:
         click.echo(f"  API key: {api_key[:8]}... (configured)")
     else:
         click.echo("  API key: Not configured")
+    click.echo(f"  Saved accounts: {len(list_accounts())}")
 
     # Test connection
     if api_key:
@@ -245,9 +288,6 @@ def status():
 @click.option("--base-url", help="AutumnWeb base URL")
 def login(username: str, password: str, base_url: str):
     """Login with username/email + password and store the API token."""
-    from .utils.meta_cache import clear_cached_snapshot
-    from .utils.user_cache import clear_cached_user
-
     _warn_if_insecure_tls()
 
     if not username:
@@ -262,36 +302,94 @@ def login(username: str, password: str, base_url: str):
     token = temp.get_token_with_password(username, password)
 
     set_base_url(base_url)
-    set_api_key(token)
-
-    # Clear caches so they reload as the new user
-    clear_cached_snapshot()
-    clear_cached_user()
+    client = APIClient(api_key=token, base_url=base_url)
 
     # Validate by calling /api/me
     try:
-        client = APIClient()
         me = client.get_cached_me(ttl_seconds=0, refresh=True).get("user", {})
+        account_name = save_account(
+            account_name=derive_account_name(
+                username=me.get("username"),
+                email=me.get("email"),
+                base_url=base_url,
+            ),
+            api_key=token,
+            user=me,
+            make_active=True,
+        )
+        _clear_auth_caches()
         click.echo(f"✓ Logged in as {me.get('username') or username}.")
+        click.echo(f"  Saved account: {account_name}")
     except APIError:
+        set_api_key(token)
+        _clear_auth_caches()
         click.echo("✓ Logged in.")
 
 
 @auth.command()
 def logout():
     """Logout by clearing the stored API token and cached user metadata."""
-    from .utils.meta_cache import clear_cached_snapshot
-    from .utils.user_cache import clear_cached_user
-
     config = load_config()
-    if "api_key" in config:
-        config.pop("api_key", None)
-        save_config(config)
+    persisted_active_account = config.get("active_account")
+    active_account = get_active_account_name()
+    if persisted_active_account:
+        remove_account(active_account)
+    else:
+        if "api_key" in config:
+            config.pop("api_key", None)
+            save_config(config)
 
-    clear_cached_snapshot()
-    clear_cached_user()
+    _clear_auth_caches()
 
-    click.echo("Logged out. Run `autumn auth login` to sign in again.")
+    if persisted_active_account:
+        click.echo(f"Logged out account '{active_account}'.")
+        next_account = get_active_account_name()
+        if next_account:
+            click.echo(f"Switched to saved account '{next_account}'.")
+        else:
+            click.echo("Run `autumn auth login` to sign in again.")
+    else:
+        click.echo("Logged out. Run `autumn auth login` to sign in again.")
+
+
+@auth.command("accounts")
+def auth_accounts():
+    """List saved accounts."""
+    accounts = list_accounts()
+    click.echo(f"Base URL: {get_base_url()}")
+    if not accounts:
+        click.echo("No saved accounts.")
+        return
+
+    click.echo("Saved accounts:")
+    for entry in accounts:
+        marker = "*" if entry.get("active") else " "
+        username = entry.get("username") or entry.get("email") or entry.get("name")
+        email = entry.get("email")
+        detail = f" ({email})" if email and email != username else ""
+        click.echo(f" {marker} {entry['name']}: {username}{detail}")
+
+
+@auth.command("switch")
+@click.argument("account_name")
+def auth_switch(account_name: str):
+    """Switch to a saved account."""
+    try:
+        switch_saved_account(account_name)
+    except KeyError:
+        click.echo(f"Error: Unknown account '{account_name}'.", err=True)
+        raise click.Abort()
+
+    _clear_auth_caches()
+
+    try:
+        client = APIClient()
+        me = client.get_cached_me(ttl_seconds=0, refresh=True).get("user", {})
+        click.echo(
+            f"Switched to {account_name} ({me.get('username') or me.get('email') or 'unknown user'})."
+        )
+    except APIError:
+        click.echo(f"Switched to {account_name}.")
 
 
 # Register commands directly (flat structure)

@@ -14,30 +14,30 @@ class TestSubprojectAliasLookup:
     def test_get_subproject_alias_finds_match(self):
         """Test that project-scoped subproject alias is found."""
         mock_config = {
-            "aliases": {
-                "subprojects": {
-                    "Autumn CLI": {
-                        "fe": "Frontend",
-                        "be": "Backend",
-                    }
+            "subprojects": {
+                "Autumn CLI": {
+                    "fe": "Frontend",
+                    "be": "Backend",
                 }
             }
         }
 
-        with patch("autumn_cli.utils.resolvers.get_config_value") as mock_get:
-            mock_get.return_value = mock_config["aliases"]["subprojects"]
+        with patch("autumn_cli.utils.resolvers.get_account_aliases") as mock_get:
+            mock_get.return_value = mock_config
             result = _get_subproject_alias("fe", "Autumn CLI")
             assert result == "Frontend"
 
     def test_get_subproject_alias_case_insensitive_project(self):
         """Test that project name matching is case-insensitive."""
         mock_config = {
-            "Autumn CLI": {
-                "fe": "Frontend",
-            }
+            "subprojects": {
+                "Autumn CLI": {
+                    "fe": "Frontend",
+                }
+            },
         }
 
-        with patch("autumn_cli.utils.resolvers.get_config_value") as mock_get:
+        with patch("autumn_cli.utils.resolvers.get_account_aliases") as mock_get:
             mock_get.return_value = mock_config
             result = _get_subproject_alias("fe", "autumn cli")
             assert result == "Frontend"
@@ -45,12 +45,14 @@ class TestSubprojectAliasLookup:
     def test_get_subproject_alias_case_insensitive_alias(self):
         """Test that alias key matching is case-insensitive."""
         mock_config = {
-            "Autumn CLI": {
-                "FE": "Frontend",
-            }
+            "subprojects": {
+                "Autumn CLI": {
+                    "FE": "Frontend",
+                }
+            },
         }
 
-        with patch("autumn_cli.utils.resolvers.get_config_value") as mock_get:
+        with patch("autumn_cli.utils.resolvers.get_account_aliases") as mock_get:
             mock_get.return_value = mock_config
             result = _get_subproject_alias("fe", "Autumn CLI")
             assert result == "Frontend"
@@ -58,12 +60,14 @@ class TestSubprojectAliasLookup:
     def test_get_subproject_alias_returns_none_wrong_project(self):
         """Test that alias is not found for different project."""
         mock_config = {
-            "Autumn CLI": {
-                "fe": "Frontend",
-            }
+            "subprojects": {
+                "Autumn CLI": {
+                    "fe": "Frontend",
+                }
+            },
         }
 
-        with patch("autumn_cli.utils.resolvers.get_config_value") as mock_get:
+        with patch("autumn_cli.utils.resolvers.get_account_aliases") as mock_get:
             mock_get.return_value = mock_config
             result = _get_subproject_alias("fe", "Other Project")
             assert result is None
@@ -71,12 +75,14 @@ class TestSubprojectAliasLookup:
     def test_get_subproject_alias_returns_none_no_project(self):
         """Test that alias lookup requires project."""
         mock_config = {
-            "Autumn CLI": {
-                "fe": "Frontend",
-            }
+            "subprojects": {
+                "Autumn CLI": {
+                    "fe": "Frontend",
+                }
+            },
         }
 
-        with patch("autumn_cli.utils.resolvers.get_config_value") as mock_get:
+        with patch("autumn_cli.utils.resolvers.get_account_aliases") as mock_get:
             mock_get.return_value = mock_config
             result = _get_subproject_alias("fe", None)
             assert result is None

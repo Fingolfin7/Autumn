@@ -164,7 +164,12 @@ def render_active_timer_block(session: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_sessions_list(sessions: Iterable[Dict[str, Any]], *, markdown_notes: bool = False) -> Union[str, List[object]]:
+def render_sessions_list(
+    sessions: Iterable[Dict[str, Any]],
+    *,
+    markdown_notes: bool = False,
+    show_ids: bool = False,
+) -> Union[str, List[object]]:
     """Render logs grouped by date header in the old CLI style.
 
     Args:
@@ -231,8 +236,14 @@ def render_sessions_list(sessions: Iterable[Dict[str, Any]], *, markdown_notes: 
 
             subs_bracket = _format_subs_bracketed(subs)
 
+            session_id = s.get("id")
+            id_prefix = (
+                f"[autumn.id]#{session_id}[/]  "
+                if show_ids and session_id is not None
+                else ""
+            )
             base = (
-                f"[autumn.time]{start}[/] to [autumn.time]{end}[/]\t"
+                f"{id_prefix}[autumn.time]{start}[/] to [autumn.time]{end}[/]\t"
                 f"{dur_str}  [autumn.project]{project}[/] "
                 f"{subs_bracket}"
             )

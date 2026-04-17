@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple, List
 
-from ..config import get_config_value
+from ..config import get_account_aliases
 
 
 def _is_int_string(value: str) -> bool:
@@ -49,7 +49,7 @@ def _get_alias(alias_type: str, name: str) -> Optional[str]:
     Returns:
         The canonical name if alias exists, None otherwise
     """
-    aliases = get_config_value(f"aliases.{alias_type}", {})
+    aliases = get_account_aliases().get(alias_type, {})
     if not isinstance(aliases, dict):
         return None
     # Case-insensitive alias lookup
@@ -71,7 +71,7 @@ def _get_subproject_alias(name: str, project: Optional[str] = None) -> Optional[
     Returns:
         The canonical subproject name if alias exists, None otherwise
     """
-    all_sub_aliases = get_config_value("aliases.subprojects", {})
+    all_sub_aliases = get_account_aliases().get("subprojects", {})
     if not isinstance(all_sub_aliases, dict):
         return None
 
@@ -298,4 +298,3 @@ def resolve_subproject_params(
             warnings.append(f"Unknown subproject '{sub}'. Passing through as provided.")
 
     return resolved, warnings
-

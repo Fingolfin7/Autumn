@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..config import load_config, save_config
+from ..config import load_account_cache, save_account_cache, clear_account_cache
 
 
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
@@ -48,8 +48,7 @@ def load_cached_projects(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Pro
     if _mem_snapshot is not None and _is_fresh(_mem_snapshot.fetched_at, ttl_seconds):
         return _mem_snapshot
 
-    cfg = load_config() or {}
-    cache = cfg.get("projects_cache") or {}
+    cache = load_account_cache("projects_cache") or {}
 
     try:
         fetched_at_s = cache.get("fetched_at")
@@ -79,12 +78,10 @@ def save_cached_projects(projects: List[Dict[str, Any]]) -> None:
     snap = ProjectsSnapshot(projects=projects, fetched_at=_now())
     _mem_snapshot = snap
 
-    cfg = load_config() or {}
-    cfg["projects_cache"] = {
+    save_account_cache("projects_cache", {
         "fetched_at": snap.fetched_at.isoformat(),
         "projects": projects,
-    }
-    save_config(cfg)
+    })
 
 
 def clear_cached_projects() -> None:
@@ -92,7 +89,4 @@ def clear_cached_projects() -> None:
     global _mem_snapshot
     _mem_snapshot = None
 
-    cfg = load_config() or {}
-    if "projects_cache" in cfg:
-        cfg.pop("projects_cache", None)
-        save_config(cfg)
+    clear_account_cache("projects_cache")

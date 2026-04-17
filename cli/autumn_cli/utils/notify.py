@@ -5,7 +5,7 @@ Goal: best-effort notifications without adding heavy dependencies.
 Strategy:
 - Preferred (all OSes): `plyer` (single Python API)
 - Fallbacks:
-  - macOS: `terminal-notifier` with automatic Homebrew installation
+  - macOS: `terminal-notifier`; if missing, we explicitly try `brew install terminal-notifier`
   - Linux: `notify-send` if available
   - Windows: `powershell` toast notification (best-effort)
 
@@ -112,7 +112,8 @@ def _get_asset_path(asset_name: str) -> Path:
 def _ensure_terminal_notifier_available(*, auto_install: bool = True) -> tuple[str | None, str | None]:
     """Return path to `terminal-notifier` if available.
 
-    If it's missing and we're on macOS, optionally try to install it via Homebrew.
+    If it's missing and we're on macOS, optionally try to install it via Homebrew
+    with `brew install terminal-notifier`.
 
     Returns:
       (path, error_message)

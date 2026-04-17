@@ -20,7 +20,7 @@ Config structure in ~/.autumn/config.yaml:
 import click
 from typing import Optional
 
-from ..config import get_config_value, set_config_value
+from ..config import get_account_aliases, set_account_aliases
 from ..utils.console import console
 from ..api_client import APIClient, APIError
 
@@ -38,7 +38,8 @@ def _get_aliases_section(alias_type: str) -> dict:
         "subproject": "subprojects",
     }.get(alias_type, f"{alias_type}s")
 
-    return get_config_value(f"aliases.{type_key}", {}) or {}
+    aliases = get_account_aliases()
+    return aliases.get(type_key, {}) or {}
 
 
 def _set_aliases_section(alias_type: str, aliases: dict) -> None:
@@ -50,7 +51,9 @@ def _set_aliases_section(alias_type: str, aliases: dict) -> None:
         "subproject": "subprojects",
     }.get(alias_type, f"{alias_type}s")
 
-    set_config_value(f"aliases.{type_key}", aliases)
+    all_aliases = get_account_aliases()
+    all_aliases[type_key] = aliases
+    set_account_aliases(all_aliases)
 
 
 @click.group()

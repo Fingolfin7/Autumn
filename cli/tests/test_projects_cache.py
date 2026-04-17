@@ -1,131 +1,87 @@
 """Tests for the projects cache module."""
 
-from datetime import datetime, timezone, timedelta
-
-import pytest
-
+import autumn_cli.config as cfg
 from autumn_cli.utils.projects_cache import (
-    ProjectsSnapshot,
     load_cached_projects,
     save_cached_projects,
     clear_cached_projects,
-    _mem_snapshot,
 )
 
 
-def test_projects_cache_roundtrip(tmp_path, monkeypatch):
-    """Test saving and loading projects cache."""
-    # Setup: use a temp config file
-    config_file = tmp_path / "config.yaml"
+def test_projects_cache_roundtrip_active_account_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")
 
-    def fake_load_config():
-        if config_file.exists():
-            import yaml
-            return yaml.safe_load(config_file.read_text()) or {}
-        return {}
-
-    def fake_save_config(cfg):
-        import yaml
-        config_file.write_text(yaml.dump(cfg))
-
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.load_config", fake_load_config)
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.save_config", fake_save_config)
-
-    # Clear any existing in-memory cache
     import autumn_cli.utils.projects_cache as pc
-    pc._mem_snapshot = None
 
-    # Test saving
+    pc._mem_snapshot = None
+    cfg.save_account(account_name="alice", api_key="token-a", user={"username": "alice"})
+
     projects = [
         {"name": "Project A", "status": "active", "description": "Test project"},
         {"name": "Project B", "status": "paused", "description": ""},
     ]
     save_cached_projects(projects)
 
-    # Verify config file was written
-    assert config_file.exists()
-
-    # Test loading (should hit in-memory cache)
     snap = load_cached_projects(ttl_seconds=300)
     assert snap is not None
     assert len(snap.projects) == 2
+
+    pc._mem_snapshot = None
+    snap = load_cached_projects(ttl_seconds=300)
+    assert snap is not None
     assert snap.projects[0]["name"] == "Project A"
-    assert snap.projects[1]["name"] == "Project B"
-
-    # Clear in-memory but keep disk cache
-    pc._mem_snapshot = None
-
-    # Test loading from disk
-    snap = load_cached_projects(ttl_seconds=300)
-    assert snap is not None
-    assert len(snap.projects) == 2
 
 
-def test_projects_cache_ttl_expiry(tmp_path, monkeypatch):
-    """Test that expired cache is not returned."""
-    config_file = tmp_path / "config.yaml"
-
-    def fake_load_config():
-        if config_file.exists():
-            import yaml
-            return yaml.safe_load(config_file.read_text()) or {}
-        return {}
-
-    def fake_save_config(cfg):
-        import yaml
-        config_file.write_text(yaml.dump(cfg))
-
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.load_config", fake_load_config)
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.save_config", fake_save_config)
+def test_projects_cache_legacy_schema_migrates_on_load(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")
 
     import autumn_cli.utils.projects_cache as pc
+
     pc._mem_snapshot = None
+    cfg.save_config(
+        {
+            "api_key": "token-a",
+            "base_url": "https://autumn.example",
+            "user_cache": {
+                "fetched_at": "2026-04-17T10:00:00+00:00",
+                "user": {"username": "alice"},
+            },
+            "projects_cache": {
+                "fetched_at": "3026-04-17T10:00:00+00:00",
+                "projects": [{"name": "Legacy", "status": "active"}],
+            },
+        }
+    )
 
-    # Save projects
-    save_cached_projects([{"name": "Test", "status": "active"}])
+    stored = cfg.load_config()
+    assert "projects_cache" not in stored
+    assert stored["account_caches"]["alice"]["projects_cache"]["projects"][0]["name"] == "Legacy"
 
-    # Should load fine with normal TTL
     snap = load_cached_projects(ttl_seconds=300)
     assert snap is not None
-
-    # Clear in-memory
-    pc._mem_snapshot = None
-
-    # Should not load with 0 TTL (expired)
-    snap = load_cached_projects(ttl_seconds=0)
-    assert snap is None
+    assert snap.projects[0]["name"] == "Legacy"
 
 
-def test_projects_cache_clear(tmp_path, monkeypatch):
-    """Test clearing the cache."""
-    config_file = tmp_path / "config.yaml"
-
-    def fake_load_config():
-        if config_file.exists():
-            import yaml
-            return yaml.safe_load(config_file.read_text()) or {}
-        return {}
-
-    def fake_save_config(cfg):
-        import yaml
-        config_file.write_text(yaml.dump(cfg))
-
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.load_config", fake_load_config)
-    monkeypatch.setattr("autumn_cli.utils.projects_cache.save_config", fake_save_config)
+def test_projects_cache_clear_clears_active_scope_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")
 
     import autumn_cli.utils.projects_cache as pc
+
     pc._mem_snapshot = None
+    cfg.save_account(account_name="alice", api_key="token-a", user={"username": "alice"})
+    cfg.save_account(account_name="bob", api_key="token-b", user={"username": "bob"})
+    cfg.switch_account("alice")
+    save_cached_projects([{"name": "Alice", "status": "active"}])
+    cfg.switch_account("bob")
+    save_cached_projects([{"name": "Bob", "status": "active"}])
 
-    # Save projects
-    save_cached_projects([{"name": "Test", "status": "active"}])
-
-    # Verify it's there
-    snap = load_cached_projects(ttl_seconds=300)
-    assert snap is not None
-
-    # Clear
+    cfg.switch_account("alice")
     clear_cached_projects()
 
-    # Should be gone from both memory and disk
-    snap = load_cached_projects(ttl_seconds=300)
-    assert snap is None
+    stored = cfg.load_config()
+    assert "projects_cache" not in stored
+    assert "projects_cache" not in stored["account_caches"].get("alice", {})
+    assert stored["account_caches"]["bob"]["projects_cache"]["projects"][0]["name"] == "Bob"

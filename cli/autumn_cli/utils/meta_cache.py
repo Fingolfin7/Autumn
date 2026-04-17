@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..config import load_config, save_config
+from ..config import load_account_cache, save_account_cache, clear_account_cache
 
 
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
@@ -49,8 +49,7 @@ def load_cached_snapshot(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Met
     if _mem_snapshot is not None and _is_fresh(_mem_snapshot.fetched_at, ttl_seconds):
         return _mem_snapshot
 
-    cfg = load_config() or {}
-    meta = cfg.get("meta_cache") or {}
+    meta = load_account_cache("meta_cache") or {}
 
     try:
         fetched_at_s = meta.get("fetched_at")
@@ -81,13 +80,11 @@ def save_cached_snapshot(contexts: List[Dict[str, Any]], tags: List[Dict[str, An
     snap = MetaSnapshot(contexts=contexts, tags=tags, fetched_at=_now())
     _mem_snapshot = snap
 
-    cfg = load_config() or {}
-    cfg["meta_cache"] = {
+    save_account_cache("meta_cache", {
         "fetched_at": snap.fetched_at.isoformat(),
         "contexts": contexts,
         "tags": tags,
-    }
-    save_config(cfg)
+    })
 
 
 def clear_cached_snapshot() -> None:
@@ -95,7 +92,4 @@ def clear_cached_snapshot() -> None:
     global _mem_snapshot
     _mem_snapshot = None
 
-    cfg = load_config() or {}
-    if "meta_cache" in cfg:
-        cfg.pop("meta_cache", None)
-        save_config(cfg)
+    clear_account_cache("meta_cache")

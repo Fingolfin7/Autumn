@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from autumn_cli.commands.sessions import track
+from autumn_cli.commands.sessions import log, track
 from autumn_cli.commands.timer import start, stop, status
 
 
@@ -63,6 +63,38 @@ class _StatusClient:
             "ok": True,
             "active": 1,
             "sessions": [{"id": 303, "p": "MyProj", "subs": ["meals"], "elapsed": 5}],
+        }
+
+
+class _LogClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_discovery_meta(self, ttl_seconds=300, refresh=False):
+        return {"contexts": [], "tags": []}
+
+    def log_activity(
+        self,
+        period=None,
+        project=None,
+        start_date=None,
+        end_date=None,
+        context=None,
+        tags=None,
+    ):
+        return {
+            "count": 1,
+            "logs": [
+                {
+                    "id": 404,
+                    "project": "MyProj",
+                    "subprojects": ["meals"],
+                    "start_time": "2026-01-01T10:00:00",
+                    "end_time": "2026-01-01T10:30:00",
+                    "duration_minutes": 30,
+                    "note": "Breakfast",
+                }
+            ],
         }
 
 
@@ -138,3 +170,34 @@ def test_status_output_uses_colored_session_id(monkeypatch):
     result = runner.invoke(status, [])
     assert result.exit_code == 0
     assert any("Session ID: #[autumn.id]303[/]" in line for line in printed)
+
+
+def test_log_output_hides_session_ids_by_default(monkeypatch):
+    printed = []
+
+    monkeypatch.setattr("autumn_cli.commands.sessions.APIClient", _LogClient)
+    monkeypatch.setattr(
+        "autumn_cli.commands.sessions.console.print",
+        lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(log, ["--raw"])
+    assert result.exit_code == 0
+    assert any("Breakfast" in line for line in printed)
+    assert not any("#404" in line for line in printed)
+
+
+def test_log_output_can_show_session_ids(monkeypatch):
+    printed = []
+
+    monkeypatch.setattr("autumn_cli.commands.sessions.APIClient", _LogClient)
+    monkeypatch.setattr(
+        "autumn_cli.commands.sessions.console.print",
+        lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(log, ["--raw", "--show-ids"])
+    assert result.exit_code == 0
+    assert any("#404" in line for line in printed)

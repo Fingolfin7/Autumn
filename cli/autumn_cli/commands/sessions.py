@@ -51,6 +51,11 @@ def _format_session_id_line(session_id: Optional[int]) -> str:
     default=False,
     help="Show raw (single-line) notes instead of Markdown",
 )
+@click.option(
+    "--show-ids",
+    is_flag=True,
+    help="Show session IDs in log output",
+)
 def log(
     ctx: click.Context,
     period: Optional[str],
@@ -61,6 +66,7 @@ def log(
     end_date: Optional[str],
     pick: bool,
     raw: bool,
+    show_ids: bool,
 ):
     """Show activity logs (saved sessions). Use 'log search' for advanced search."""
     # If a subcommand was invoked, don't run this command
@@ -155,7 +161,11 @@ def log(
             count = result.get("count", len(logs))
 
             console.print(f"[autumn.label]Sessions:[/] {count}")
-            rendered = render_sessions_list(logs, markdown_notes=not raw)
+            rendered = render_sessions_list(
+                logs,
+                markdown_notes=not raw,
+                show_ids=show_ids,
+            )
             if isinstance(rendered, list):
                 for r in rendered:
                     console.print(r)
@@ -182,6 +192,11 @@ def log(
     default=False,
     help="Show raw (single-line) notes instead of Markdown",
 )
+@click.option(
+    "--show-ids",
+    is_flag=True,
+    help="Show session IDs in log output",
+)
 def log_search(
     project: Optional[str],
     context: Optional[str],
@@ -194,6 +209,7 @@ def log_search(
     offset: Optional[int],
     pick: bool,
     raw: bool,
+    show_ids: bool,
 ):
     """Search sessions with filters."""
     try:
@@ -249,7 +265,11 @@ def log_search(
         count = result.get("count", len(sessions_list))
 
         console.print(f"[autumn.label]Sessions:[/] {count}")
-        rendered = render_sessions_list(sessions_list, markdown_notes=not raw)
+        rendered = render_sessions_list(
+            sessions_list,
+            markdown_notes=not raw,
+            show_ids=show_ids,
+        )
         if isinstance(rendered, list):
             for r in rendered:
                 console.print(r)
