@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from datetime import datetime
+import re
 from textwrap import wrap
 from typing import Dict, Any, Iterable, List, Optional, Union
 
@@ -27,6 +28,9 @@ from .formatters import (
 
 from rich.markup import escape as rich_escape
 from rich.markdown import Markdown
+
+
+_SINGLE_TILDE_STRIKE = re.compile(r"(?<!~)~([^~\n]+)~(?!~)")
 
 
 def _normalize_ws(text: str) -> str:
@@ -189,6 +193,10 @@ def render_sessions_list(
         can show clickable links.
         """
 
+        # Rich/CommonMark supports strikethrough with double tildes (~~text~~).
+        # For convenience and backward compatibility with older note habits,
+        # normalize single-tilde markers (~text~) into CommonMark form.
+        note = _SINGLE_TILDE_STRIKE.sub(r"~~\1~~", note)
         return Markdown(note, style="autumn.note")
 
     sessions_list = list(sessions)
