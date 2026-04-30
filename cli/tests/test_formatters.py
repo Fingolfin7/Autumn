@@ -90,3 +90,27 @@ def test_status_matches_old_style_without_end_and_with_duration():
     assert " ago" in rendered
     assert "2h" in rendered and "5m" in rendered
     assert "End" not in rendered
+
+
+def test_markdown_notes_support_single_tilde_strikethrough():
+    sessions = [
+        {
+            "id": 5,
+            "project": "Project A",
+            "subprojects": [],
+            "start_time": "2026-01-01T10:00:00",
+            "end_time": "2026-01-01T11:00:00",
+            "duration_minutes": 60,
+            "note": "before ~removed~ after",
+        }
+    ]
+
+    with _plain_console.capture() as capture:
+        for item in render_sessions_list(sessions, markdown_notes=True):
+            _plain_console.print(item)
+    rendered = capture.get()
+
+    # Terminal text still includes the content; we mainly verify this doesn't
+    # render literal single-tilde markers in markdown mode.
+    assert "before removed after" in rendered
+    assert "~removed~" not in rendered
