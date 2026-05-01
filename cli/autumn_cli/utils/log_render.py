@@ -30,7 +30,10 @@ from rich.markup import escape as rich_escape
 from rich.markdown import Markdown
 
 
-_SINGLE_TILDE_STRIKE = re.compile(r"(?<!~)~([^~\n]+)~(?!~)")
+_SINGLE_TILDE_STRIKE = re.compile(
+    r"(^|(?<=\s))~(?!~)([^\s~](?:[^~]*?[^\s~])?)~(?!~)(?=\s|[.,!?;:]|$)",
+    re.MULTILINE,
+)
 
 
 def _normalize_ws(text: str) -> str:
@@ -196,7 +199,7 @@ def render_sessions_list(
         # Rich/CommonMark supports strikethrough with double tildes (~~text~~).
         # For convenience and backward compatibility with older note habits,
         # normalize single-tilde markers (~text~) into CommonMark form.
-        note = _SINGLE_TILDE_STRIKE.sub(r"~~\1~~", note)
+        note = _SINGLE_TILDE_STRIKE.sub(r"\1~~\2~~", note)
         return Markdown(note, style="autumn.note")
 
     sessions_list = list(sessions)

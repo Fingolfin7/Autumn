@@ -114,3 +114,27 @@ def test_markdown_notes_support_single_tilde_strikethrough():
     # render literal single-tilde markers in markdown mode.
     assert "before removed after" in rendered
     assert "~removed~" not in rendered
+
+
+def test_markdown_notes_only_convert_bounded_single_tilde_strikethrough():
+    sessions = [
+        {
+            "id": 5,
+            "project": "Project A",
+            "subprojects": [],
+            "start_time": "2026-01-01T10:00:00",
+            "end_time": "2026-01-01T11:00:00",
+            "duration_minutes": 60,
+            "note": "keep a~b~c and ~ spaced ~ but convert ~removed~.",
+        }
+    ]
+
+    with _plain_console.capture() as capture:
+        for item in render_sessions_list(sessions, markdown_notes=True):
+            _plain_console.print(item)
+    rendered = capture.get()
+
+    assert "a~b~c" in rendered
+    assert "~ spaced ~" in rendered
+    assert "convert removed." in rendered
+    assert "~removed~" not in rendered
