@@ -99,10 +99,10 @@ autumn
 | | `autumn stop` | Stop timer | `-p`, `-i`, `-n` |
 | | `autumn restart` | Reset start time to now | `-p`, `-i` |
 | | `autumn resume` | Resume last project | `--stop-current` |
-| **Logs** | `autumn log` | List sessions (saved) | `-P month`, `-p`, `-t`, `-c`, `--pick` |
-| | `autumn log search` | Advanced search | `--note-snippet`, `--start-date` |
+| **Logs** | `autumn log` | List sessions (saved) | `-P month`, `-p`, `-x`, `-t`, `-c`, `--pick` |
+| | `autumn log search` | Advanced search | `--note-snippet`, `--start-date`, `-x` |
 | | `autumn track` | Manually log a session | `--start`, `--end`, `-n` |
-| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-t`, `-d`, `--search` |
+| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-x`, `-t`, `-d`, `--search` |
 | | `autumn project` | Show single project details | `<name>`, `--pick` |
 | | `autumn subprojects` | List subprojects for a project | `<project>`, `-d`, `--search` |
 | | `autumn new` | Create project or subproject | `-s`, `-d`, `--pick` |
@@ -114,7 +114,7 @@ autumn
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
 | **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `--stdout` |
-| | `autumn audit` | Recompute project totals | — |
+| | `autumn audit` | Recompute project totals | `--dry-run` |
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
 | **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
@@ -180,6 +180,12 @@ Filter by period, project, or tags:
 autumn log -P month -p "AutumnWeb" -t "Feature"
 ```
 
+Exclude one or more projects from logs:
+```bash
+autumn log -P month -x "Admin" -x "Meta"
+autumn log search --start-date 2026-01-01 --exclude "Admin"
+```
+
 *Note: Short flag `-P` is for **Period**, and `-p` is for **Project**.*
 
 ### Projects & Subprojects
@@ -189,6 +195,7 @@ List all projects:
 autumn projects
 autumn p            # Alias
 autumn projects -d  # Show descriptions
+autumn projects -x "Admin" -x "Meta"  # Exclude projects
 ```
 
 List subprojects for a specific project:
@@ -239,6 +246,7 @@ Shows: status, total time, session count, average session duration, context, tag
 ```bash
 autumn projects --search "web"              # Search by name
 autumn projects --search "api" -S all       # Search across all statuses
+autumn projects --search "api" -x "Admin"   # Search while excluding projects
 autumn subprojects "My Project" --search "frontend"
 ```
 
@@ -287,9 +295,12 @@ autumn config set export.default_dir "~/backups"
 **Audit/recompute totals:**
 ```bash
 autumn audit
+autumn audit --dry-run
 ```
 
 This recalculates all project and subproject totals from session data. Useful after imports or if totals seem incorrect.
+
+`--dry-run` previews what would change without saving anything. When the backend reports changed rows, the CLI prints the affected projects and subprojects with `before -> after` totals and the delta.
 
 ### Interactive Selection
 
