@@ -115,6 +115,21 @@ class TestDeleteSubproject:
             assert result["project"] == "MyProject"
 
 
+class TestDeleteSession:
+    def test_delete_session_returns_ok_on_204(self, mock_client):
+        with patch("requests.request") as mock_req:
+            mock_response = MagicMock()
+            mock_response.status_code = 204
+            mock_response.content = b""
+            mock_response.raise_for_status = MagicMock()
+            mock_req.return_value = mock_response
+
+            result = mock_client.delete_session(123)
+
+            assert result["ok"] is True
+            assert result["deleted"] == 123
+
+
 class TestExportData:
     def test_export_data_sends_correct_payload(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
@@ -166,6 +181,99 @@ class TestAuditTotals:
             mock_req.assert_called_once_with("POST", "/api/audit/")
             assert result["ok"] is True
             assert result["projects"]["changed"] == 1
+
+    def test_audit_totals_dry_run_sends_payload(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"ok": True, "dry_run": True}
+
+            result = mock_client.audit_totals(dry_run=True)
+
+            mock_req.assert_called_once_with(
+                "POST", "/api/audit/", json={"dry_run": True}
+            )
+            assert result["dry_run"] is True
+
+
+class TestExcludeFilters:
+    def test_log_activity_sends_exclude_param(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"logs": []}
+
+            mock_client.log_activity(exclude=["Admin", "Meta"])
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/log/",
+                params={"compact": "false", "exclude": "Admin,Meta"},
+            )
+
+    def test_search_sessions_sends_exclude_param(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"sessions": []}
+
+            mock_client.search_sessions(exclude=["Admin"])
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/sessions/search/",
+                params={"exclude": "Admin", "compact": "false"},
+            )
+
+    def test_list_projects_grouped_sends_exclude_param(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"projects": {}}
+
+            mock_client.list_projects_grouped(exclude=["Admin"])
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/projects/grouped/",
+                params={"compact": "false", "exclude": "Admin"},
+            )
+
+    def test_list_sessions_sends_exclude_param(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = []
+
+            mock_client.list_sessions(exclude=["Admin"])
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/list_sessions/",
+                params={"compact": "false", "exclude": "Admin"},
+            )
+
+
+class TestChartDateParams:
+    def test_tally_by_context_uses_legacy_chart_date_format(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = []
+
+            mock_client.tally_by_context(
+                start_date="2026-01-15",
+                end_date="2026-01-31",
+            )
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/tally_by_context/",
+                params={"start_date": "01-15-2026", "end_date": "01-31-2026"},
+            )
+
+    def test_get_hierarchy_uses_legacy_chart_date_format(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {}
+
+            mock_client.get_hierarchy(
+                start_date="2026-01-15",
+                end_date="2026-01-31",
+            )
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/hierarchy/",
+                params={"start_date": "01-15-2026", "end_date": "01-31-2026"},
+            )
 
 
 class TestGetProjectTotals:

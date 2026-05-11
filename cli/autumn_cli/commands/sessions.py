@@ -28,6 +28,21 @@ def _format_session_id_line(session_id: Optional[int]) -> str:
     return f"Session ID: #[autumn.id]{session_id}[/]"
 
 
+def _resolve_excluded_projects(client: APIClient, exclude: tuple) -> Optional[list[str]]:
+    if not exclude:
+        return None
+
+    projects_meta = client.get_discovery_projects()
+    known_projects = projects_meta.get("projects", [])
+    resolved = []
+    for project in exclude:
+        proj_res = resolve_project_param(project=project, projects=known_projects)
+        if proj_res.warning:
+            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+        resolved.append(proj_res.value or project)
+    return resolved
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.option(
@@ -41,6 +56,7 @@ def _format_session_id_line(session_id: Optional[int]) -> str:
     help="Time period (default: week)",
 )
 @click.option("--project", "-p", help="Filter by project name")
+@click.option("--exclude", "-x", multiple=True, help="Exclude project by name (repeatable)")
 @click.option("--context", "-c", help="Filter by context (name or id)")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
@@ -60,6 +76,7 @@ def log(
     ctx: click.Context,
     period: Optional[str],
     project: Optional[str],
+    exclude: tuple,
     context: Optional[str],
     tag: tuple,
     start_date: Optional[str],
@@ -107,6 +124,7 @@ def log(
                 if proj_res.warning:
                     console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
                 resolved_project = proj_res.value or project
+            excluded_projects = _resolve_excluded_projects(client, exclude)
 
             # Normalize period to a consistent trailing window.
             # Server interprets period=week as "since Monday"; we want "last 7 days".
@@ -124,6 +142,7 @@ def log(
                     end_date=None,
                     context=resolved_context,
                     tags=resolved_tags,
+                    exclude=excluded_projects,
                 )
             else:
                 # For custom periods (fortnight/lunar cycle/quarter/year) or explicit dates,
@@ -146,6 +165,7 @@ def log(
                         end_date=None,
                         context=resolved_context,
                         tags=resolved_tags,
+                        exclude=excluded_projects,
                     )
                 else:
                     result = client.log_activity(
@@ -155,6 +175,7 @@ def log(
                         end_date=calculated_end_date,
                         context=resolved_context,
                         tags=resolved_tags,
+                        exclude=excluded_projects,
                     )
 
             logs = result.get("logs", [])
@@ -178,6 +199,7 @@ def log(
 
 @log.command("search")
 @click.option("--project", "-p", help="Filter by project name")
+@click.option("--exclude", "-x", multiple=True, help="Exclude project by name (repeatable)")
 @click.option("--context", "-c", help="Filter by context (name or id)")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
@@ -199,6 +221,7 @@ def log(
 )
 def log_search(
     project: Optional[str],
+    exclude: tuple,
     context: Optional[str],
     tag: tuple,
     start_date: Optional[str],
@@ -248,6 +271,7 @@ def log_search(
             if proj_res.warning:
                 console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
             resolved_project = proj_res.value or project
+        excluded_projects = _resolve_excluded_projects(client, exclude)
 
         result = client.search_sessions(
             project=resolved_project,
@@ -259,6 +283,7 @@ def log_search(
             offset=offset,
             context=resolved_context,
             tags=resolved_tags,
+            exclude=excluded_projects,
         )
 
         sessions_list = result.get("sessions", [])
@@ -530,4 +555,37 @@ def edit_session(
         raise click.Abort()
     except ValueError as e:
         console.print(f"[autumn.err]Error:[/] Invalid date format - {e}")
+        raise click.Abort()
+
+
+@click.command("delete-session")
+@click.argument("session_id", type=int)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def delete_session(session_id: int, yes: bool):
+    """Delete a completed/saved session log by ID.
+
+    This is for saved session logs. To discard an active timer, use
+    `autumn delete --session-id <id>`.
+    """
+    try:
+        if not yes and not click.confirm(
+            f"Delete saved session #{session_id}? This cannot be undone."
+        ):
+            console.print("[autumn.muted]Cancelled.[/]")
+            return
+
+        client = APIClient()
+        result = client.delete_session(session_id)
+
+        if result.get("ok", True):
+            deleted_id = result.get("deleted", session_id)
+            console.print(
+                f"[autumn.warn]Session deleted[/] (Session ID: {deleted_id})",
+                highlight=True,
+            )
+        else:
+            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.Abort()
+    except APIError as e:
+        console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()

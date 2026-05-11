@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from autumn_cli.commands.sessions import log, track
+from autumn_cli.commands.sessions import delete_session, log, track
+from autumn_cli.commands.meta import meta_audit
 from autumn_cli.commands.timer import start, stop, status
 
 
@@ -81,6 +82,7 @@ class _LogClient:
         end_date=None,
         context=None,
         tags=None,
+        exclude=None,
     ):
         return {
             "count": 1,
@@ -93,6 +95,40 @@ class _LogClient:
                     "end_time": "2026-01-01T10:30:00",
                     "duration_minutes": 30,
                     "note": "Breakfast",
+                }
+            ],
+        }
+
+
+class _DeleteSessionClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def delete_session(self, session_id):
+        return {"ok": True, "deleted": session_id}
+
+
+class _AuditClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def audit_totals(self, dry_run=False):
+        return {
+            "ok": True,
+            "dry_run": dry_run,
+            "projects": {"count": 3, "changed": 1, "delta": 9.0},
+            "subprojects": {"count": 5, "changed": 2, "delta": -3.5},
+            "changed_projects": [
+                {"id": 1, "name": "Autumn", "before": 10.0, "after": 19.0, "delta": 9.0}
+            ],
+            "changed_subprojects": [
+                {
+                    "id": 2,
+                    "name": "CLI",
+                    "project": "Autumn",
+                    "before": 5.0,
+                    "after": 1.5,
+                    "delta": -3.5,
                 }
             ],
         }
@@ -201,3 +237,65 @@ def test_log_output_can_show_session_ids(monkeypatch):
     result = runner.invoke(log, ["--raw", "--show-ids"])
     assert result.exit_code == 0
     assert any("#404" in line for line in printed)
+
+
+def test_delete_session_output_uses_session_id(monkeypatch):
+    printed = []
+
+    monkeypatch.setattr("autumn_cli.commands.sessions.APIClient", _DeleteSessionClient)
+    monkeypatch.setattr(
+        "autumn_cli.commands.sessions.console.print",
+        lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(delete_session, ["404", "--yes"])
+    assert result.exit_code == 0
+    assert any("Session deleted" in line for line in printed)
+    assert any("Session ID: 404" in line for line in printed)
+
+
+def test_audit_output_uses_delta_key_from_api_docs(monkeypatch):
+    printed = []
+
+    monkeypatch.setattr("autumn_cli.commands.meta.APIClient", _AuditClient)
+    monkeypatch.setattr("autumn_cli.commands.meta.clear_cached_projects", lambda: None)
+    monkeypatch.setattr("autumn_cli.commands.meta.clear_cached_activity", lambda: None)
+    monkeypatch.setattr(
+        "autumn_cli.commands.meta.console.print",
+        lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(meta_audit, [])
+    assert result.exit_code == 0
+    assert any("delta: +9.0 min" in line for line in printed)
+    assert any("delta: -3.5 min" in line for line in printed)
+    assert any("Autumn" in line and "10.0 -> 19.0" in line for line in printed)
+    assert any("CLI" in line and "5.0 -> 1.5" in line for line in printed)
+
+
+def test_audit_dry_run_labels_preview(monkeypatch):
+    printed = []
+    cleared = {"projects": 0, "activity": 0}
+
+    monkeypatch.setattr("autumn_cli.commands.meta.APIClient", _AuditClient)
+    monkeypatch.setattr(
+        "autumn_cli.commands.meta.clear_cached_projects",
+        lambda: cleared.__setitem__("projects", cleared["projects"] + 1),
+    )
+    monkeypatch.setattr(
+        "autumn_cli.commands.meta.clear_cached_activity",
+        lambda: cleared.__setitem__("activity", cleared["activity"] + 1),
+    )
+    monkeypatch.setattr(
+        "autumn_cli.commands.meta.console.print",
+        lambda *args, **kwargs: printed.append(" ".join(str(a) for a in args)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(meta_audit, ["--dry-run"])
+    assert result.exit_code == 0
+    assert any("Audit preview complete" in line for line in printed)
+    assert any("Dry run only" in line for line in printed)
+    assert cleared == {"projects": 0, "activity": 0}

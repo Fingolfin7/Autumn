@@ -9,6 +9,21 @@ from ..utils.console import console
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
 
 
+def _resolve_excluded_projects(client: APIClient, exclude: tuple) -> Optional[list[str]]:
+    if not exclude:
+        return None
+
+    projects_meta = client.get_discovery_projects()
+    known_projects = projects_meta.get("projects", [])
+    resolved = []
+    for project in exclude:
+        proj_res = resolve_project_param(project=project, projects=known_projects)
+        if proj_res.warning:
+            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
+        resolved.append(proj_res.value or project)
+    return resolved
+
+
 @click.command()
 @click.option(
     "--status",
@@ -19,6 +34,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve
     help="Filter by status (use `all` to show every type)",
 )
 @click.option("--context", "-c", help="Filter by context name")
+@click.option("--exclude", "-x", multiple=True, help="Exclude project by name (repeatable)")
 @click.option(
     "--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)"
 )
@@ -32,6 +48,7 @@ from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve
 def projects_list(
     status: Optional[str],
     context: Optional[str],
+    exclude: tuple,
     tag: tuple,
     start_date: Optional[str],
     end_date: Optional[str],
@@ -43,12 +60,21 @@ def projects_list(
 
     try:
         client = APIClient()
+        excluded_projects = _resolve_excluded_projects(client, exclude)
 
         # If search is provided, use the search endpoint instead
         if search:
             # When searching, status filter is optional (pass None for "all")
             search_status = None if status == "all" else status
-            result = client.search_projects(search, status=search_status)
+            if excluded_projects:
+                result = client.list_projects_flat(
+                    status=search_status,
+                    search=search,
+                    exclude=excluded_projects,
+                    compact=False,
+                )
+            else:
+                result = client.search_projects(search, status=search_status)
             if isinstance(result, list):
                 projects = result
             else:
@@ -112,6 +138,7 @@ def projects_list(
             end_date=end_date,
             context=ctx_res.value,
             tags=tag_resolved or None,
+            exclude=excluded_projects,
         )
 
         projects_data = result.get("projects", {})

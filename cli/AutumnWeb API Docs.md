@@ -9,6 +9,7 @@ All endpoints below live under `/api/` and use Django REST Framework with `IsAut
   - `Content-Type: application/json`
 - Datetimes are returned as ISO 8601 strings (`.isoformat()`).
 - **Durations are minutes** (float, typically rounded to 4 decimals).
+- Session payloads include `crosses_dst_transition` (boolean) for completed sessions that span a DST offset change in the server timezone.
 
 ---
 
@@ -46,6 +47,15 @@ There are two tag-filter paths:
   - tag **names** (CLI)
 
 Some endpoints apply both filters; `.distinct()` is used to prevent duplicates.
+
+### 5) Exclude filtering
+Many list endpoints support an `exclude` query param to remove specific projects from results:
+
+- `exclude` accepts project **names** as a comma-separated string or list (e.g. `?exclude=ProjectA,ProjectB`)
+- For project endpoints: excludes projects matching those names
+- For session endpoints: excludes sessions belonging to those projects
+- Names are validated against the current user's projects (no cross-user leakage)
+- The web UI uses `exclude_projects` (project IDs via multi-select checkboxes); the API uses `exclude` (project names, consistent with how tags work)
 
 ---
 
@@ -86,6 +96,7 @@ Response:
     "end": null,
     "active": true,
     "elapsed": 0.0,
+    "crosses_dst_transition": false,
     "note": "optional"
   }
 }
@@ -245,6 +256,7 @@ A) Direct start/end
 start/end are parsed by parse_date_or_datetime, which accepts:
 
 
+- ISO-8601 datetimes (for example `2026-01-15T09:00:00Z` or `2026-01-15T09:00:00+01:00`)
 - %m-%d-%Y
 
 - %m-%d-%Y %H:%M:%S
@@ -290,6 +302,8 @@ Query:
 
 - tags (optional; treated as tag names by _apply_tag_filters)
 
+- exclude (optional; comma-separated project names to exclude from results)
+
 - compact=true|false
 
 Compact response:
@@ -334,6 +348,7 @@ Query:
 - `status`: filter by status (active, paused, complete, archived) - optional
 - `context`: filter by context id or name - optional
 - `tags`: filter by tag names (comma-separated) - optional
+- `exclude`: exclude projects by name (comma-separated) - optional
 - `search`: search by name (icontains) - optional
 - `compact=true|false` (default true)
 
@@ -399,6 +414,34 @@ Non-compact response includes stats and parent project ID:
   ]
 }
 ```
+
+## 9b) Search subprojects
+
+**GET** `/api/search_subprojects/`
+
+Query:
+
+- `project_name` or `project`: parent project name
+- `search_term`: optional substring to match
+
+Response 200 OK:
+
+```json
+[
+  {
+    "id": 1,
+    "user": 1,
+    "name": "A",
+    "description": "...",
+    "total_time": 750.0,
+    "parent_project": 42,
+    "start_date": "...",
+    "last_updated": "..."
+  }
+]
+```
+
+If no subproject matches the search term, the endpoint falls back to returning all subprojects for the parent project.
 
 ## 10) Totals (project + subproject totals)
 
@@ -703,6 +746,7 @@ Notes:
 - Returns the new session object with a **new ID**
 - If changing project, subprojects must exist under the new project
 - If `subprojects` is not provided, existing subprojects are preserved (if valid for the project)
+- Missing, invalid, or non-positive session IDs return structured JSON errors, e.g. `{"ok": false, "error": "Session not found"}`.
 
 Response 200 OK:
 
@@ -727,15 +771,42 @@ Response 200 OK:
 
 **POST** `/api/audit/`
 
-Recomputes and persists totals for all of the authenticated user's projects and subprojects using `audit_total_time(log=False)`.
+Recomputes totals for all of the authenticated user's projects and subprojects from completed sessions.
+
+Body:
+
+```json
+{ "dry_run": true }
+```
+
+Behavior:
+
+- `dry_run=true` previews the audit and reports exactly what would change without saving anything.
+- `dry_run=false` or omitted persists the recomputed `total_time` values.
+- Changed rows are returned in `changed_projects` and `changed_subprojects`, including `before`, `after`, and `delta`.
 
 Response 200 OK:
 
 ```json
 {
   "ok": true,
-  "projects": {"count": 3, "changed": 1, "delta_total": 9.0},
-  "subprojects": {"count": 5, "changed": 2, "delta_total": 18.0}
+  "dry_run": true,
+  "projects": {"count": 3, "changed": 1, "delta": 9.0},
+  "changed_projects": [
+    {"id": 120, "name": "Example", "before": 100.0, "after": 109.0, "delta": 9.0}
+  ],
+  "subprojects": {"count": 5, "changed": 2, "delta": 18.0},
+  "changed_subprojects": [
+    {
+      "id": 300,
+      "name": "Research",
+      "project_id": 120,
+      "project": "Example",
+      "before": 10.0,
+      "after": 19.0,
+      "delta": 9.0
+    }
+  ]
 }
 ```
 
@@ -750,7 +821,7 @@ These remain available and are used by older clients. Some are thin wrappers aro
 Projects
 
 
-- POST /api/create_project/
+- POST /api/create_project/ (infers `user` from the authenticated request; clients should not send a `user` field)
 
 - GET /api/list_projects/ (optional start_date, end_date, context)
 
@@ -767,7 +838,7 @@ Subprojects
 
 - GET /api/list_subprojects/<project_name>/ and /api/list_subprojects/?project_name=...
 
-- GET /api/search_subprojects/?project_name=...&search_term=...
+- GET /api/search_subprojects/?project_name=...&search_term=... (also accepts `project=...`)
 
 - DELETE /api/delete_subproject/<project_name>/<subproject_name>/
 
@@ -788,11 +859,11 @@ Shimmed onto the new compact endpoints:
 Direct:
 
 
-- GET /api/list_sessions/ (completed sessions)
+- GET /api/list_sessions/ (completed sessions; supports `exclude` param to exclude projects by name)
 
 - GET /api/list_active_sessions/
 
-- DELETE /api/delete_session/<int:session_id>/
+- DELETE /api/delete_session/<session_id>/ (missing, invalid, or non-positive IDs return structured JSON errors)
 
 Tallies
 
@@ -933,6 +1004,8 @@ Response 200 OK:
   {
     "name": "Project A",
     "total_time": 12000.0,
+    "computed_total_time": 12000.0,
+    "persisted_total_time": 11950.0,
     "session_count": 45,
     "subproject_count": 3,
     "days_since_update": 2,
@@ -941,6 +1014,8 @@ Response 200 OK:
   {
     "name": "Project B",
     "total_time": 8000.0,
+    "computed_total_time": 8000.0,
+    "persisted_total_time": 8000.0,
     "session_count": 30,
     "subproject_count": 1,
     "days_since_update": 7,
@@ -949,7 +1024,12 @@ Response 200 OK:
 ]
 ```
 
-Note: `total_time` is in **minutes**.
+Notes:
+
+- `total_time` is in **minutes** and remains the live/computed value for backwards compatibility.
+- `computed_total_time` is calculated from completed sessions at request time.
+- `persisted_total_time` is the saved `Projects.total_time` value that `/api/audit/` can repair.
+- If `computed_total_time` and `persisted_total_time` differ, persisted totals are stale while session-derived chart totals are already correct.
 
 ---
 

@@ -2,6 +2,7 @@
 
 import json
 import requests
+from datetime import datetime
 from typing import Optional, Dict, List, Any
 from .config import get_api_key, get_base_url
 
@@ -51,6 +52,15 @@ class APIClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+
+    def _chart_date_param(self, value: Optional[str]) -> Optional[str]:
+        """Normalize chart-only legacy date params to MM-DD-YYYY."""
+        if not value:
+            return value
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").strftime("%m-%d-%Y")
+        except ValueError:
+            return value
 
     def _request(
         self,
@@ -352,6 +362,7 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        exclude: Optional[List[str]] = None,
     ) -> Dict:
         """Get activity logs."""
         params = {"compact": "false"}
@@ -367,6 +378,8 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
+        if exclude:
+            params["exclude"] = ",".join(exclude)
         return self._request("GET", "/api/log/", params=params)
 
     def search_sessions(
@@ -380,6 +393,7 @@ class APIClient:
         offset: Optional[int] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        exclude: Optional[List[str]] = None,
     ) -> Dict:
         """Search sessions."""
         params = {}
@@ -401,6 +415,8 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
+        if exclude:
+            params["exclude"] = ",".join(exclude)
 
         params["compact"] = "false" # make sure to get full session data and session notes
 
@@ -434,6 +450,7 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        exclude: Optional[List[str]] = None,
     ) -> Dict:
         """List projects grouped by status."""
         params = {"compact": "false"}  # Request full project metadata
@@ -445,6 +462,8 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
+        if exclude:
+            params["exclude"] = ",".join(exclude)
         return self._request("GET", "/api/projects/grouped/", params=params)
 
     def create_project(self, name: str, description: Optional[str] = None) -> Dict:
@@ -512,6 +531,7 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        exclude: Optional[List[str]] = None,
     ) -> List[Dict]:
         """List sessions (for charts)."""
         params = {"compact": "false"}
@@ -525,6 +545,8 @@ class APIClient:
             params["context"] = context
         if tags:
             params["tags"] = ",".join(tags)
+        if exclude:
+            params["exclude"] = ",".join(exclude)
         return self._request("GET", "/api/list_sessions/", params=params)
 
     def list_contexts(self, compact: bool = True) -> Dict:
@@ -737,8 +759,10 @@ class APIClient:
 
     # Audit
 
-    def audit_totals(self) -> Dict:
+    def audit_totals(self, dry_run: bool = False) -> Dict:
         """Recompute and persist totals for all projects and subprojects."""
+        if dry_run:
+            return self._request("POST", "/api/audit/", json={"dry_run": True})
         return self._request("POST", "/api/audit/")
 
     # Project details and search
@@ -815,6 +839,7 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
         search: Optional[str] = None,
+        exclude: Optional[List[str]] = None,
         compact: bool = True,
     ) -> Dict:
         """List projects as a flat (ungrouped) list with optional filters."""
@@ -827,6 +852,8 @@ class APIClient:
             params["tags"] = ",".join(tags)
         if search:
             params["search"] = search
+        if exclude:
+            params["exclude"] = ",".join(exclude)
         return self._request("GET", "/api/projects/", params=params)
 
     def edit_session(
@@ -855,6 +882,32 @@ class APIClient:
         params = {"compact": str(compact).lower()}
         return self._request("PATCH", f"/api/session/{session_id}/", params=params, json=data)
 
+    def delete_session(self, session_id: int) -> Dict:
+        """Delete a completed/saved session by ID."""
+        endpoint = f"/api/delete_session/{session_id}/"
+        url = f"{self.base_url}{endpoint}"
+        try:
+            response = requests.request(
+                method="DELETE",
+                url=url,
+                headers=self._headers(),
+                timeout=30,
+                verify=self._verify,
+            )
+            response.raise_for_status()
+            if response.status_code == 204 or not response.content:
+                return {"ok": True, "deleted": session_id}
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_data = response.json() if response is not None else {}
+                error_msg = error_data.get("error", str(e))
+                raise APIError(f"API error: {error_msg}")
+            except APIError:
+                raise
+            except (json.JSONDecodeError, ValueError, KeyError):
+                raise APIError(f"API error: {e}")
+
     # Chart data endpoints
 
     def tally_by_context(
@@ -865,9 +918,9 @@ class APIClient:
         """Get time totals aggregated by context."""
         params = {}
         if start_date:
-            params["start_date"] = start_date
+            params["start_date"] = self._chart_date_param(start_date)
         if end_date:
-            params["end_date"] = end_date
+            params["end_date"] = self._chart_date_param(end_date)
         return self._request("GET", "/api/tally_by_context/", params=params)
 
     def tally_by_status(
@@ -892,9 +945,9 @@ class APIClient:
         """Get nested Context → Project → Subproject hierarchy with time totals."""
         params = {}
         if start_date:
-            params["start_date"] = start_date
+            params["start_date"] = self._chart_date_param(start_date)
         if end_date:
-            params["end_date"] = end_date
+            params["end_date"] = self._chart_date_param(end_date)
         return self._request("GET", "/api/hierarchy/", params=params)
 
     def get_projects_with_stats(
