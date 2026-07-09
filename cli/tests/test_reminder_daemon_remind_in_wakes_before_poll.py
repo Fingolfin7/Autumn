@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import types
+from datetime import datetime, timedelta
 
 
 def test_reminder_daemon_remind_in_wakes_before_poll(monkeypatch):
@@ -34,7 +35,7 @@ def test_reminder_daemon_remind_in_wakes_before_poll(monkeypatch):
     monkeypatch.setattr(rd, "sleep_seconds", fake_sleep)
 
     # APIClient isn't used because _is_session_active is patched.
-    monkeypatch.setattr(rd, "APIClient", lambda: object())
+    monkeypatch.setattr(rd, "APIClient", lambda quiet=False: object())
 
     # Run: remind-in=5s, poll=30s → should sleep 5s first, send notification once, then exit.
     rd.main.callback(
@@ -52,3 +53,49 @@ def test_reminder_daemon_remind_in_wakes_before_poll(monkeypatch):
     assert calls["notify"] == 1
     assert calls["slept"], "daemon should have slept at least once"
     assert calls["slept"][0] == 5, "daemon should wake to fire remind-in before poll interval"
+
+
+def test_reminder_daemon_auto_stop_notifies_without_stopping_inactive_session(monkeypatch):
+    from autumn_cli.commands import reminder_daemon as rd
+
+    calls = {"notify": 0, "stop": 0}
+
+    class _Client:
+        def get_timer_status(self, session_id=None, project=None):
+            return {"ok": True, "session": {"id": 1, "active": False}}
+
+        def stop_timer(self, session_id=None, project=None, note=None):
+            calls["stop"] += 1
+
+    monkeypatch.setattr(rd, "APIClient", lambda quiet=False: _Client())
+    monkeypatch.setattr(rd, "sleep_seconds", lambda seconds: None)
+    monkeypatch.setattr(rd, "_log_to_file", lambda message: None)
+
+    class _Clock:
+        current = datetime.now()
+
+        @classmethod
+        def now(cls):
+            cls.current += timedelta(seconds=1)
+            return cls.current
+
+    monkeypatch.setattr(rd, "datetime", _Clock)
+    monkeypatch.setattr(
+        rd,
+        "send_notification",
+        lambda **kwargs: calls.__setitem__("notify", calls["notify"] + 1),
+    )
+
+    rd.main.callback(
+        session_id=1,
+        project="p",
+        notify_title="Autumn",
+        remind_in=None,
+        remind_every=None,
+        for_="1s",
+        remind_message="Timer running: {project} ({elapsed})",
+        remind_poll="30s",
+        quiet=True,
+    )
+
+    assert calls == {"notify": 1, "stop": 0}

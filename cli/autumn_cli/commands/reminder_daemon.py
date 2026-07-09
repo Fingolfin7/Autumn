@@ -6,7 +6,7 @@ We keep it dependency-free and portable:
 - Spawned via the current Python interpreter
 - Communicates only via stdout/stderr (optional)
 
-It polls timer status and optionally stops the timer after a duration.
+It polls timer status and sends reminders, including an auto-stop notification.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from ..utils.notify import send_notification
 from ..utils.formatters import format_duration_minutes
 from ..utils.scheduler import sleep_seconds
 from ..utils.reminders_registry import update_next_fire_at
+from ..utils.auto_stop import session_still_active_after_auto_stop
 
 
 DAEMON_LOG = CONFIG_DIR / "daemon.log"
@@ -218,7 +219,7 @@ def main(
     if plan.poll_seconds < 5:
         raise click.ClickException("--remind-poll must be >= 5s")
 
-    client = APIClient()
+    client = APIClient(quiet=True)
 
     # Schedule bookkeeping
     start_time = datetime.now()
@@ -263,28 +264,33 @@ def main(
         while True:
             now = datetime.now()
 
-            if plan.session_id is not None and not _is_session_active(
-                client, plan.session_id
-            ):
-                log("session ended; exiting")
-                update_next_fire_at(os.getpid(), None, status="completed")
-                return
-
-            # Auto-stop
+            # Auto-stop notification. The server owns the actual auto-stop;
+            # status polling below also triggers its lazy expiry handling.
             if stop_at_dt is not None and now >= stop_at_dt:
                 log("auto-stop triggered")
                 update_next_fire_at(
                     os.getpid(), stop_at_dt.isoformat(), status="firing"
                 )
-                try:
-                    client.stop_timer(session_id=plan.session_id, note=None)
-                except Exception as e:
-                    log(f"auto-stop failed: {e}")
+                if session_still_active_after_auto_stop(
+                    client, plan.session_id, sleep=sleep_seconds
+                ):
+                    try:
+                        client.stop_timer(session_id=plan.session_id, note=None)
+                        log("server auto-stop fallback sent")
+                    except Exception as e:
+                        log(f"auto-stop fallback failed: {e}")
                 send_notification(
                     title=plan.notify_title,
                     message=f"Auto-stopped timer: {plan.project}",
                 )
                 log("auto-stopped; exiting")
+                update_next_fire_at(os.getpid(), None, status="completed")
+                return
+
+            if plan.session_id is not None and not _is_session_active(
+                client, plan.session_id
+            ):
+                log("session ended; exiting")
                 update_next_fire_at(os.getpid(), None, status="completed")
                 return
 

@@ -73,9 +73,11 @@ cli/
 
 ## Key Patterns
 
-**Configuration:** YAML at `~/.autumn/config.yaml` with dotted-path access. Environment variables (`AUTUMN_API_KEY`, `AUTUMN_API_BASE`, `AUTUMN_INSECURE`) take precedence.
+**Configuration:** YAML at `~/.autumn/config.yaml` with dotted-path access. Environment variables (`AUTUMN_API_KEY`, `AUTUMN_API_BASE`, `AUTUMN_INSECURE`, `AUTUMN_WAKE_RETRY`, `AUTUMN_WAKE_TIMEOUT_SECONDS`) take precedence. `wake_retry` defaults to `true`; `wake_timeout_seconds` defaults to `120`.
 
-**API Client:** RESTful client with TTL-based caching for metadata (projects, contexts, tags, user info).
+**API Client:** RESTful client with TTL-based caching for metadata (projects, contexts, tags, user info). On wake-trigger responses, it can poll `/healthz/` with backoff and retry the original request.
+
+**Command modules:** `commitments.py` owns recurring-goal commands; `import_cmd.py` imports export JSON or compressed exports; `meta.py` manages contexts and tags; and `projects.py` includes project metadata editing.
 
 **Background Reminders:** Spawned as detached processes with JSON registry for persistence at `~/.autumn/reminders.json`.
 

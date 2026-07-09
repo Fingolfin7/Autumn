@@ -297,9 +297,23 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
 
         subs_bracket = _format_subs_bracketed(subs)
 
+        stop_at_raw = s.get("stop_at") or s.get("auto_stop_at")
+        auto_stop_info = ""
+        stop_at = _parse_iso(stop_at_raw) if stop_at_raw else None
+        if stop_at is not None:
+            remaining_seconds = (stop_at - datetime.now(stop_at.tzinfo)).total_seconds()
+            if remaining_seconds <= 0:
+                auto_stop_info = " [autumn.muted]\u00b7 stopping...[/]"
+            else:
+                remaining_minutes = max(1, int((remaining_seconds + 59) // 60))
+                auto_stop_info = (
+                    " [autumn.muted]\u00b7 auto-stops in [/]"
+                    f"[autumn.duration]{remaining_minutes}m[/]"
+                )
+
         lines.append(
             f"Started [autumn.project]{project}[/] {subs_bracket}, "
-            f"[autumn.duration]{dur_str}[/] ago{sid_suffix}"
+            f"[autumn.duration]{dur_str}[/] ago{auto_stop_info}{sid_suffix}"
         )
 
     return "\n".join(lines)

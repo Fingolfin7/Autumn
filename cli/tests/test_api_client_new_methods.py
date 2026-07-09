@@ -167,6 +167,33 @@ class TestExportData:
             )
 
 
+class TestImportData:
+    def test_import_data_sends_correct_payload(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"ok": True, "summary": {}}
+
+            mock_client.import_data(
+                data={"Project A": {}},
+                force=True,
+                tolerance=5,
+                autumn_import=True,
+                context="Work",
+            )
+
+            mock_req.assert_called_once_with(
+                "POST",
+                "/api/import/",
+                json={
+                    "data": {"Project A": {}},
+                    "force": True,
+                    "merge": False,
+                    "tolerance": 5,
+                    "autumn_import": True,
+                    "context": "Work",
+                },
+            )
+
+
 class TestAuditTotals:
     def test_audit_totals_calls_correct_endpoint(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
@@ -192,6 +219,19 @@ class TestAuditTotals:
                 "POST", "/api/audit/", json={"dry_run": True}
             )
             assert result["dry_run"] is True
+
+
+class TestStartTimer:
+    def test_start_timer_sends_stop_after_when_provided(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"ok": True}
+
+            mock_client.start_timer("MyProject", stop_after="25m")
+
+            mock_req.assert_called_once_with(
+                "POST", "/api/timer/start/",
+                json={"project": "MyProject", "stop_after": "25m"},
+            )
 
 
 class TestExcludeFilters:

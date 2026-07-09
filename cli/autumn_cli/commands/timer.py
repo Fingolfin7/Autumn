@@ -1,17 +1,19 @@
 """Timer commands for Autumn CLI."""
 
 import click
+from datetime import datetime
 from typing import Optional
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console
-from ..utils.formatters import format_duration_minutes
+from ..utils.formatters import format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import render_active_timers_list
 from ..utils.duration_parse import parse_duration_to_seconds
 from ..utils.datetime_parse import parse_user_datetime
 from ..utils.notify import send_notification
 from ..utils.scheduler import schedule_in, schedule_every, sleep_seconds
 from ..utils.reminder_spawner import spawn_reminder
+from ..utils.auto_stop import session_still_active_after_auto_stop
 from ..utils.reminders_registry import add_entry
 from ..utils.resolvers import resolve_project_param, resolve_subproject_params
 
@@ -33,12 +35,28 @@ def _format_session_id_line(session_id: Optional[int]) -> str:
     return f"Session ID: #[autumn.id]{session_id}[/]"
 
 
+def _print_auto_stop_line(session: dict) -> None:
+    """Print server-provided auto-stop timing in the local timezone."""
+    stop_at_raw = session.get("stop_at") or session.get("auto_stop_at")
+    stop_at = parse_utc_to_local(stop_at_raw) if stop_at_raw else None
+    if stop_at is None:
+        return
+
+    remaining_seconds = (stop_at - datetime.now(stop_at.tzinfo)).total_seconds()
+    remaining_minutes = max(0, int((remaining_seconds + 59) // 60))
+    remaining = f"{remaining_minutes}m" if remaining_minutes else "now"
+    console.print(
+        f"[autumn.label]Auto-stops at[/] [autumn.time]{stop_at:%H:%M}[/] "
+        f"[autumn.muted](in [autumn.duration]{remaining}[/])[/]"
+    )
+
+
 
 @click.command()
 @click.argument("project", required=False)
 @click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option("--note", "-n", help="Note for the session")
-@click.option("--for", "for_", help="Auto-stop after a duration (e.g. 25m, 1h30m)")
+@click.option("--for", "for_", help="Server-side auto-stop after a duration (e.g. 25m, 1h30m)")
 @click.option("--remind-in", help="Send a reminder after a duration (e.g. 30m)")
 @click.option("--remind-at", help="Send a reminder at a specific time (e.g. 14:30, 5pm)")
 @click.option("--remind-every", help="Send periodic reminders every duration (e.g. 15m)")
@@ -186,7 +204,22 @@ def start(
                 console.print(f"[autumn.warn]Warning:[/] {w}")
             subprojects_list = resolved_subs if resolved_subs else None
 
-        result = client.start_timer(resolved_project, subprojects_list, note)
+        # The server accepts a simple duration, but our local parser also
+        # supports compound input such as "1h30m". Send normalized minutes.
+        stop_after_minutes = (
+            round(for_seconds / 60, 2) if for_seconds is not None else None
+        )
+        start_kwargs = (
+            {"stop_after": stop_after_minutes}
+            if stop_after_minutes is not None
+            else {}
+        )
+        result = client.start_timer(
+            resolved_project,
+            subprojects_list,
+            note,
+            **start_kwargs,
+        )
 
         if not result.get("ok"):
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
@@ -201,6 +234,7 @@ def start(
         console.print(_format_session_id_line(session_id))
         if session.get("note"):
             console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
+        _print_auto_stop_line(session)
 
 
         # Nothing time-based requested.
@@ -337,24 +371,35 @@ def start(
             )
 
         # Auto-stop
+        auto_stop_task = None
         if for_seconds is not None:
 
             def _auto_stop() -> None:
-                try:
-                    APIClient().stop_timer(session_id=session_id, note=None)
-                except APIError:
-                    # If stopping fails, we still try to notify.
-                    pass
+                if session_still_active_after_auto_stop(
+                    poll_client, session_id, sleep=sleep_seconds
+                ):
+                    try:
+                        poll_client.stop_timer(session_id=session_id, note=None)
+                    except APIError:
+                        pass
                 send_notification(title=notify_title, message=f"Auto-stopped timer: {resolved_project}")
 
-            tasks.append(schedule_in(seconds=for_seconds, fn=_auto_stop, name="auto-stop"))
+            auto_stop_task = schedule_in(seconds=for_seconds, fn=_auto_stop, name="auto-stop")
+            tasks.append(auto_stop_task)
 
         # Keep this process alive until:
         # - auto-stop triggers (if configured), or
         # - the session is no longer active (stopped/deleted), or
         # - user interrupts.
         if for_seconds is not None:
-            sleep_seconds(for_seconds + 1)
+            # The worker thread is a daemon: wait for it to finish (it may poll
+            # the server for up to ~30s past the deadline) or the notification
+            # would be lost when this process exits.
+            worker = getattr(auto_stop_task, "thread", None)
+            if worker is not None:
+                worker.join(timeout=for_seconds + 60)
+            else:
+                sleep_seconds(for_seconds + 1)
             return
 
         # Reminders only: poll for session lifetime.
@@ -463,6 +508,7 @@ def restart(session_id: Optional[int], project: Optional[str]):
             console.print(
                 f"[autumn.label]Project:[/] [autumn.project]{session.get('p') or session.get('project') or project or ''}[/]"
             )
+            _print_auto_stop_line(session)
 
         else:
             console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")

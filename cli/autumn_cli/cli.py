@@ -28,6 +28,7 @@ from .api_client import APIClient, APIError
 from .commands.timer import start, stop, restart, delete, status as timer_status
 from .commands.sessions import log, track, edit_session, delete_session
 from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
+from .commands.commitments import commitments
 from .commands.charts import chart
 
 from .commands.meta import context, tag
@@ -39,6 +40,7 @@ from .commands.notify_cmd import notify_cmd
 from .commands.remind_cmd import remind
 from .commands.reminders_cmd import reminders
 from .commands.export_cmd import export
+from .commands.import_cmd import import_cmd
 from .commands.meta import meta_audit
 from .commands.alias_cmd import alias
 
@@ -421,6 +423,8 @@ cli.add_command(totals, name="totals")
 cli.add_command(project_details, name="project")
 cli.add_command(merge, name="merge")
 cli.add_command(merge_subs, name="merge-subs")
+cli.add_command(commitments, name="commitments")
+cli.add_command(commitments, name="cmt")
 
 
 # Chart command
@@ -443,6 +447,7 @@ cli.add_command(reminders, name="reminders")
 
 # Data commands
 cli.add_command(export, name="export")
+cli.add_command(import_cmd, name="import")
 cli.add_command(meta_audit, name="audit")
 
 # Alias management

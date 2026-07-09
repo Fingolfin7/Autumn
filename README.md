@@ -94,8 +94,8 @@ autumn
 
 | Area | Command | What it does | Common options |
 |---|---|---|---|
-| **Timers** | `autumn start <project>` | Start a timer | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
-| | `autumn status` | Show active timers | `-p`, `-i` |
+| **Timers** | `autumn start <project>` | Start a timer (with optional server-side auto-stop) | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
+| | `autumn status` | Show active timers and auto-stop timing | `-p`, `-i` |
 | | `autumn stop` | Stop timer | `-p`, `-i`, `-n` |
 | | `autumn restart` | Reset start time to now | `-p`, `-i` |
 | | `autumn resume` | Resume last project | `--stop-current` |
@@ -103,9 +103,9 @@ autumn
 | | `autumn log search` | Advanced search | `--note-snippet`, `--start-date`, `-x` |
 | | `autumn track` | Manually log a session | `--start`, `--end`, `-n` |
 | **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-x`, `-t`, `-d`, `--search` |
-| | `autumn project` | Show single project details | `<name>`, `--pick` |
+| | `autumn project` | Show or edit a project's metadata | `<name>`, `edit <name>` |
 | | `autumn subprojects` | List subprojects for a project | `<project>`, `-d`, `--search` |
-| | `autumn new` | Create project or subproject | `-s`, `-d`, `--pick` |
+| | `autumn new` | Create project or subproject | `-s`, `-d`, `--context`, `--tags`, `--pick` |
 | | `autumn mark` | Change project status | `<project> <status>`, `--pick` |
 | | `autumn rename` | Rename project or subproject | `<old> <new>`, `-p` for subprojects |
 | | `autumn totals` | Show project time breakdown | `<project>`, `--start-date`, `--end-date` |
@@ -114,6 +114,7 @@ autumn
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
 | **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `--stdout` |
+| | `autumn import <file>` | Import an export JSON or compressed export | `--force`, `--merge`, `--tolerance`, `-y` |
 | | `autumn audit` | Recompute project totals | `--dry-run` |
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
@@ -122,6 +123,9 @@ autumn
 | **Auth** | `autumn auth accounts` | List saved accounts | — |
 | | `autumn auth switch <account>` | Switch active account | — |
 | | `autumn alias` | Manage aliases | `add`, `list`, `remove` |
+| **Metadata** | `autumn context` | List and manage contexts | `list`, `new`, `rename`, `edit`, `delete` |
+| | `autumn tag` | List and manage tags | `list`, `new`, `rename`, `edit`, `delete` |
+| **Commitments** | `autumn commitments` (`cmt`) | Track recurring goals | `list`, `show`, `new`, `edit`, `delete` |
 | **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 
 ## Usage
@@ -134,10 +138,12 @@ autumn start "AutumnWeb" --note "Implementing reminders"
 ```
 
 **Pomodoro / Timed Sessions:**
-You can set an auto-stop duration and various reminders when starting:
+You can set a server-side auto-stop duration and various reminders when starting:
 ```bash
 autumn start "Deep Work" --for 25m --remind-in 20m --remind-message "5 minutes left!"
 ```
+
+`--for` sends the duration to AutumnWeb, so the timer stops even if this machine sleeps or the local CLI worker exits. `autumn start`, `autumn restart`, and `autumn status` show when an active timer auto-stops (and how long remains). The local worker only handles the desktop notification; it does not own the stop itself.
 
 Periodic reminders (runs in background):
 ```bash
@@ -207,6 +213,7 @@ autumn subs "AutumnWeb"        # Alias
 Create a new project or subproject:
 ```bash
 autumn new "My Project" -d "Project description"
+autumn new "My Project" --context Work --tags "Important,Client"
 autumn new "My Project" -s "Backend" -d "Backend services"  # Create subproject
 autumn new --pick -s "New Feature"  # Interactive project selection
 ```
@@ -241,6 +248,16 @@ autumn project --pick  # Interactive selection
 ```
 
 Shows: status, total time, session count, average session duration, context, tags, and subprojects.
+
+**Edit project metadata:**
+```bash
+autumn project edit "My Project" --description "New description" --context Work
+autumn project edit "My Project" --clear-context
+autumn project edit "My Project" --tags "Important,Client"  # Replace all tags
+autumn project edit "My Project" --add-tag Urgent --remove-tag Client
+```
+
+Use either `--tags` to replace the complete tag list, or `--add-tag` / `--remove-tag` for incremental changes. `--context` and `--clear-context` cannot be combined.
 
 **Search projects and subprojects:**
 ```bash
@@ -287,6 +304,17 @@ autumn export --stdout | jq .sessions      # Pipe to jq
 autumn export --compress                   # Compressed format
 ```
 
+**Import an export:**
+
+```bash
+autumn import backup.json
+autumn import autumn_export_compressed.txt --merge --tolerance 5 -y
+autumn import legacy_export.json --autumn-format --context Work
+autumn import replacement.json --force
+```
+
+Imports are performed by the server. Use `--merge` to merge into existing projects, or `--force` to delete same-named projects first; the two options are mutually exclusive. `--context` imports into that context (creating it if needed), and `--autumn-format` marks a legacy Autumn CLI export.
+
 Configure a custom default directory:
 ```bash
 autumn config set export.default_dir "~/backups"
@@ -326,6 +354,42 @@ autumn chart --type calendar --color-by-project
 autumn chart --type bar -P week --context Work
 ```
 
+### Contexts & Tags
+
+Contexts and tags can be listed, created, renamed, edited, and deleted:
+
+```bash
+autumn context list -d
+autumn context new Work --description "Client and office work"
+autumn context rename Work "Client Work"
+autumn context edit "Client Work" --description "Client-facing work"
+autumn context delete "Client Work" -y
+
+autumn tag list --color
+autumn tag new Urgent --color red
+autumn tag rename Urgent Priority
+autumn tag edit Priority --color orange
+autumn tag delete Priority -y
+```
+
+Pass an empty string to `context edit --description` or `tag edit --color` to clear that field. Deleting a context removes it from its projects but retains the projects and their other data.
+
+### Commitments
+
+Commitments track recurring time or session goals for a project, subproject, context, or tag. `autumn commitments` (or `autumn cmt`) lists active commitments with progress, status, and balance.
+
+```bash
+autumn commitments --all --streak
+autumn commitments show 12
+autumn commitments new "AutumnWeb" --target-value 5h --period weekly
+autumn cmt new "AutumnWeb/Backend" --type subproject --target-value 10 --commitment-type sessions --period monthly
+autumn commitments new Work --type context --target-value 8h --include "Client Project"
+autumn commitments edit 12 --target-value 6h --no-banking --max-balance 2h
+autumn commitments delete 12
+```
+
+Time commitments accept duration values such as `5h` for `--target-value`, `--min-balance`, and `--max-balance`; session commitments use whole session counts. `--include` and `--exclude` apply only to context or tag commitments. Use `--json` for raw list output, and `--start-date` to set a commitment's `YYYY-MM-DD` start date.
+
 ## Configuration
 
 Settings are stored in `~/.autumn/config.yaml`. You can edit this file directly or use the CLI:
@@ -339,6 +403,10 @@ autumn config open    # Open config file in default editor
 - `tls.insecure: true` - Disable TLS verification (for local dev)
 - `greeting_activity_weight: 0.5` - How often to show activity in greetings (0-1)
 - `notify.log_file: "~/.autumn/notify.log"` - Enable notification debug logging
+- `wake_retry: true` - Automatically wake and retry a sleeping hosted server
+- `wake_timeout_seconds: 120` - Maximum seconds to wait for the server to become healthy
+
+When a hosted instance such as a Render free-tier service is asleep, commands print a waking-up notice, poll `/healthz/` with backoff, then retry automatically. Set `wake_retry: false` to fail fast, or override either setting for one environment with `AUTUMN_WAKE_RETRY` and `AUTUMN_WAKE_TIMEOUT_SECONDS`.
 
 ### Aliases
 

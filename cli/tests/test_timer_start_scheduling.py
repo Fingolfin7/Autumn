@@ -9,7 +9,7 @@ class _FakeClient:
     def __init__(self, *args, **kwargs):
         self._checks = 0
 
-    def start_timer(self, project, subprojects, note):
+    def start_timer(self, project, subprojects, note, stop_after=None):
         return {"ok": True, "session": {"id": 123, "note": note, "subs": subprojects or []}}
 
     def get_timer_status(self, session_id=None, project=None):
@@ -49,6 +49,44 @@ def test_start_with_for_sleeps(monkeypatch):
     assert result.exit_code == 0
     # sleeps for for_seconds + 1
     assert calls["sleep"] == [6]
+
+
+def test_start_for_sends_server_stop_after_and_does_not_stop_inactive_timer(monkeypatch):
+    calls = {"stop": 0, "scheduled": []}
+
+    class _Client(_FakeClient):
+        def start_timer(self, project, subprojects, note, stop_after=None):
+            calls["stop_after"] = stop_after
+            return {"ok": True, "session": {"id": 123, "note": note, "subs": []}}
+
+        def stop_timer(self, session_id=None, project=None, note=None):
+            calls["stop"] += 1
+
+        def get_timer_status(self, session_id=None, project=None):
+            return {"ok": True, "session": {"id": 123, "active": False}}
+
+    monkeypatch.setattr("autumn_cli.commands.timer.APIClient", _Client)
+
+    def fake_schedule_in(*, seconds: int, fn, name: str = "reminder"):
+        calls["scheduled"].append((seconds, name))
+        fn()
+
+        class T:
+            def cancel(self):
+                return None
+
+        return T()
+
+    monkeypatch.setattr("autumn_cli.commands.timer.schedule_in", fake_schedule_in)
+    monkeypatch.setattr("autumn_cli.commands.timer.sleep_seconds", lambda seconds: None)
+    monkeypatch.setattr("autumn_cli.commands.timer.send_notification", lambda **kwargs: None)
+
+    result = CliRunner().invoke(start, ["MyProj", "--for", "25m", "--no-background"])
+
+    assert result.exit_code == 0
+    assert calls["stop_after"] == 25.0
+    assert (1500, "auto-stop") in calls["scheduled"]
+    assert calls["stop"] == 0
 
 
 def test_start_rejects_both_remind_options():

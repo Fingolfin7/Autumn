@@ -5,6 +5,8 @@ from typing import Optional
 from ..api_client import APIClient, APIError
 from ..utils.formatters import projects_tables, subprojects_table
 from ..utils.console import console
+from ..utils.projects_cache import clear_cached_projects
+from ..utils.meta_cache import clear_cached_snapshot
 
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
 
@@ -240,8 +242,10 @@ def subprojects(project: str, desc: bool, search: Optional[str]):
 @click.argument("project")
 @click.option("--subproject", "-s", help="Create a subproject instead (requires existing project)")
 @click.option("--description", "-d", help="Project/subproject description")
+@click.option("--context", "context", help="Existing context name for a new project")
+@click.option("--tags", "tags", help="Comma-separated tags for a new project")
 @click.option("--pick", is_flag=True, help="Interactively pick parent project for subproject")
-def new_project(project: str, subproject: Optional[str], description: Optional[str], pick: bool):
+def new_project(project: str, subproject: Optional[str], description: Optional[str], context: Optional[str], tags: Optional[str], pick: bool):
     """Create a new project or subproject.
 
     To create a project: autumn new "My Project"
@@ -285,11 +289,16 @@ def new_project(project: str, subproject: Optional[str], description: Optional[s
                 console.print(f"[autumn.label]Description:[/] {description}")
         else:
             # Creating a project
-            result = client.create_project(project, description)
+            tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()] if tags is not None else None
+            result = client.create_project(project, description, context=context, tags=tag_list)
 
             console.print(f"[autumn.ok]Project created:[/] [autumn.project]{project}[/]")
             if description:
                 console.print(f"[autumn.label]Description:[/] {description}")
+            if context:
+                console.print(f"[autumn.label]Context:[/] {context}")
+            if tag_list:
+                console.print(f"[autumn.label]Tags:[/] {', '.join(tag_list)}")
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -608,10 +617,24 @@ def totals(project: Optional[str], start_date: Optional[str], end_date: Optional
         raise click.Abort()
 
 
-@click.command("project")
-@click.argument("name", required=False)
-@click.option("--pick", is_flag=True, help="Interactively pick project")
-def project_details(name: Optional[str], pick: bool):
+class _ProjectGroup(click.Group):
+    """Route legacy `project <name>` calls to the hidden show command."""
+
+    def parse_args(self, ctx: click.Context, args: list) -> list:
+        if "--help" not in args and "-h" not in args:
+            commands = set(self.list_commands(ctx))
+            first_positional = next((arg for arg in args if not arg.startswith("-")), None)
+            if first_positional is None or first_positional not in commands:
+                args.insert(0, "show")
+        return super().parse_args(ctx, args)
+
+
+@click.group("project", cls=_ProjectGroup)
+def project_details() -> None:
+    """Show project details or edit project metadata."""
+
+
+def _show_project_details(name: Optional[str], pick: bool) -> None:
     """Show detailed information about a single project.
 
     Examples:
@@ -701,6 +724,113 @@ def project_details(name: Optional[str], pick: bool):
 
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
+        raise click.Abort()
+
+
+@project_details.command("show", hidden=True)
+@click.argument("name", required=False)
+@click.option("--pick", is_flag=True, help="Interactively pick project")
+def project_show(name: Optional[str], pick: bool) -> None:
+    """Show detailed information about a single project."""
+    _show_project_details(name, pick)
+
+
+def _grouped_project_items(result: dict) -> list[dict]:
+    """Flatten the grouped project response for metadata edits."""
+    projects = result.get("projects", {})
+    if isinstance(projects, list):
+        return [item for item in projects if isinstance(item, dict)]
+    items: list[dict] = []
+    if isinstance(projects, dict):
+        for group in projects.values():
+            if isinstance(group, list):
+                items.extend(item for item in group if isinstance(item, dict))
+    return items
+
+
+@project_details.command("edit")
+@click.argument("name")
+@click.option("--description", "description", help="New description (pass an empty string to clear)")
+@click.option("--context", "context", help="Set context by name")
+@click.option("--clear-context", is_flag=True, help="Remove the current context")
+@click.option("--tags", "tags", help="Comma-separated complete replacement tag list")
+@click.option("--add-tag", "add_tags", multiple=True, help="Add a tag (repeatable)")
+@click.option("--remove-tag", "remove_tags", multiple=True, help="Remove a tag (repeatable)")
+def project_edit(
+    name: str,
+    description: Optional[str],
+    context: Optional[str],
+    clear_context: bool,
+    tags: Optional[str],
+    add_tags: tuple,
+    remove_tags: tuple,
+) -> None:
+    """Edit a project's description, context, or tags."""
+    if tags is not None and (add_tags or remove_tags):
+        raise click.UsageError("--tags cannot be combined with --add-tag or --remove-tag.")
+    if context is not None and clear_context:
+        raise click.UsageError("--context cannot be combined with --clear-context.")
+    if (
+        description is None
+        and context is None
+        and not clear_context
+        and tags is None
+        and not add_tags
+        and not remove_tags
+    ):
+        raise click.UsageError("Specify metadata to update.")
+
+    try:
+        client = APIClient()
+        grouped = client.list_projects_grouped()
+        known_projects = _grouped_project_items(grouped)
+        resolved = resolve_project_param(project=name, projects=known_projects)
+        if resolved.warning:
+            console.print(f"[autumn.warn]Warning:[/] {resolved.warning}")
+        project_name = resolved.value or name
+        current = next(
+            (item for item in known_projects if item.get("name") == project_name), {}
+        )
+
+        update: dict = {}
+        if description is not None:
+            update["description"] = description
+        if context is not None:
+            update["context"] = context
+        elif clear_context:
+            update["context"] = None
+
+        if tags is not None:
+            update["tags"] = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        elif add_tags or remove_tags:
+            current_tags = current.get("tags", []) or []
+            current_names = [tag.get("name") if isinstance(tag, dict) else tag for tag in current_tags]
+            remove_keys = {tag.strip().casefold() for tag in remove_tags if tag.strip()}
+            final_tags = [tag for tag in current_names if tag and tag.casefold() not in remove_keys]
+            final_keys = {tag.casefold() for tag in final_tags}
+            for tag in add_tags:
+                clean = tag.strip()
+                if clean and clean.casefold() not in final_keys:
+                    final_tags.append(clean)
+                    final_keys.add(clean.casefold())
+            update["tags"] = final_tags
+
+        result = client.update_project_metadata(project_name, **update)
+        clear_cached_projects()
+        clear_cached_snapshot()
+        updated = result.get("project", {})
+        shown_name = updated.get("name") or updated.get("p") or project_name
+        console.print(f"[autumn.ok]Project metadata updated:[/] [autumn.project]{shown_name}[/]")
+        if "description" in update:
+            console.print(f"[autumn.label]Description:[/] {updated.get('description', updated.get('desc', update['description'])) or '-'}")
+        if "context" in update:
+            console.print(f"[autumn.label]Context:[/] {updated.get('context', updated.get('ctx', update['context'])) or '-'}")
+        if "tags" in update:
+            returned_tags = updated.get("tags", update["tags"]) or []
+            returned_names = [tag.get("name") if isinstance(tag, dict) else tag for tag in returned_tags]
+            console.print(f"[autumn.label]Tags:[/] {', '.join(returned_names) or '-'}")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
         raise click.Abort()
 
 

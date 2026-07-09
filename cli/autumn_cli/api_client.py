@@ -1,10 +1,15 @@
 """API client for communicating with AutumnWeb API."""
 
 import json
+import time
 import requests
 from datetime import datetime
 from typing import Optional, Dict, List, Any
-from .config import get_api_key, get_base_url
+from .config import get_api_key, get_base_url, get_wake_retry, get_wake_timeout_seconds
+from .utils.console import console
+
+
+_UNSET = object()
 
 
 class APIError(Exception):
@@ -16,9 +21,19 @@ class APIError(Exception):
 class APIClient:
     """Client for AutumnWeb API."""
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        quiet: bool = False,
+        wake_retry: Optional[bool] = None,
+    ):
         self.api_key = api_key or get_api_key()
         self.base_url = (base_url or get_base_url()).rstrip("/")
+        self.quiet = quiet
+        # None -> defer to config; False forces fast-fail (for opportunistic
+        # background checks that must never block on a sleeping server).
+        self._wake_retry_override = wake_retry
 
         # Only support a simple TLS verify toggle.
         # Safe-by-default: verify=True unless explicitly configured insecure.
@@ -62,6 +77,99 @@ class APIClient:
         except ValueError:
             return value
 
+    @staticmethod
+    def _is_dns_error(error: requests.exceptions.ConnectionError) -> bool:
+        """Return whether a connection error is specifically DNS resolution."""
+        message = str(error)
+        return "getaddrinfo failed" in message or "NameResolutionError" in message
+
+    def _is_wake_trigger(
+        self,
+        method: str,
+        *,
+        response: Optional[requests.Response] = None,
+        error: Optional[requests.exceptions.RequestException] = None,
+    ) -> bool:
+        """Return whether this failure is consistent with a sleeping server."""
+        if response is not None:
+            return response.status_code in (502, 503, 504)
+        if isinstance(error, requests.exceptions.ConnectionError):
+            return not self._is_dns_error(error)
+        if isinstance(error, requests.exceptions.ConnectTimeout):
+            return True
+        return isinstance(error, requests.exceptions.ReadTimeout) and method.upper() == "GET"
+
+    def _wake_server(self) -> bool:
+        """Poll the unauthenticated health endpoint until the server is ready."""
+        if not self.quiet:
+            console.print(
+                "[autumn.warn]Server appears to be asleep (free instance). "
+                "Waking it up - this usually takes about a minute...[/]"
+            )
+
+        deadline = time.monotonic() + get_wake_timeout_seconds()
+        delays = (3, 5, 8, 10)
+        attempt = 0
+        health_url = f"{self.base_url}/healthz/"
+
+        while True:
+            try:
+                response = requests.get(health_url, timeout=10, verify=self._verify)
+                if response.status_code == 200:
+                    if not self.quiet:
+                        console.print("[autumn.ok]Server is up - retrying...[/]")
+                    return True
+            except requests.exceptions.RequestException:
+                pass
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            delay = delays[min(attempt, len(delays) - 1)]
+            time.sleep(min(delay, remaining))
+            attempt += 1
+
+    def _wake_retry_enabled(self) -> bool:
+        if self._wake_retry_override is not None:
+            return self._wake_retry_override
+        return get_wake_retry()
+
+    def _http(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        """Send one API request, waking a sleeping hosted server when needed."""
+        try:
+            response = requests.request(method=method, url=url, **kwargs)
+        except requests.exceptions.RequestException as error:
+            if not self._wake_retry_enabled() or not self._is_wake_trigger(method, error=error):
+                raise
+            response = None
+
+        if response is not None:
+            if not self._is_wake_trigger(method, response=response) or not self._wake_retry_enabled():
+                return response
+
+        if not self._wake_server():
+            raise APIError(
+                "Server did not wake up in time. Try again in a minute, or check "
+                f"{self.base_url}."
+            )
+
+        try:
+            retry_response = requests.request(method=method, url=url, **kwargs)
+        except requests.exceptions.RequestException as error:
+            if self._is_wake_trigger(method, error=error):
+                raise APIError(
+                    "Server did not wake up in time. Try again in a minute, or check "
+                    f"{self.base_url}."
+                )
+            raise
+
+        if self._is_wake_trigger(method, response=retry_response):
+            raise APIError(
+                "Server did not wake up in time. Try again in a minute, or check "
+                f"{self.base_url}."
+            )
+        return retry_response
+
     def _request(
         self,
         method: str,
@@ -74,9 +182,9 @@ class APIClient:
 
         response = None
         try:
-            response = requests.request(
-                method=method,
-                url=url,
+            response = self._http(
+                method,
+                url,
                 headers=self._headers(),
                 params=params,
                 json=json,
@@ -118,13 +226,41 @@ class APIClient:
                 f"{hint}{host_part}. Check your internet connection and base_url (autumn auth status). Details: {msg}"
             )
 
+    def _delete_no_content(self, endpoint: str, *, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Delete an endpoint which normally returns HTTP 204 No Content."""
+        url = f"{self.base_url}{endpoint}"
+        response = None
+        try:
+            response = self._http(
+                "DELETE",
+                url,
+                headers=self._headers(),
+                json=data,
+                timeout=30,
+                verify=self._verify,
+            )
+            response.raise_for_status()
+            if response.status_code == 204 or not response.content:
+                return {"ok": True}
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            try:
+                error_data = response.json() if response is not None else {}
+                error_msg = error_data.get("error", str(e))
+                raise APIError(f"API error: {error_msg}")
+            except APIError:
+                raise
+            except (json.JSONDecodeError, ValueError, KeyError):
+                raise APIError(f"API error: {e}")
+
     def get_token_with_password(self, username_or_email: str, password: str) -> str:
         """Fetch an auth token using username/email + password.
 
         Uses DRF's built-in token endpoint at /get-auth-token/.
         """
         url = f"{self.base_url}/get-auth-token/"
-        resp = requests.post(
+        resp = self._http(
+            "POST",
             url,
             json={"username": username_or_email, "password": password},
             headers={"Accept": "application/json"},
@@ -298,6 +434,7 @@ class APIClient:
         project: str,
         subprojects: Optional[List[str]] = None,
         note: Optional[str] = None,
+        stop_after: Optional[Any] = None,
     ) -> Dict:
         """Start a new timer."""
         data = {"project": project}
@@ -305,6 +442,8 @@ class APIClient:
             data["subprojects"] = subprojects
         if note:
             data["note"] = note
+        if stop_after is not None:
+            data["stop_after"] = stop_after
         return self._request("POST", "/api/timer/start/", json=data)
 
     def stop_timer(
@@ -466,12 +605,40 @@ class APIClient:
             params["exclude"] = ",".join(exclude)
         return self._request("GET", "/api/projects/grouped/", params=params)
 
-    def create_project(self, name: str, description: Optional[str] = None) -> Dict:
+    def create_project(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict:
         """Create a new project."""
         data = {"name": name}
         if description:
             data["description"] = description
+        if context is not None:
+            data["context"] = context
+        if tags is not None:
+            data["tags"] = tags
         return self._request("POST", "/api/create_project/", json=data)
+
+    def update_project_metadata(
+        self,
+        project: str,
+        *,
+        description: Any = _UNSET,
+        context: Any = _UNSET,
+        tags: Any = _UNSET,
+    ) -> Dict:
+        """Update a project's description, context, and/or complete tag set."""
+        data: Dict[str, Any] = {"project": project}
+        if description is not _UNSET:
+            data["description"] = description
+        if context is not _UNSET:
+            data["context"] = context
+        if tags is not _UNSET:
+            data["tags"] = tags
+        return self._request("PATCH", "/api/project/update/", json=data)
 
     def list_subprojects(self, project: str, compact: bool = True) -> Dict:
         """List subprojects for a project."""
@@ -558,6 +725,89 @@ class APIClient:
         """List available tags for the authenticated user."""
         params = {"compact": str(compact).lower()}
         return self._request("GET", "/api/tags/", params=params)
+
+    # Context and tag management
+
+    def create_context(self, name: str, description: Optional[str] = None) -> Dict:
+        """Create a context."""
+        data: Dict[str, Any] = {"name": name}
+        if description is not None:
+            data["description"] = description
+        return self._request("POST", "/api/contexts/", json=data)
+
+    def update_context(
+        self, context_id: int, *, name: Any = _UNSET, description: Any = _UNSET
+    ) -> Dict:
+        """Update a context by ID."""
+        data: Dict[str, Any] = {}
+        if name is not _UNSET:
+            data["name"] = name
+        if description is not _UNSET:
+            data["description"] = description
+        return self._request("PATCH", f"/api/contexts/{context_id}/", json=data)
+
+    def delete_context(self, context_id: int) -> Dict:
+        """Delete a context by ID."""
+        return self._delete_no_content(f"/api/contexts/{context_id}/")
+
+    def create_tag(self, name: str, color: Optional[str] = None) -> Dict:
+        """Create a tag."""
+        data: Dict[str, Any] = {"name": name}
+        if color is not None:
+            data["color"] = color
+        return self._request("POST", "/api/tags/", json=data)
+
+    def update_tag(self, tag_id: int, *, name: Any = _UNSET, color: Any = _UNSET) -> Dict:
+        """Update a tag by ID."""
+        data: Dict[str, Any] = {}
+        if name is not _UNSET:
+            data["name"] = name
+        if color is not _UNSET:
+            data["color"] = color
+        return self._request("PATCH", f"/api/tags/{tag_id}/", json=data)
+
+    def delete_tag(self, tag_id: int) -> Dict:
+        """Delete a tag by ID."""
+        return self._delete_no_content(f"/api/tags/{tag_id}/")
+
+    # Commitment endpoints
+
+    def list_commitments(
+        self,
+        *,
+        active: Optional[bool] = None,
+        aggregation_type: Optional[str] = None,
+        progress: bool = True,
+        streak: bool = False,
+        compact: bool = True,
+    ) -> Dict:
+        """List commitments, optionally filtering by active state or aggregation."""
+        params: Dict[str, Any] = {
+            "progress": str(progress).lower(),
+            "streak": str(streak).lower(),
+            "compact": str(compact).lower(),
+        }
+        if active is not None:
+            params["active"] = str(active).lower()
+        if aggregation_type:
+            params["aggregation_type"] = aggregation_type
+        return self._request("GET", "/api/commitments/", params=params)
+
+    def get_commitment(self, commitment_id: int) -> Dict:
+        """Get one commitment in its full representation."""
+        return self._request("GET", f"/api/commitments/{commitment_id}/")
+
+    def create_commitment(self, data: Dict[str, Any]) -> Dict:
+        """Create a commitment from its API request fields."""
+        return self._request("POST", "/api/commitments/", json=data)
+
+    def update_commitment(self, commitment_id: int, data: Dict[str, Any]) -> Dict:
+        """Patch the supplied commitment fields."""
+        return self._request("PATCH", f"/api/commitments/{commitment_id}/", json=data)
+
+    def delete_commitment(self, commitment_id: int) -> Dict:
+        """Delete a commitment by ID."""
+        return self._delete_no_content(f"/api/commitments/{commitment_id}/")
 
     def get_discovery_meta(
         self, *, ttl_seconds: int = 300, refresh: bool = False
@@ -671,9 +921,9 @@ class APIClient:
         # This endpoint returns 204 No Content, so we handle it specially
         url = f"{self.base_url}/api/project/delete/"
         try:
-            response = requests.request(
-                method="DELETE",
-                url=url,
+            response = self._http(
+                "DELETE",
+                url,
                 headers=self._headers(),
                 json=data,
                 timeout=30,
@@ -702,9 +952,9 @@ class APIClient:
         # This endpoint likely returns 204 No Content
         url = f"{self.base_url}{endpoint}"
         try:
-            response = requests.request(
-                method="DELETE",
-                url=url,
+            response = self._http(
+                "DELETE",
+                url,
                 headers=self._headers(),
                 timeout=30,
                 verify=self._verify,
@@ -756,6 +1006,41 @@ class APIClient:
         if autumn_compatible:
             data["autumn_compatible"] = True
         return self._request("POST", "/api/export/", json=data)
+
+    # Import
+
+    def import_data(
+        self,
+        *,
+        data: Optional[Dict[str, Any]] = None,
+        data_compressed: Optional[str] = None,
+        force: bool = False,
+        merge: bool = False,
+        tolerance: int = 2,
+        autumn_import: bool = False,
+        context: Optional[str] = None,
+    ) -> Dict:
+        """Import an export payload into the user's projects.
+
+        Exactly one of ``data`` and ``data_compressed`` must be supplied.  The
+        latter is the opaque string returned by a compressed export.
+        """
+        if (data is None) == (data_compressed is None):
+            raise ValueError("Provide exactly one of data or data_compressed")
+
+        payload: Dict[str, Any] = {
+            "force": force,
+            "merge": merge,
+            "tolerance": tolerance,
+            "autumn_import": autumn_import,
+        }
+        if data is not None:
+            payload["data"] = data
+        else:
+            payload["data_compressed"] = data_compressed
+        if context is not None:
+            payload["context"] = context
+        return self._request("POST", "/api/import/", json=payload)
 
     # Audit
 
@@ -887,9 +1172,9 @@ class APIClient:
         endpoint = f"/api/delete_session/{session_id}/"
         url = f"{self.base_url}{endpoint}"
         try:
-            response = requests.request(
-                method="DELETE",
-                url=url,
+            response = self._http(
+                "DELETE",
+                url,
                 headers=self._headers(),
                 timeout=30,
                 verify=self._verify,

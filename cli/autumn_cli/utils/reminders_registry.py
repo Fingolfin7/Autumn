@@ -143,7 +143,8 @@ def _session_active(session_id: int | None) -> bool:
     try:
         from ..api_client import APIClient, APIError
 
-        client = APIClient()
+        # Opportunistic prune check: never block waking a sleeping server.
+        client = APIClient(quiet=True, wake_retry=False)
     except (ImportError, APIError):
         # If we can't create a client, be conservative and assume active.
         return True

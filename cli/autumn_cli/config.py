@@ -13,6 +13,8 @@ CONFIG_FILE = CONFIG_DIR / "config.yaml"
 DEFAULT_GREETING_GENERAL_WEIGHT = 0.4
 DEFAULT_GREETING_ACTIVITY_WEIGHT = 0.4
 DEFAULT_GREETING_MOON_CAMEO_WEIGHT = 0.2
+DEFAULT_WAKE_RETRY = True
+DEFAULT_WAKE_TIMEOUT_SECONDS = 120
 ACCOUNTS_KEY = "accounts"
 ACTIVE_ACCOUNT_KEY = "active_account"
 ACCOUNT_CACHES_KEY = "account_caches"
@@ -729,3 +731,46 @@ def get_insecure() -> bool:
         return bool(config.get("insecure", False))
     except (ValueError, TypeError):
         return False
+
+
+def _env_bool(name: str) -> Optional[bool]:
+    """Read an optional boolean environment variable."""
+    value = os.getenv(name)
+    if value is None or not str(value).strip():
+        return None
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def get_wake_retry() -> bool:
+    """Whether API calls should wake a sleeping hosted server before retrying.
+
+    Controlled by ``AUTUMN_WAKE_RETRY`` or config.yaml key ``wake_retry``.
+    Default: True.
+    """
+    env_value = _env_bool("AUTUMN_WAKE_RETRY")
+    if env_value is not None:
+        return env_value
+    try:
+        return bool((load_config() or {}).get("wake_retry", DEFAULT_WAKE_RETRY))
+    except (ValueError, TypeError):
+        return DEFAULT_WAKE_RETRY
+
+
+def get_wake_timeout_seconds() -> int:
+    """Maximum time to wait for a sleeping hosted server to become healthy.
+
+    Controlled by ``AUTUMN_WAKE_TIMEOUT_SECONDS`` or config.yaml key
+    ``wake_timeout_seconds``. Default: 120 seconds.
+    """
+    raw_value = os.getenv("AUTUMN_WAKE_TIMEOUT_SECONDS")
+    if raw_value is None or not str(raw_value).strip():
+        try:
+            raw_value = (load_config() or {}).get(
+                "wake_timeout_seconds", DEFAULT_WAKE_TIMEOUT_SECONDS
+            )
+        except (ValueError, TypeError):
+            raw_value = DEFAULT_WAKE_TIMEOUT_SECONDS
+    try:
+        return max(0, int(raw_value))
+    except (ValueError, TypeError):
+        return DEFAULT_WAKE_TIMEOUT_SECONDS

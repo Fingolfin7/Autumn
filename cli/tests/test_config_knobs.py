@@ -1,6 +1,25 @@
 import autumn_cli.config as cfg
 
 
+def test_wake_retry_and_timeout_config_and_environment_overrides(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")
+    monkeypatch.delenv("AUTUMN_WAKE_RETRY", raising=False)
+    monkeypatch.delenv("AUTUMN_WAKE_TIMEOUT_SECONDS", raising=False)
+
+    assert cfg.get_wake_retry() is True
+    assert cfg.get_wake_timeout_seconds() == 120
+
+    cfg.save_config({"wake_retry": False, "wake_timeout_seconds": 45})
+    assert cfg.get_wake_retry() is False
+    assert cfg.get_wake_timeout_seconds() == 45
+
+    monkeypatch.setenv("AUTUMN_WAKE_RETRY", "true")
+    monkeypatch.setenv("AUTUMN_WAKE_TIMEOUT_SECONDS", "30")
+    assert cfg.get_wake_retry() is True
+    assert cfg.get_wake_timeout_seconds() == 30
+
+
 def test_greeting_weights_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")

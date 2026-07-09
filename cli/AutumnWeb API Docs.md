@@ -1033,6 +1033,138 @@ Notes:
 
 ---
 
+## Commitments and Metadata Management
+
+All endpoints in this section, except `/healthz/`, require `Authorization: Token <token>`. Validation failures return a 4xx response shaped as `{"ok": false, "error": "..."}`.
+
+### Commitments
+
+**GET** `/api/commitments/`
+
+Query parameters: `active=true|false` (optional), `aggregation_type=project|subproject|context|tag` (optional), `progress=true|false` (default `true`), `streak=true|false` (default `false`), and `compact=true|false` (default `true`).
+
+Compact response:
+
+```json
+{"ok": true, "count": 1, "commitments": [{"id": 7, "agg": "project", "name": "Autumn", "type": "time", "period": "weekly", "target": 300, "bal": 60, "active": true, "prog": {"actual": 240, "pct": 80, "status": "on-track"}}]}
+```
+
+With `compact=false`, each item includes `aggregation_type`, `target_name`, `commitment_type`, `period`, `target`, `start_date`, `balance`, `max_balance`, `min_balance`, `banking_enabled`, `active`, `created_at`, `last_reconciled`, `rules`, and `progress`. `progress` contains `actual`, `target`, `percentage`, `balance`, `current_surplus`, `status`, `period_start`, `effective_period_start`, `period_end`, `commitment_type`, and `period`. Dates are ISO strings; status is `complete`, `approaching`, `on-track`, `warning`, or `behind`.
+
+**GET** `/api/commitments/<id>/`
+
+Returns the full commitment shape under `{"ok": true, "commitment": {...}}`, plus a `streak` field.
+
+**POST** `/api/commitments/`
+
+Create a commitment. `target_value` for time commitments is in **minutes**.
+
+```json
+{
+  "aggregation_type": "project",
+  "target": "Autumn",
+  "target_value": 300,
+  "commitment_type": "time",
+  "period": "weekly",
+  "start_date": "2026-07-01",
+  "banking_enabled": true,
+  "max_balance": 600,
+  "min_balance": -120
+}
+```
+
+For `aggregation_type: "subproject"`, also provide `project` and use the subproject name as `target`. Optional rule lists are `include_projects`, `exclude_projects`, `include_subprojects`, `exclude_subprojects` (values use `Project/Sub`), `include_contexts`, `exclude_contexts`, `include_tags`, and `exclude_tags`. `commitment_type` defaults to `time`; `period` defaults to `weekly`. Returns `201 {"ok": true, "commitment": {...}}` with the full shape.
+
+**PATCH** `/api/commitments/<id>/`
+
+Accepts the same mutable fields as POST; `aggregation_type` and `target` cannot change. Example:
+
+```json
+{"target_value": 360, "banking_enabled": false}
+```
+
+Returns `{"ok": true, "commitment": {...}}`.
+
+**DELETE** `/api/commitments/<id>/`
+
+Returns `204 No Content`.
+
+### Project metadata
+
+**PATCH** `/api/project/update/`
+
+Update only description, context, and tags. Renaming and status changes are rejected here.
+
+```json
+{"project": "Autumn", "description": "CLI companion", "context": "Work", "tags": ["python", "cli"]}
+```
+
+`project` is required. `description` may be a string or null; `context` is a context **name** and `null` or `""` clears it; `tags` replaces the complete tag list and unknown tag names are created automatically. Returns `{"ok": true, "project": {...}}`; compact fields are `p`, `desc`, `status`, `ctx`, `tags`, while full fields are `name`, `description`, `status`, `context`, `tags`.
+
+**POST** `/api/create_project/`
+
+Also accepts optional `context` (an existing context name; unknown contexts return 400) and `tags` (a list of names; unknown tags are created).
+
+```json
+{"name": "Autumn", "description": "CLI work", "context": "Work", "tags": ["python", "cli"]}
+```
+
+The project serializer response includes `context` and `tags` when those fields were sent.
+
+### Contexts
+
+**POST** `/api/contexts/`
+
+```json
+{"name": "Work", "description": "Professional projects"}
+```
+
+Returns `201 {"ok": true, "context": {"id": 3, "name": "Work", "...": "..."}}`. Duplicate names return 400.
+
+**PATCH** `/api/contexts/<id>/`
+
+Provide either or both mutable fields:
+
+```json
+{"name": "Client work", "description": "Billable projects"}
+```
+
+Returns `{"ok": true, "context": {...}}`.
+
+**DELETE** `/api/contexts/<id>/`
+
+Returns `204 No Content`. Projects previously assigned to the context remain, with their context set to null.
+
+### Tags
+
+**POST** `/api/tags/`
+
+```json
+{"name": "urgent", "color": "#e74c3c"}
+```
+
+`color` is optional and limited to 20 characters. Returns `201 {"ok": true, "tag": {"id": 4, "name": "urgent", "...": "..."}}`.
+
+**PATCH** `/api/tags/<id>/`
+
+Accepts `name` and/or `color`; for example `{"color": "#3498db"}`. Returns `{"ok": true, "tag": {...}}`.
+
+**DELETE** `/api/tags/<id>/`
+
+Returns `204 No Content`.
+
+### Health check
+
+**GET** `/healthz/`
+
+No authentication is required. It is used for availability checks and returns:
+
+```json
+{"status": "ok"}
+```
+
+---
+
 Merge endpoints
 
 Merge two projects into a new one
@@ -1102,3 +1234,40 @@ Behavior:
 
 
 ---
+
+### Import
+
+**POST** `/api/import/`
+
+Import projects and sessions from an export payload. Supply exactly one of `data` (the plain export dictionary) or `data_compressed` (the opaque string returned by an export with compression enabled).
+
+```json
+{
+  "data": {"Project A": {"Session History": []}},
+  "force": false,
+  "merge": false,
+  "tolerance": 2,
+  "autumn_import": false,
+  "context": "Work"
+}
+```
+
+`force` deletes existing projects with the same name before importing; `merge` merges sessions and subprojects into existing projects. They should not be used together. `tolerance` is a minutes value (default `2`) used for duplicate-session detection and total-time mismatch checks. Set `autumn_import` for legacy Autumn CLI export files. `context` is a context name and is created when missing.
+
+Successful imports return:
+
+```json
+{"ok": true, "summary": {"projects_processed": 2, "projects_created": 1, "projects_updated": 1, "sessions_imported": 8, "skipped": ["Existing project"]}}
+```
+
+Malformed payloads and invalid options return `400 {"ok": false, "error": "..."}`.
+
+### Health check
+
+**GET** `/healthz/`
+
+No authentication is required. This availability endpoint returns:
+
+```json
+{"status": "ok"}
+```

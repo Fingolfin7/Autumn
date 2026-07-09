@@ -35,6 +35,9 @@ def test_load_entries_prunes_inactive_session(monkeypatch, tmp_path):
     from autumn_cli.api_client import APIError
 
     class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def get_timer_status(self, session_id=None, project=None):
             raise APIError("API error: Session not found")
 

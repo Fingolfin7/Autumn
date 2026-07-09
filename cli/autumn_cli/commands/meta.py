@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from typing import Optional
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console
@@ -10,6 +11,26 @@ from ..utils.formatters import contexts_table, tags_table
 from ..utils.meta_cache import clear_cached_snapshot
 from ..utils.projects_cache import clear_cached_projects
 from ..utils.recent_activity_cache import clear_cached_activity
+
+
+def _find_named_item(items: list, name: str, kind: str) -> dict:
+    """Find a context/tag by name, providing a useful discovery error."""
+    lookup = {
+        str(item.get("name", "")).strip().casefold(): item
+        for item in items
+        if isinstance(item, dict) and item.get("name")
+    }
+    item = lookup.get(name.strip().casefold())
+    if item is not None:
+        return item
+    available = ", ".join(item.get("name", "") for item in lookup.values()) or "none"
+    raise click.UsageError(f"Unknown {kind} '{name}'. Available {kind}s: {available}.")
+
+
+def _clear_metadata_caches() -> None:
+    clear_cached_snapshot()
+    clear_cached_projects()
+    clear_cached_activity()
 
 
 def _delta_text(delta: float) -> str:
@@ -78,6 +99,77 @@ def context_list(json_out: bool, compact: bool, desc: bool) -> None:
         raise click.Abort()
 
 
+@context.command("new")
+@click.argument("name")
+@click.option("--description", "description", help="Optional context description")
+def context_new(name: str, description: Optional[str]) -> None:
+    """Create a context."""
+    try:
+        result = APIClient().create_context(name, description)
+        _clear_metadata_caches()
+        item = result.get("context", {})
+        console.print(f"[autumn.ok]Context created:[/] [autumn.project]{item.get('name', name)}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@context.command("rename")
+@click.argument("old")
+@click.argument("new")
+def context_rename(old: str, new: str) -> None:
+    """Rename a context (case-insensitive lookup)."""
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_contexts(compact=False).get("contexts", []), old, "context")
+        client.update_context(item["id"], name=new)
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Context renamed:[/] [autumn.project]{item['name']}[/] → [autumn.project]{new}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@context.command("edit")
+@click.argument("name")
+@click.option("--description", "description", help="New description (pass an empty string to clear)")
+def context_edit(name: str, description: Optional[str]) -> None:
+    """Update a context's description."""
+    if description is None:
+        raise click.UsageError("Specify --description to update the context.")
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_contexts(compact=False).get("contexts", []), name, "context")
+        client.update_context(item["id"], description=description)
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Context updated:[/] [autumn.project]{item['name']}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@context.command("delete")
+@click.argument("name")
+@click.option("--yes", "yes", is_flag=True, help="Skip confirmation prompt")
+def context_delete(name: str, yes: bool) -> None:
+    """Delete a context; its projects retain their other data."""
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_contexts(compact=False).get("contexts", []), name, "context")
+        if not yes and not click.confirm(
+            f"Delete context '{item['name']}'? Projects will keep their data but lose this context.",
+            default=False,
+        ):
+            console.print("[autumn.muted]Cancelled.[/]")
+            return
+        client.delete_context(item["id"])
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Context deleted:[/] [autumn.project]{item['name']}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
 @click.group()
 def tag() -> None:
     """Tag-related commands."""
@@ -104,6 +196,74 @@ def tag_list(json_out: bool, compact: bool, color: bool) -> None:
         console.print(tags_table(tags, show_color=color))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
+        raise click.Abort()
+
+
+@tag.command("new")
+@click.argument("name")
+@click.option("--color", "color", help="Optional tag color (max 20 characters)")
+def tag_new(name: str, color: Optional[str]) -> None:
+    """Create a tag."""
+    try:
+        result = APIClient().create_tag(name, color)
+        _clear_metadata_caches()
+        item = result.get("tag", {})
+        console.print(f"[autumn.ok]Tag created:[/] [autumn.note]{item.get('name', name)}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@tag.command("rename")
+@click.argument("old")
+@click.argument("new")
+def tag_rename(old: str, new: str) -> None:
+    """Rename a tag (case-insensitive lookup)."""
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_tags(compact=False).get("tags", []), old, "tag")
+        client.update_tag(item["id"], name=new)
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Tag renamed:[/] [autumn.note]{item['name']}[/] → [autumn.note]{new}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@tag.command("edit")
+@click.argument("name")
+@click.option("--color", "color", help="New color (pass an empty string to clear)")
+def tag_edit(name: str, color: Optional[str]) -> None:
+    """Update a tag's color."""
+    if color is None:
+        raise click.UsageError("Specify --color to update the tag.")
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_tags(compact=False).get("tags", []), name, "tag")
+        client.update_tag(item["id"], color=color)
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Tag updated:[/] [autumn.note]{item['name']}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@tag.command("delete")
+@click.argument("name")
+@click.option("--yes", "yes", is_flag=True, help="Skip confirmation prompt")
+def tag_delete(name: str, yes: bool) -> None:
+    """Delete a tag."""
+    try:
+        client = APIClient()
+        item = _find_named_item(client.list_tags(compact=False).get("tags", []), name, "tag")
+        if not yes and not click.confirm(f"Delete tag '{item['name']}'?", default=False):
+            console.print("[autumn.muted]Cancelled.[/]")
+            return
+        client.delete_tag(item["id"])
+        _clear_metadata_caches()
+        console.print(f"[autumn.ok]Tag deleted:[/] [autumn.note]{item['name']}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
         raise click.Abort()
 
 

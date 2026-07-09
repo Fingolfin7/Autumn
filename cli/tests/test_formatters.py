@@ -1,4 +1,5 @@
 from autumn_cli.utils.log_render import render_sessions_list, render_active_timers_list
+from datetime import datetime, timedelta, timezone
 from rich.console import Console
 
 # Use a non-color console for stable capture assertions.
@@ -90,6 +91,23 @@ def test_status_matches_old_style_without_end_and_with_duration():
     assert " ago" in rendered
     assert "2h" in rendered and "5m" in rendered
     assert "End" not in rendered
+
+
+def test_status_shows_remaining_server_auto_stop_time():
+    active_sessions = [
+        {
+            "id": 10,
+            "p": "Project Active",
+            "elapsed": 1,
+            "stop_at": (datetime.now(timezone.utc) + timedelta(minutes=12)).isoformat(),
+        }
+    ]
+
+    with _plain_console.capture() as capture:
+        _plain_console.print(render_active_timers_list(active_sessions))
+    rendered = capture.get()
+
+    assert "auto-stops in 12m" in rendered
 
 
 def test_markdown_notes_support_single_tilde_strikethrough():
