@@ -1,5 +1,7 @@
 """Main CLI entry point for Autumn CLI."""
 
+import sys
+
 import click
 from datetime import datetime
 
@@ -454,8 +456,25 @@ cli.add_command(meta_audit, name="audit")
 cli.add_command(alias, name="alias")
 
 
+def _configure_utf8_output() -> None:
+    """Force UTF-8 on stdout/stderr.
+
+    On Windows, redirected/piped streams default to the ANSI code page
+    (e.g. cp1252), which cannot encode glyphs like ✓, →, or the banner's
+    box-drawing characters and crashes with UnicodeEncodeError.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if (stream.encoding or "").lower().replace("-", "") != "utf8":
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            # Stream doesn't support reconfigure (e.g. test capture buffers).
+            pass
+
+
 def main():
     """Main entry point."""
+    _configure_utf8_output()
     cli()
 
 
