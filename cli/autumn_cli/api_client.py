@@ -1084,7 +1084,7 @@ class APIClient:
         context: Optional[Any] = None,
         tags: Optional[List[Any]] = None,
     ) -> Tuple[Optional[int], Optional[List[int]]]:
-        """Resolve legacy context/tag names (or numeric strings) through v1 metadata."""
+        """Resolve legacy context/tag names (or numeric strings) through cached metadata."""
         context_id: Optional[int] = None
         tag_ids: Optional[List[int]] = None
         needs_context_lookup = context is not None and not str(context).isdigit()
@@ -1344,13 +1344,29 @@ class APIClient:
 
     def list_contexts(self, compact: bool = True) -> Dict:
         """List available contexts for the authenticated user."""
-        params = {"compact": str(compact).lower()}
-        return self._request("GET", "/api/contexts/", params=params)
+        result = self._request("GET", "/api/v2/contexts/")
+        contexts = []
+        for resource in result.get("contexts") or []:
+            if not isinstance(resource, dict):
+                continue
+            context = {"id": resource.get("id"), "name": resource.get("name")}
+            if not compact:
+                context["project_count"] = resource.get("project_count", 0)
+            contexts.append(context)
+        return {"count": result.get("count", len(contexts)), "contexts": contexts}
 
     def list_tags(self, compact: bool = True) -> Dict:
         """List available tags for the authenticated user."""
-        params = {"compact": str(compact).lower()}
-        return self._request("GET", "/api/tags/", params=params)
+        result = self._request("GET", "/api/v2/tags/")
+        tags = []
+        for resource in result.get("tags") or []:
+            if not isinstance(resource, dict):
+                continue
+            tag = {"id": resource.get("id"), "name": resource.get("name")}
+            if not compact:
+                tag["project_count"] = resource.get("project_count", 0)
+            tags.append(tag)
+        return {"count": result.get("count", len(tags)), "tags": tags}
 
     # Context and tag management
 
@@ -1359,7 +1375,8 @@ class APIClient:
         data: Dict[str, Any] = {"name": name}
         if description is not None:
             data["description"] = description
-        return self._request("POST", "/api/contexts/", json=data)
+        resource = self._request("POST", "/api/v2/contexts/", json=data)
+        return {"ok": True, "context": resource}
 
     def update_context(
         self, context_id: int, *, name: Any = _UNSET, description: Any = _UNSET
@@ -1370,18 +1387,25 @@ class APIClient:
             data["name"] = name
         if description is not _UNSET:
             data["description"] = description
-        return self._request("PATCH", f"/api/contexts/{context_id}/", json=data)
+        resource = self._request(
+            "PATCH", f"/api/v2/contexts/{context_id}", json=data
+        )
+        return {"ok": True, "context": resource}
 
     def delete_context(self, context_id: int) -> Dict:
         """Delete a context by ID."""
-        return self._delete_no_content(f"/api/contexts/{context_id}/")
+        self._request(
+            "DELETE", f"/api/v2/contexts/{context_id}", retry_safe=True
+        )
+        return {"ok": True}
 
     def create_tag(self, name: str, color: Optional[str] = None) -> Dict:
         """Create a tag."""
         data: Dict[str, Any] = {"name": name}
         if color is not None:
             data["color"] = color
-        return self._request("POST", "/api/tags/", json=data)
+        resource = self._request("POST", "/api/v2/tags/", json=data)
+        return {"ok": True, "tag": resource}
 
     def update_tag(self, tag_id: int, *, name: Any = _UNSET, color: Any = _UNSET) -> Dict:
         """Update a tag by ID."""
@@ -1390,11 +1414,13 @@ class APIClient:
             data["name"] = name
         if color is not _UNSET:
             data["color"] = color
-        return self._request("PATCH", f"/api/tags/{tag_id}/", json=data)
+        resource = self._request("PATCH", f"/api/v2/tags/{tag_id}", json=data)
+        return {"ok": True, "tag": resource}
 
     def delete_tag(self, tag_id: int) -> Dict:
         """Delete a tag by ID."""
-        return self._delete_no_content(f"/api/tags/{tag_id}/")
+        self._request("DELETE", f"/api/v2/tags/{tag_id}", retry_safe=True)
+        return {"ok": True}
 
     # Commitment endpoints
 

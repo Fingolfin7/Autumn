@@ -1,6 +1,6 @@
 """Simple cache for contexts/tags discovery.
 
-This avoids calling /api/contexts and /api/tags on every single command invocation.
+This avoids calling the v2 contexts and tags endpoints on every command invocation.
 
 Cache strategy:
 - In-memory cache for the current process
