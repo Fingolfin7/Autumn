@@ -2039,28 +2039,45 @@ class APIClient:
         tags: Optional[List[int]] = None,
         compress: bool = False,
         autumn_compatible: bool = True,
+        legacy: bool = False,
     ) -> Dict:
-        """Export sessions/projects data as JSON.
+        """Export data as JSON (format 2 by default; legacy=True for format 1).
 
         Note: context must be an integer ID, not a name.
         Tags should be a list of tag IDs.
         """
-        data = {}
+        if legacy:
+            data = {}
+            if project:
+                data["project_name"] = project
+            if start_date:
+                data["start_date"] = start_date
+            if end_date:
+                data["end_date"] = end_date
+            if context is not None:
+                data["context"] = context
+            if tags:
+                data["tags"] = tags
+            if compress:
+                data["compress"] = True
+            if autumn_compatible:
+                data["autumn_compatible"] = True
+            return self._request("POST", "/api/export/", json=data)
+
+        params: Dict[str, Any] = {}
         if project:
-            data["project_name"] = project
+            params["project_ids"] = str(self._resolve_project_id(project))
         if start_date:
-            data["start_date"] = start_date
+            params["start_date"] = start_date
         if end_date:
-            data["end_date"] = end_date
+            params["end_date"] = end_date
         if context is not None:
-            data["context"] = context
+            params["context_ids"] = str(context)
         if tags:
-            data["tags"] = tags
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tags)
         if compress:
-            data["compress"] = True
-        if autumn_compatible:
-            data["autumn_compatible"] = True
-        return self._request("POST", "/api/export/", json=data)
+            params["compress"] = "true"
+        return self._request("GET", "/api/v2/export/", params=params)
 
     # Import
 
@@ -2079,9 +2096,16 @@ class APIClient:
 
         Exactly one of ``data`` and ``data_compressed`` must be supplied.  The
         latter is the opaque string returned by a compressed export.
+        Format-2 documents go to the v2 endpoint (atomic, UUID-identity);
+        legacy payloads keep the v1 endpoint and its merge/tolerance options.
         """
         if (data is None) == (data_compressed is None):
             raise ValueError("Provide exactly one of data or data_compressed")
+
+        if isinstance(data, dict) and data.get("format") == 2:
+            return self._request(
+                "POST", "/api/v2/import/", json={"data": data, "force": force}
+            )
 
         payload: Dict[str, Any] = {
             "force": force,

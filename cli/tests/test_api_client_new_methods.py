@@ -153,15 +153,49 @@ class TestDeleteSession:
 
 
 class TestExportData:
-    def test_export_data_sends_correct_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"sessions": [], "projects": []}
+    def test_export_data_defaults_to_v2_format2(self, mock_client):
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=9),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"format": 2, "projects": []}
 
-            result = mock_client.export_data(
+            mock_client.export_data(
                 project="MyProject",
                 start_date="2026-01-01",
                 end_date="2026-01-31",
-                compress=True
+                compress=True,
+            )
+
+            mock_req.assert_called_once_with(
+                "GET",
+                "/api/v2/export/",
+                params={
+                    "project_ids": "9",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-31",
+                    "compress": "true",
+                },
+            )
+
+    def test_export_data_minimal_call_uses_v2(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"format": 2, "projects": []}
+
+            mock_client.export_data()
+
+            mock_req.assert_called_once_with("GET", "/api/v2/export/", params={})
+
+    def test_export_data_legacy_keeps_v1_payload(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"sessions": [], "projects": []}
+
+            mock_client.export_data(
+                project="MyProject",
+                start_date="2026-01-01",
+                end_date="2026-01-31",
+                compress=True,
+                legacy=True,
             )
 
             mock_req.assert_called_once_with(
@@ -174,18 +208,6 @@ class TestExportData:
                     "compress": True,
                     "autumn_compatible": True
                 }
-            )
-
-    def test_export_data_minimal_call(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"sessions": [], "projects": []}
-
-            mock_client.export_data()
-
-            mock_req.assert_called_once_with(
-                "POST",
-                "/api/export/",
-                json={"autumn_compatible": True}
             )
 
 
@@ -213,6 +235,19 @@ class TestImportData:
                     "autumn_import": True,
                     "context": "Work",
                 },
+            )
+
+    def test_import_data_routes_format2_to_v2_endpoint(self, mock_client):
+        with patch.object(mock_client, "_request") as mock_req:
+            mock_req.return_value = {"sessions_imported": 1}
+
+            document = {"format": 2, "projects": []}
+            mock_client.import_data(data=document, force=True)
+
+            mock_req.assert_called_once_with(
+                "POST",
+                "/api/v2/import/",
+                json={"data": document, "force": True},
             )
 
 
