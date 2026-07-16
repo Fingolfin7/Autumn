@@ -69,6 +69,145 @@ def test_commitments_new_converts_duration_to_minutes(monkeypatch):
     }
 
 
+class _PendingCommitmentClient(_CommitmentClient):
+    def list_commitments(self, **kwargs):
+        result = super().list_commitments(**kwargs)
+        result["commitments"][0]["pending_revision"] = {
+            "effective_from": "2026-07-20T00:00:00+02:00",
+            "changes": {"target_value": 360, "filters": {"include_project_ids": [2]}},
+        }
+        return result
+
+    def get_commitment(self, commitment_id):
+        return {
+            "ok": True,
+            "commitment": {
+                "id": commitment_id,
+                "target_name": "Autumn",
+                "aggregation_type": "project",
+                "commitment_type": "time",
+                "period": "weekly",
+                "target": 300,
+                "balance": 60,
+                "banking_enabled": True,
+                "active": True,
+                "progress": {
+                    "actual": 240,
+                    "target": 300,
+                    "percentage": 80,
+                    "status": "in-progress",
+                    "period_start": "2026-07-13",
+                    "period_end": "2026-07-20",
+                },
+                "pending_revision": {
+                    "effective_from": "2026-07-20T00:00:00+02:00",
+                    "changes": {"target_value": 360},
+                },
+                "rules": [],
+            },
+        }
+
+
+def test_commitments_list_and_show_render_pending_revision(monkeypatch):
+    monkeypatch.setattr(
+        "autumn_cli.commands.commitments.APIClient", _PendingCommitmentClient
+    )
+    runner = CliRunner()
+
+    listed = runner.invoke(commitments, ["list"])
+    shown = runner.invoke(commitments, ["show", "12"])
+
+    assert listed.exit_code == 0
+    assert "pending: target-value=360, filters from 2026-07-20" in listed.output
+    assert shown.exit_code == 0
+    assert "pending: target-value=360 from 2026-07-20" in shown.output
+
+
+class _CommitmentActionClient:
+    restarted = None
+    adjusted = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def list_commitments(self, **kwargs):
+        return {"commitments": [{"id": 12, "name": "Deep Work"}]}
+
+    def restart_commitment(self, commitment_id, *, keep_balance, changes=None):
+        type(self).restarted = (commitment_id, keep_balance, changes)
+        return {"ok": True, "commitment": {"id": commitment_id}}
+
+    def adjust_commitment(self, commitment_id, *, amount, reason=None):
+        type(self).adjusted = (commitment_id, amount, reason)
+        return {"ok": True, "adjustment": {"balance": 30}}
+
+
+def test_commitments_restart_requires_exactly_one_balance_flag():
+    runner = CliRunner()
+
+    missing = runner.invoke(commitments, ["restart", "12"])
+    conflicting = runner.invoke(
+        commitments, ["restart", "12", "--keep-balance", "--reset-balance"]
+    )
+
+    assert missing.exit_code == 2
+    assert "Specify exactly one" in missing.output
+    assert conflicting.exit_code == 2
+    assert "Specify exactly one" in conflicting.output
+
+
+def test_commitments_restart_resolves_name_and_sends_restart_fields(monkeypatch):
+    _CommitmentActionClient.restarted = None
+    monkeypatch.setattr(
+        "autumn_cli.commands.commitments.APIClient", _CommitmentActionClient
+    )
+
+    result = CliRunner().invoke(
+        commitments,
+        [
+            "restart",
+            "deep work",
+            "--reset-balance",
+            "--period",
+            "monthly",
+            "--commitment-type",
+            "sessions",
+            "--start-date",
+            "2026-08-01",
+            "--timezone",
+            "UTC",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert _CommitmentActionClient.restarted == (
+        12,
+        False,
+        {
+            "period": "monthly",
+            "commitment_type": "sessions",
+            "start_date": "2026-08-01",
+            "timezone": "UTC",
+        },
+    )
+
+
+def test_commitments_adjust_accepts_negative_minutes_and_displays_balance(monkeypatch):
+    _CommitmentActionClient.adjusted = None
+    monkeypatch.setattr(
+        "autumn_cli.commands.commitments.APIClient", _CommitmentActionClient
+    )
+
+    result = CliRunner().invoke(
+        commitments,
+        ["adjust", "Deep Work", "--amount", "-30", "--reason", "Correction"],
+    )
+
+    assert result.exit_code == 0
+    assert _CommitmentActionClient.adjusted == (12, -30, "Correction")
+    assert "Balance: 30m" in result.output
+
+
 class _ProjectEditClient:
     calls = []
 

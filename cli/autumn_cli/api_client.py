@@ -270,9 +270,21 @@ class APIClient:
                     code = error_envelope.get("code")
                     message = error_envelope.get("message") or str(e)
                     if code == "version_conflict":
+                        subject = (
+                            "commitment"
+                            if endpoint.startswith("/api/v2/commitments/")
+                            else "timer"
+                        )
                         raise APIError(
-                            "The timer changed on the server (someone else edited it?). "
+                            f"The {subject} changed on the server (someone else edited it?). "
                             "Re-run the command."
+                        )
+                    if code == "restart_required" and endpoint.startswith(
+                        "/api/v2/commitments/"
+                    ):
+                        raise APIError(
+                            "This field requires restarting the commitment. Use "
+                            "'autumn commitments restart'."
                         )
                     raise APIError(message)
 
@@ -1492,6 +1504,263 @@ class APIClient:
 
     # Commitment endpoints
 
+    @staticmethod
+    def _commitment_progress_v2_to_legacy(
+        resource: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Rebuild the v1 progress fields available from a v2 current period."""
+        current = resource.get("current_period") or {}
+        actual = current.get("accrued", 0)
+        target = current.get("target", resource.get("target_value", 0))
+        # Prefer the server's v1-parity progress semantics (five temporal
+        # states); fall back to the local derivation for older servers.
+        if current.get("percentage") is not None:
+            percentage = current["percentage"]
+        else:
+            try:
+                percentage = (
+                    round(float(actual) * 100 / float(target)) if target else 0
+                )
+            except (TypeError, ValueError, ZeroDivisionError):
+                percentage = 0
+        status = current.get("status") or (
+            "complete" if current.get("met") else "in-progress"
+        )
+        period_start = current.get("start")
+        ledger_start = resource.get("ledger_start_at")
+        effective_period_start = period_start or ledger_start
+        if period_start and ledger_start:
+            try:
+                period_dt = datetime.fromisoformat(
+                    str(period_start).replace("Z", "+00:00")
+                )
+                ledger_dt = datetime.fromisoformat(
+                    str(ledger_start).replace("Z", "+00:00")
+                )
+                if ledger_dt > period_dt:
+                    effective_period_start = ledger_start
+            except (TypeError, ValueError):
+                effective_period_start = period_start
+        return {
+            "actual": actual,
+            "target": target,
+            "percentage": percentage,
+            "balance": resource.get("balance", 0),
+            "current_surplus": actual - target
+            if isinstance(actual, (int, float)) and isinstance(target, (int, float))
+            else 0,
+            "status": status,
+            "period_start": period_start,
+            "effective_period_start": effective_period_start,
+            "period_end": current.get("end"),
+            "commitment_type": resource.get("commitment_type"),
+            "period": resource.get("period"),
+        }
+
+    @staticmethod
+    def _commitment_rules_v2_to_legacy(resource: Dict[str, Any]) -> List[str]:
+        """Render v2 filter IDs without pretending their names are embedded."""
+        filters = resource.get("filters") or {}
+        labels = {
+            "include_project_ids": "include projects",
+            "exclude_project_ids": "exclude projects",
+            "include_subproject_ids": "include subprojects",
+            "exclude_subproject_ids": "exclude subprojects",
+            "include_context_ids": "include contexts",
+            "exclude_context_ids": "exclude contexts",
+            "include_tag_ids": "include tags",
+            "exclude_tag_ids": "exclude tags",
+        }
+        return [
+            f"{labels.get(key, key)}: {', '.join(str(value) for value in values)}"
+            for key, values in filters.items()
+            if values
+        ]
+
+    @classmethod
+    def _commitment_v2_to_legacy(cls, resource: Dict[str, Any]) -> Dict[str, Any]:
+        target = resource.get("target") or {}
+        progress = cls._commitment_progress_v2_to_legacy(resource)
+        return {
+            "id": resource.get("id"),
+            "version": resource.get("version"),
+            "aggregation_type": resource.get("aggregation_type"),
+            "target_id": target.get("id"),
+            "target_name": target.get("name"),
+            "commitment_type": resource.get("commitment_type"),
+            "period": resource.get("period"),
+            "target": resource.get("target_value"),
+            "start_date": resource.get("start_date"),
+            "timezone": resource.get("timezone"),
+            "generation": resource.get("generation"),
+            "balance": resource.get("balance"),
+            "max_balance": resource.get("max_balance"),
+            "min_balance": resource.get("min_balance"),
+            "banking_enabled": resource.get("banking_enabled"),
+            "active": resource.get("active"),
+            "rules": cls._commitment_rules_v2_to_legacy(resource),
+            "filters": resource.get("filters") or {},
+            "progress": progress,
+            "pending_revision": resource.get("pending_revision"),
+            "ledger_start_at": resource.get("ledger_start_at"),
+            **(
+                {"streak": resource["streak"]} if "streak" in resource else {}
+            ),
+        }
+
+    @classmethod
+    def _commitment_v2_to_compact(cls, resource: Dict[str, Any]) -> Dict[str, Any]:
+        target = resource.get("target") or {}
+        progress = cls._commitment_progress_v2_to_legacy(resource)
+        return {
+            "id": resource.get("id"),
+            "agg": resource.get("aggregation_type"),
+            "name": target.get("name"),
+            "type": resource.get("commitment_type"),
+            "period": resource.get("period"),
+            "target": resource.get("target_value"),
+            "bal": resource.get("balance"),
+            "active": resource.get("active"),
+            "prog": {
+                "actual": progress["actual"],
+                "pct": progress["percentage"],
+                "status": progress["status"],
+            },
+            "pending_revision": resource.get("pending_revision"),
+        }
+
+    @staticmethod
+    def _numeric_id(value: Any) -> Optional[int]:
+        text = str(value)
+        return int(text) if text.isdigit() else None
+
+    def _resolve_commitment_context_id(self, value: Any) -> int:
+        numeric = self._numeric_id(value)
+        if numeric is not None:
+            return numeric
+        context_id, _ = self._metadata_ids(context=value)
+        if context_id is None:
+            raise APIError(f"Unknown context: {value}")
+        return context_id
+
+    def _resolve_commitment_tag_ids(self, values: List[Any]) -> List[int]:
+        _, tag_ids = self._metadata_ids(tags=values)
+        return tag_ids or []
+
+    def _resolve_commitment_subproject_id(self, value: Any) -> int:
+        numeric = self._numeric_id(value)
+        if numeric is not None:
+            return numeric
+        project, separator, subproject = str(value).partition("/")
+        if not separator or not project.strip() or not subproject.strip():
+            raise APIError(
+                f"Subproject must be written as Project/Subproject: {value}"
+            )
+        project = project.strip()
+        project_id = self._resolve_project_id(project)
+        ids = self._resolve_subproject_ids(project, project_id, [subproject.strip()])
+        return int((ids or [])[0])
+
+    def _commitment_filters_v1_to_v2(
+        self,
+        data: Dict[str, Any],
+        current: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, List[int]]]:
+        mapping = {
+            "include_projects": ("include_project_ids", "project"),
+            "exclude_projects": ("exclude_project_ids", "project"),
+            "include_subprojects": ("include_subproject_ids", "subproject"),
+            "exclude_subprojects": ("exclude_subproject_ids", "subproject"),
+            "include_contexts": ("include_context_ids", "context"),
+            "exclude_contexts": ("exclude_context_ids", "context"),
+            "include_tags": ("include_tag_ids", "tag"),
+            "exclude_tags": ("exclude_tag_ids", "tag"),
+        }
+        supplied = [key for key in mapping if key in data]
+        if not supplied and "filters" not in data:
+            return None
+        filters: Dict[str, List[int]] = {
+            key: list(values or [])
+            for key, values in (current or {}).items()
+            if isinstance(values, list)
+        }
+        if "filters" in data:
+            filters.update(
+                {
+                    key: [int(value) for value in (values or [])]
+                    for key, values in (data.get("filters") or {}).items()
+                }
+            )
+        for legacy_key in supplied:
+            v2_key, kind = mapping[legacy_key]
+            values = list(data.get(legacy_key) or [])
+            if kind == "project":
+                resolved = [
+                    self._numeric_id(value) or self._resolve_project_id(str(value))
+                    for value in values
+                ]
+            elif kind == "subproject":
+                resolved = [
+                    self._resolve_commitment_subproject_id(value) for value in values
+                ]
+            elif kind == "context":
+                resolved = [
+                    self._resolve_commitment_context_id(value) for value in values
+                ]
+            else:
+                resolved = self._resolve_commitment_tag_ids(values)
+            filters[v2_key] = resolved
+        return filters
+
+    def _commitment_payload_v1_to_v2(
+        self,
+        data: Dict[str, Any],
+        *,
+        creating: bool,
+        current: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload = {
+            key: data[key]
+            for key in (
+                "target_value",
+                "commitment_type",
+                "period",
+                "start_date",
+                "timezone",
+                "banking_enabled",
+                "max_balance",
+                "min_balance",
+                "active",
+            )
+            if key in data
+        }
+        if creating:
+            aggregation_type = data.get("aggregation_type", "project")
+            target = data.get("target")
+            payload["aggregation_type"] = aggregation_type
+            numeric = self._numeric_id(target)
+            if aggregation_type == "project":
+                payload["project_id"] = numeric or self._resolve_project_id(str(target))
+            elif aggregation_type == "subproject":
+                if numeric is not None:
+                    payload["subproject_id"] = numeric
+                else:
+                    project = data.get("project")
+                    qualified = f"{project}/{target}" if project else target
+                    payload["subproject_id"] = self._resolve_commitment_subproject_id(
+                        qualified
+                    )
+            elif aggregation_type == "context":
+                payload["context_id"] = self._resolve_commitment_context_id(target)
+            elif aggregation_type == "tag":
+                payload["tag_id"] = self._resolve_commitment_tag_ids([target])[0]
+            else:
+                raise APIError(f"Unknown aggregation type: {aggregation_type}")
+        filters = self._commitment_filters_v1_to_v2(data, current)
+        if filters is not None:
+            payload["filters"] = filters
+        return payload
+
     def list_commitments(
         self,
         *,
@@ -1502,32 +1771,121 @@ class APIClient:
         compact: bool = True,
     ) -> Dict:
         """List commitments, optionally filtering by active state or aggregation."""
-        params: Dict[str, Any] = {
-            "progress": str(progress).lower(),
-            "streak": str(streak).lower(),
-            "compact": str(compact).lower(),
+        params = {"include": "streak"} if streak else None
+        result = self._request("GET", "/api/v2/commitments/", params=params)
+        resources = [
+            resource
+            for resource in result.get("commitments") or []
+            if isinstance(resource, dict)
+            and (active is None or resource.get("active") is active)
+            and (
+                aggregation_type is None
+                or resource.get("aggregation_type") == aggregation_type
+            )
+        ]
+        translate = (
+            self._commitment_v2_to_compact
+            if compact
+            else self._commitment_v2_to_legacy
+        )
+        return {
+            "ok": True,
+            "count": len(resources),
+            "commitments": [translate(resource) for resource in resources],
         }
-        if active is not None:
-            params["active"] = str(active).lower()
-        if aggregation_type:
-            params["aggregation_type"] = aggregation_type
-        return self._request("GET", "/api/commitments/", params=params)
 
     def get_commitment(self, commitment_id: int) -> Dict:
         """Get one commitment in its full representation."""
-        return self._request("GET", f"/api/commitments/{commitment_id}/")
+        resource = self._request("GET", f"/api/v2/commitments/{commitment_id}")
+        return {"ok": True, "commitment": self._commitment_v2_to_legacy(resource)}
 
     def create_commitment(self, data: Dict[str, Any]) -> Dict:
         """Create a commitment from its API request fields."""
-        return self._request("POST", "/api/commitments/", json=data)
+        payload = self._commitment_payload_v1_to_v2(data, creating=True)
+        resource = self._request("POST", "/api/v2/commitments/", json=payload)
+        return {"ok": True, "commitment": self._commitment_v2_to_legacy(resource)}
 
     def update_commitment(self, commitment_id: int, data: Dict[str, Any]) -> Dict:
         """Patch the supplied commitment fields."""
-        return self._request("PATCH", f"/api/commitments/{commitment_id}/", json=data)
+        current = self._request("GET", f"/api/v2/commitments/{commitment_id}")
+        payload = self._commitment_payload_v1_to_v2(
+            data,
+            creating=False,
+            current=current.get("filters") or {},
+        )
+        resource = self._request(
+            "PATCH",
+            f"/api/v2/commitments/{commitment_id}",
+            json=payload,
+            headers={"If-Match": str(current["version"])},
+        )
+        return {"ok": True, "commitment": self._commitment_v2_to_legacy(resource)}
 
     def delete_commitment(self, commitment_id: int) -> Dict:
         """Delete a commitment by ID."""
-        return self._delete_no_content(f"/api/commitments/{commitment_id}/")
+        self._request(
+            "DELETE", f"/api/v2/commitments/{commitment_id}", retry_safe=True
+        )
+        return {"ok": True}
+
+    def restart_commitment(
+        self,
+        commitment_id: int,
+        *,
+        keep_balance: bool,
+        changes: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
+        """Restart a commitment into a new generation without automatic retry."""
+        payload: Dict[str, Any] = {"keep_balance": keep_balance}
+        if changes:
+            payload["changes"] = self._commitment_payload_v1_to_v2(
+                changes, creating=False
+            )
+        resource = self._request(
+            "POST",
+            f"/api/v2/commitments/{commitment_id}/restart/",
+            json=payload,
+        )
+        return {"ok": True, "commitment": self._commitment_v2_to_legacy(resource)}
+
+    def adjust_commitment(
+        self, commitment_id: int, *, amount: int, reason: Optional[str] = None
+    ) -> Dict:
+        """Apply a manual commitment ledger adjustment without automatic retry."""
+        payload: Dict[str, Any] = {"amount": amount}
+        if reason is not None:
+            payload["reason"] = reason
+        adjustment = self._request(
+            "POST",
+            f"/api/v2/commitments/{commitment_id}/adjustments/",
+            json=payload,
+        )
+        return {"ok": True, "adjustment": adjustment}
+
+    def list_commitment_periods(
+        self,
+        commitment_id: int,
+        *,
+        generation: Optional[int] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> Dict:
+        """List closed commitment periods from v2."""
+        params = {
+            key: value
+            for key, value in {
+                "generation": generation,
+                "limit": limit,
+                "offset": offset,
+            }.items()
+            if value is not None
+        }
+        result = self._request(
+            "GET",
+            f"/api/v2/commitments/{commitment_id}/periods/",
+            params=params,
+        )
+        return {"ok": True, **result}
 
     def get_discovery_meta(
         self, *, ttl_seconds: int = 300, refresh: bool = False
