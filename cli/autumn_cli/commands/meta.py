@@ -296,6 +296,15 @@ def meta_audit(dry_run: bool) -> None:
 
         result = client.audit_totals(dry_run=dry_run)
 
+        if result.get("deprecated"):
+            message = result.get(
+                "message",
+                "Deprecated: totals are always derived from sessions now; "
+                "there is nothing to audit.",
+            )
+            console.print(f"[autumn.warn]{message}[/]")
+            return
+
         if result.get("ok"):
             projects = result.get("projects", {})
             subprojects = result.get("subprojects", {})
