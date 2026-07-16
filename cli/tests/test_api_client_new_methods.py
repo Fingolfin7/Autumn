@@ -410,7 +410,12 @@ class TestGetProjectTotals:
             patch.object(mock_client, "_resolve_project_id", return_value=7),
             patch.object(mock_client, "_request") as mock_req,
         ):
-            mock_req.return_value = {"total_minutes": 123.4, "session_count": 5}
+            def side_effect(method, endpoint, params=None, **kwargs):
+                if endpoint == "/api/v2/reports/totals/":
+                    return {"total_minutes": 123.4, "session_count": 5}
+                return {"by": "subproject", "entries": []}
+
+            mock_req.side_effect = side_effect
 
             result = mock_client.get_project_totals(
                 "MyProject",
@@ -418,7 +423,7 @@ class TestGetProjectTotals:
                 end_date="2026-01-31"
             )
 
-            mock_req.assert_called_once_with(
+            mock_req.assert_any_call(
                 "GET",
                 "/api/v2/reports/totals/",
                 params={
