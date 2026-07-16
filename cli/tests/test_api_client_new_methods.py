@@ -1,7 +1,7 @@
 """Tests for new API client methods (Phase 1 features)."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, patch, MagicMock
 
 
 @pytest.fixture
@@ -10,7 +10,7 @@ def mock_client():
     with patch("autumn_cli.api_client.get_api_key", return_value="test-key"):
         with patch("autumn_cli.api_client.get_base_url", return_value="http://test"):
             from autumn_cli.api_client import APIClient
-            client = APIClient()
+            client = APIClient(wake_retry=False)
             return client
 
 
@@ -230,7 +230,7 @@ class TestStartTimer:
 
             mock_req.assert_called_once_with(
                 "POST", "/api/timer/start/",
-                json={"project": "MyProject", "stop_after": "25m"},
+                json={"project": "MyProject", "start": ANY, "stop_after": "25m"},
             )
 
 

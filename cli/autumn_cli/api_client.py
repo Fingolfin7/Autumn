@@ -3,7 +3,7 @@
 import json
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 from .config import get_api_key, get_base_url, get_wake_retry, get_wake_timeout_seconds
 from .utils.console import console
@@ -34,6 +34,7 @@ class APIClient:
         # None -> defer to config; False forces fast-fail (for opportunistic
         # background checks that must never block on a sleeping server).
         self._wake_retry_override = wake_retry
+        self._server_awake = False
 
         # Only support a simple TLS verify toggle.
         # Safe-by-default: verify=True unless explicitly configured insecure.
@@ -87,6 +88,7 @@ class APIClient:
         self,
         method: str,
         *,
+        retry_safe: bool = False,
         response: Optional[requests.Response] = None,
         error: Optional[requests.exceptions.RequestException] = None,
     ) -> bool:
@@ -97,7 +99,8 @@ class APIClient:
             return not self._is_dns_error(error)
         if isinstance(error, requests.exceptions.ConnectTimeout):
             return True
-        return isinstance(error, requests.exceptions.ReadTimeout) and method.upper() == "GET"
+        retry_eligible = method.upper() in ("GET", "HEAD") or retry_safe
+        return isinstance(error, requests.exceptions.ReadTimeout) and retry_eligible
 
     def _wake_server(self) -> bool:
         """Poll the unauthenticated health endpoint until the server is ready."""
@@ -116,6 +119,7 @@ class APIClient:
             try:
                 response = requests.get(health_url, timeout=10, verify=self._verify)
                 if response.status_code == 200:
+                    self._server_awake = True
                     if not self.quiet:
                         console.print("[autumn.ok]Server is up - retrying...[/]")
                     return True
@@ -134,18 +138,68 @@ class APIClient:
             return self._wake_retry_override
         return get_wake_retry()
 
-    def _http(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+    def _ensure_server_awake(self) -> None:
+        """Confirm the server is awake before sending a mutation."""
+        if self._server_awake:
+            return
+
+        health_url = f"{self.base_url}/healthz/"
+        try:
+            response = requests.get(health_url, timeout=5, verify=self._verify)
+            if response.status_code == 200:
+                self._server_awake = True
+                return
+        except requests.exceptions.RequestException:
+            pass
+
+        if self._wake_server():
+            self._server_awake = True
+            return
+
+        raise APIError(
+            "Server did not wake up in time. Try again in a minute, or check "
+            f"{self.base_url}."
+        )
+
+    @staticmethod
+    def _uncertain_mutation_error() -> APIError:
+        return APIError(
+            "The server was unreachable while processing this command. It may or "
+            "may not have been applied - check with 'autumn status' or 'autumn log' "
+            "before re-running."
+        )
+
+    def _http(
+        self, method: str, url: str, *, retry_safe: bool = False, **kwargs: Any
+    ) -> requests.Response:
         """Send one API request, waking a sleeping hosted server when needed."""
+        method = method.upper()
+        wake_retry_enabled = self._wake_retry_enabled()
+        retry_eligible = method in ("GET", "HEAD") or retry_safe
+
+        if wake_retry_enabled and method not in ("GET", "HEAD"):
+            self._ensure_server_awake()
+
         try:
             response = requests.request(method=method, url=url, **kwargs)
         except requests.exceptions.RequestException as error:
-            if not self._wake_retry_enabled() or not self._is_wake_trigger(method, error=error):
+            if not wake_retry_enabled or not self._is_wake_trigger(
+                method, retry_safe=retry_safe, error=error
+            ):
                 raise
+            if not retry_eligible:
+                raise self._uncertain_mutation_error()
             response = None
 
         if response is not None:
-            if not self._is_wake_trigger(method, response=response) or not self._wake_retry_enabled():
+            if response.status_code < 400:
+                self._server_awake = True
+            if not self._is_wake_trigger(
+                method, retry_safe=retry_safe, response=response
+            ) or not wake_retry_enabled:
                 return response
+            if not retry_eligible:
+                raise self._uncertain_mutation_error()
 
         if not self._wake_server():
             raise APIError(
@@ -156,14 +210,18 @@ class APIClient:
         try:
             retry_response = requests.request(method=method, url=url, **kwargs)
         except requests.exceptions.RequestException as error:
-            if self._is_wake_trigger(method, error=error):
+            if self._is_wake_trigger(method, retry_safe=retry_safe, error=error):
                 raise APIError(
                     "Server did not wake up in time. Try again in a minute, or check "
                     f"{self.base_url}."
                 )
             raise
 
-        if self._is_wake_trigger(method, response=retry_response):
+        if retry_response.status_code < 400:
+            self._server_awake = True
+        if self._is_wake_trigger(
+            method, retry_safe=retry_safe, response=retry_response
+        ):
             raise APIError(
                 "Server did not wake up in time. Try again in a minute, or check "
                 f"{self.base_url}."
@@ -176,6 +234,7 @@ class APIClient:
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
+        retry_safe: bool = False,
     ) -> Dict[str, Any]:
         """Make HTTP request to API."""
         url = f"{self.base_url}{endpoint}"
@@ -185,6 +244,7 @@ class APIClient:
             response = self._http(
                 method,
                 url,
+                retry_safe=retry_safe,
                 headers=self._headers(),
                 params=params,
                 json=json,
@@ -234,6 +294,7 @@ class APIClient:
             response = self._http(
                 "DELETE",
                 url,
+                retry_safe=True,
                 headers=self._headers(),
                 json=data,
                 timeout=30,
@@ -437,7 +498,8 @@ class APIClient:
         stop_after: Optional[Any] = None,
     ) -> Dict:
         """Start a new timer."""
-        data = {"project": project}
+        start = datetime.now(timezone.utc).isoformat()
+        data = {"project": project, "start": start}
         if subprojects:
             data["subprojects"] = subprojects
         if note:
@@ -453,14 +515,17 @@ class APIClient:
         note: Optional[str] = None,
     ) -> Dict:
         """Stop the current timer."""
-        data = {}
+        end = datetime.now(timezone.utc).isoformat()
+        data = {"end": end}
         if session_id:
             data["session_id"] = session_id
         if project:
             data["project"] = project
         if note is not None:
             data["note"] = note
-        return self._request("POST", "/api/timer/stop/", json=data)
+        return self._request(
+            "POST", "/api/timer/stop/", json=data, retry_safe=True
+        )
 
     def get_timer_status(
         self, session_id: Optional[int] = None, project: Optional[str] = None
@@ -489,7 +554,9 @@ class APIClient:
         params = {}
         if session_id:
             params["session_id"] = session_id
-        return self._request("DELETE", "/api/timer/delete/", params=params)
+        return self._request(
+            "DELETE", "/api/timer/delete/", params=params, retry_safe=True
+        )
 
     # Session endpoints
 
@@ -924,6 +991,7 @@ class APIClient:
             response = self._http(
                 "DELETE",
                 url,
+                retry_safe=True,
                 headers=self._headers(),
                 json=data,
                 timeout=30,
@@ -955,6 +1023,7 @@ class APIClient:
             response = self._http(
                 "DELETE",
                 url,
+                retry_safe=True,
                 headers=self._headers(),
                 timeout=30,
                 verify=self._verify,
@@ -1175,6 +1244,7 @@ class APIClient:
             response = self._http(
                 "DELETE",
                 url,
+                retry_safe=True,
                 headers=self._headers(),
                 timeout=30,
                 verify=self._verify,
