@@ -119,12 +119,15 @@ def render_status_chart(
     colors = []
 
     for item in status_data:
-        status = item.get("status", "unknown")
+        status = item.get("status") or item.get("name", "unknown")
         total_time = item.get("total_time", 0) / 60.0  # Convert to hours
         count = item.get("count", 0)
 
         if total_time > 0:
-            labels.append(f"{status.title()}\n({count} projects)")
+            label = status.title()
+            if count:
+                label += f"\n({count} projects)"
+            labels.append(label)
             sizes.append(total_time)
             colors.append(status_colors.get(status, "#94a3b8"))
 

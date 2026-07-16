@@ -293,27 +293,43 @@ class TestStartTimer:
 
 class TestExcludeFilters:
     def test_log_activity_sends_exclude_param(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"logs": []}
+        with (
+            patch.object(mock_client, "_resolve_project_id", side_effect=[9, 10]),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"count": 0, "total": 0, "sessions": []}
 
             mock_client.log_activity(exclude=["Admin", "Meta"])
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/log/",
-                params={"compact": "false", "exclude": "Admin,Meta"},
+                "/api/v2/sessions/",
+                params={
+                    "exclude_project_ids": "9,10",
+                    "include": "note",
+                    "limit": 100,
+                    "offset": 0,
+                },
             )
 
     def test_search_sessions_sends_exclude_param(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"sessions": []}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=9),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"count": 0, "total": 0, "sessions": []}
 
             mock_client.search_sessions(exclude=["Admin"])
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/sessions/search/",
-                params={"exclude": "Admin", "compact": "false"},
+                "/api/v2/sessions/",
+                params={
+                    "exclude_project_ids": "9",
+                    "include": "note",
+                    "limit": 100,
+                    "offset": 0,
+                },
             )
 
     def test_list_projects_grouped_sends_exclude_param(self, mock_client):
@@ -332,22 +348,30 @@ class TestExcludeFilters:
             )
 
     def test_list_sessions_sends_exclude_param(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = []
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=9),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"count": 0, "total": 0, "sessions": []}
 
             mock_client.list_sessions(exclude=["Admin"])
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/list_sessions/",
-                params={"compact": "false", "exclude": "Admin"},
+                "/api/v2/sessions/",
+                params={
+                    "exclude_project_ids": "9",
+                    "include": "note",
+                    "limit": 100,
+                    "offset": 0,
+                },
             )
 
 
 class TestChartDateParams:
-    def test_tally_by_context_uses_legacy_chart_date_format(self, mock_client):
+    def test_tally_by_context_uses_v2_iso_date_format(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = []
+            mock_req.return_value = {"by": "context", "entries": []}
 
             mock_client.tally_by_context(
                 start_date="2026-01-15",
@@ -356,11 +380,15 @@ class TestChartDateParams:
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/tally_by_context/",
-                params={"start_date": "01-15-2026", "end_date": "01-31-2026"},
+                "/api/v2/reports/tallies/",
+                params={
+                    "by": "context",
+                    "start_date": "2026-01-15",
+                    "end_date": "2026-01-31",
+                },
             )
 
-    def test_get_hierarchy_uses_legacy_chart_date_format(self, mock_client):
+    def test_get_hierarchy_uses_v2_iso_date_format(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
             mock_req.return_value = {}
 
@@ -371,15 +399,18 @@ class TestChartDateParams:
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/hierarchy/",
-                params={"start_date": "01-15-2026", "end_date": "01-31-2026"},
+                "/api/v2/reports/hierarchy/",
+                params={"start_date": "2026-01-15", "end_date": "2026-01-31"},
             )
 
 
 class TestGetProjectTotals:
     def test_get_project_totals_sends_correct_params(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"project": "MyProject", "total": 123.4, "subs": []}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"total_minutes": 123.4, "session_count": 5}
 
             result = mock_client.get_project_totals(
                 "MyProject",
@@ -389,15 +420,14 @@ class TestGetProjectTotals:
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/totals/",
+                "/api/v2/reports/totals/",
                 params={
-                    "project": "MyProject",
-                    "compact": "true",
+                    "project_ids": "7",
                     "start_date": "2026-01-01",
                     "end_date": "2026-01-31"
                 }
             )
-            assert result["total"] == 123.4
+            assert result == {"project": "MyProject", "total": 123.4, "subs": []}
 
 
 class TestSearchProjects:

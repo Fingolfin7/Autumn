@@ -75,15 +75,6 @@ class APIClient:
             "Accept": "application/json",
         }
 
-    def _chart_date_param(self, value: Optional[str]) -> Optional[str]:
-        """Normalize chart-only legacy date params to MM-DD-YYYY."""
-        if not value:
-            return value
-        try:
-            return datetime.strptime(value, "%Y-%m-%d").strftime("%m-%d-%Y")
-        except ValueError:
-            return value
-
     @staticmethod
     def _is_dns_error(error: requests.exceptions.ConnectionError) -> bool:
         """Return whether a connection error is specifically DNS resolution."""
@@ -546,6 +537,92 @@ class APIClient:
         }
 
     @staticmethod
+    def _session_v2_to_legacy(resource: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate one v2 session resource to the v1 full session shape."""
+        project = resource.get("project") or {}
+        allocations = resource.get("subproject_allocations") or []
+        duration = resource.get("duration_minutes")
+        if resource.get("active"):
+            duration = resource.get("elapsed_minutes")
+        return {
+            "id": resource.get("id"),
+            "project": project.get("name"),
+            "subprojects": [
+                allocation.get("name")
+                for allocation in allocations
+                if isinstance(allocation, dict)
+            ],
+            "start_time": resource.get("start"),
+            "end_time": resource.get("end"),
+            "duration_minutes": duration,
+            "note": resource.get("note"),
+        }
+
+    def _v2_read_filter_params(
+        self,
+        *,
+        project: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        exclude: Optional[List[str]] = None,
+        note_snippet: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Translate the shared v1 read filters to v2 ID/date parameters."""
+        params: Dict[str, Any] = {}
+        if project:
+            params["project_ids"] = str(self._resolve_project_id(project))
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+
+        context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
+        if context_id is not None:
+            params["context_ids"] = str(context_id)
+        if tag_ids:
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
+        if exclude:
+            params["exclude_project_ids"] = ",".join(
+                str(self._resolve_project_id(name)) for name in exclude
+            )
+        if note_snippet:
+            params["note_snippet"] = note_snippet
+        return params
+
+    def _all_v2_session_resources(
+        self,
+        params: Optional[Dict[str, Any]] = None,
+        *,
+        page_size: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Fetch every v2 completed-session page from the requested offset."""
+        resources: List[Dict[str, Any]] = []
+        current_offset = offset
+        base_params = dict(params or {})
+
+        while True:
+            page_params = {
+                **base_params,
+                "include": "note",
+                "limit": page_size,
+                "offset": current_offset,
+            }
+            page = self._request("GET", "/api/v2/sessions/", params=page_params)
+            page_resources = list(page.get("sessions") or [])
+            resources.extend(
+                resource for resource in page_resources if isinstance(resource, dict)
+            )
+            total = int(page.get("total", current_offset + len(page_resources)))
+            if not page_resources or current_offset + len(page_resources) >= total:
+                break
+            current_offset += len(page_resources)
+
+        return resources
+
+    @staticmethod
     def _to_utc_datetime(value: str) -> datetime:
         """Parse a supported v1 datetime value and return its UTC instant."""
         from .utils.datetime_parse import parse_user_datetime
@@ -815,22 +892,21 @@ class APIClient:
         exclude: Optional[List[str]] = None,
     ) -> Dict:
         """Get activity logs."""
-        params = {"compact": "false"}
-        if period:
-            params["period"] = period
-        if project:
-            params["project"] = project
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        if exclude:
-            params["exclude"] = ",".join(exclude)
-        return self._request("GET", "/api/log/", params=params)
+        if period and not start_date and not end_date:
+            from .utils.periods import period_to_dates
+
+            start_date, end_date = period_to_dates(period)
+        params = self._v2_read_filter_params(
+            project=project,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+            exclude=exclude,
+        )
+        resources = self._all_v2_session_resources(params)
+        logs = [self._session_v2_to_legacy(resource) for resource in resources]
+        return {"count": len(logs), "logs": logs}
 
     def search_sessions(
         self,
@@ -846,31 +922,73 @@ class APIClient:
         exclude: Optional[List[str]] = None,
     ) -> Dict:
         """Search sessions."""
-        params = {}
-        if project:
-            params["project"] = project
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if note_snippet:
-            params["note_snippet"] = note_snippet
-        if active is not None:
-            params["active"] = str(active).lower()
-        if limit:
-            params["limit"] = limit
-        if offset:
-            params["offset"] = offset
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        if exclude:
-            params["exclude"] = ",".join(exclude)
+        params = self._v2_read_filter_params(
+            project=project,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+            exclude=exclude,
+            note_snippet=note_snippet,
+        )
 
-        params["compact"] = "false" # make sure to get full session data and session notes
+        if active:
+            result = self._request("GET", "/api/v2/timers/")
+            resources = [
+                resource
+                for resource in result.get("timers") or []
+                if isinstance(resource, dict)
+            ]
+            project_ids = {
+                int(value)
+                for value in str(params.get("project_ids", "")).split(",")
+                if value
+            }
+            excluded_ids = {
+                int(value)
+                for value in str(params.get("exclude_project_ids", "")).split(",")
+                if value
+            }
+            if project_ids:
+                resources = [
+                    resource
+                    for resource in resources
+                    if int((resource.get("project") or {}).get("id") or 0)
+                    in project_ids
+                ]
+            if excluded_ids:
+                resources = [
+                    resource
+                    for resource in resources
+                    if int((resource.get("project") or {}).get("id") or 0)
+                    not in excluded_ids
+                ]
+            if note_snippet:
+                folded_note = note_snippet.casefold()
+                resources = [
+                    resource
+                    for resource in resources
+                    if folded_note in str(resource.get("note") or "").casefold()
+                ]
+            if offset:
+                resources = resources[offset:]
+            if limit:
+                resources = resources[:limit]
+        elif not limit:
+            resources = self._all_v2_session_resources(params, offset=offset or 0)
+        else:
+            page_params = {**params, "include": "note", "limit": limit}
+            if offset:
+                page_params["offset"] = offset
+            page = self._request("GET", "/api/v2/sessions/", params=page_params)
+            resources = [
+                resource
+                for resource in page.get("sessions") or []
+                if isinstance(resource, dict)
+            ]
 
-        return self._request("GET", "/api/sessions/search/", params=params)
+        sessions = [self._session_v2_to_legacy(resource) for resource in resources]
+        return {"count": len(sessions), "sessions": sessions}
 
     def track_session(
         self,
@@ -1148,20 +1266,21 @@ class APIClient:
         tags: Optional[List[str]] = None,
     ) -> List[Dict]:
         """Get project totals (for charts)."""
-        params = {}
-        if project_name:
-            params["project_name"] = project_name
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        return self._request(
-            "GET", "/api/tally_by_sessions/", params=params
+        params = self._v2_read_filter_params(
+            project=project_name,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
         )
+        result = self._request(
+            "GET", "/api/v2/reports/tallies/", params={"by": "project", **params}
+        )
+        return [
+            {"name": entry.get("name"), "total_time": entry.get("total_minutes")}
+            for entry in result.get("entries") or []
+            if isinstance(entry, dict)
+        ]
 
     def tally_by_subprojects(
         self,
@@ -1172,16 +1291,33 @@ class APIClient:
         tags: Optional[List[str]] = None,
     ) -> List[Dict]:
         """Get subproject totals (for charts)."""
-        params = {"project_name": project_name}
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        return self._request("GET", "/api/tally_by_subprojects/", params=params)
+        params = self._v2_read_filter_params(
+            project=project_name,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+        )
+        result = self._request(
+            "GET", "/api/v2/reports/tallies/", params={"by": "subproject", **params}
+        )
+        translated = []
+        residual_total = 0
+        for entry in result.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("kind") == "residual" or entry.get("name") is None:
+                residual_total += entry.get("total_minutes") or 0
+            else:
+                translated.append(
+                    {
+                        "name": entry.get("name"),
+                        "total_time": entry.get("total_minutes"),
+                    }
+                )
+        if residual_total:
+            translated.append({"name": "no subproject", "total_time": residual_total})
+        return translated
 
     def list_sessions(
         self,
@@ -1193,20 +1329,18 @@ class APIClient:
         exclude: Optional[List[str]] = None,
     ) -> List[Dict]:
         """List sessions (for charts)."""
-        params = {"compact": "false"}
-        if project_name:
-            params["project_name"] = project_name
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        if exclude:
-            params["exclude"] = ",".join(exclude)
-        return self._request("GET", "/api/list_sessions/", params=params)
+        params = self._v2_read_filter_params(
+            project=project_name,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+            exclude=exclude,
+        )
+        return [
+            self._session_v2_to_legacy(resource)
+            for resource in self._all_v2_session_resources(params)
+        ]
 
     def list_contexts(self, compact: bool = True) -> Dict:
         """List available contexts for the authenticated user."""
@@ -1547,17 +1681,39 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> Dict:
-        """Get project totals with subproject breakdown."""
-        params = {"project": project, "compact": "true"}
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        return self._request("GET", "/api/totals/", params=params)
+        """Get a project total in the legacy compact totals shape."""
+        params = self._v2_read_filter_params(
+            project=project,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+        )
+        result = self._request("GET", "/api/v2/reports/totals/", params=params)
+
+        # The legacy totals shape carries a per-subproject breakdown; source it
+        # from the v2 subproject tally (residual entries fold into the same
+        # "no subproject" bucket the v1 endpoint used).
+        tally_params = dict(params, by="subproject")
+        tally = self._request(
+            "GET", "/api/v2/reports/tallies/", params=tally_params
+        )
+        subs: List[List[Any]] = []
+        residual_minutes = 0.0
+        for entry in tally.get("entries", []):
+            minutes = float(entry.get("total_minutes") or 0.0)
+            if entry.get("kind") == "residual" or entry.get("name") is None:
+                residual_minutes += minutes
+            else:
+                subs.append([entry["name"], minutes])
+        if residual_minutes:
+            subs.append(["no subproject", residual_minutes])
+
+        return {
+            "project": project,
+            "total": result.get("total_minutes"),
+            "subs": subs,
+        }
 
     def search_subprojects(
         self, project: str, search_term: str
@@ -1700,26 +1856,44 @@ class APIClient:
         end_date: Optional[str] = None,
     ) -> List[Dict]:
         """Get time totals aggregated by context."""
-        params = {}
-        if start_date:
-            params["start_date"] = self._chart_date_param(start_date)
-        if end_date:
-            params["end_date"] = self._chart_date_param(end_date)
-        return self._request("GET", "/api/tally_by_context/", params=params)
+        params = self._v2_read_filter_params(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        result = self._request(
+            "GET", "/api/v2/reports/tallies/", params={"by": "context", **params}
+        )
+        return [
+            {"name": entry.get("name"), "total_time": entry.get("total_minutes")}
+            for entry in result.get("entries") or []
+            if isinstance(entry, dict)
+        ]
 
     def tally_by_status(
         self,
         context: Optional[str] = None,
     ) -> List[Dict]:
         """Get project count and time totals by status."""
-        params = {}
-        if context:
-            params["context"] = context
-        return self._request("GET", "/api/tally_by_status/", params=params)
+        params = self._v2_read_filter_params(context=context)
+        result = self._request(
+            "GET", "/api/v2/reports/tallies/", params={"by": "status", **params}
+        )
+        return [
+            {"name": entry.get("name"), "total_time": entry.get("total_minutes")}
+            for entry in result.get("entries") or []
+            if isinstance(entry, dict)
+        ]
 
     def tally_by_tags(self) -> List[Dict]:
         """Get time and project count aggregated by tag."""
-        return self._request("GET", "/api/tally_by_tags/")
+        result = self._request(
+            "GET", "/api/v2/reports/tallies/", params={"by": "tag"}
+        )
+        return [
+            {"name": entry.get("name"), "total_time": entry.get("total_minutes")}
+            for entry in result.get("entries") or []
+            if isinstance(entry, dict)
+        ]
 
     def get_hierarchy(
         self,
@@ -1727,12 +1901,36 @@ class APIClient:
         end_date: Optional[str] = None,
     ) -> Dict:
         """Get nested Context → Project → Subproject hierarchy with time totals."""
-        params = {}
-        if start_date:
-            params["start_date"] = self._chart_date_param(start_date)
-        if end_date:
-            params["end_date"] = self._chart_date_param(end_date)
-        return self._request("GET", "/api/hierarchy/", params=params)
+        params = self._v2_read_filter_params(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        result = self._request("GET", "/api/v2/reports/hierarchy/", params=params)
+        projects = []
+        for project in result.get("projects") or []:
+            if not isinstance(project, dict):
+                continue
+            children = [
+                {
+                    "name": child.get("name"),
+                    "subproject_id": child.get("id"),
+                    "total_time": child.get("total_minutes"),
+                }
+                for child in project.get("children") or []
+                if isinstance(child, dict) and child.get("kind") == "subproject"
+            ]
+            projects.append(
+                {
+                    "name": project.get("name"),
+                    "project_id": project.get("id"),
+                    "total_time": project.get("total_minutes"),
+                    "children": children,
+                }
+            )
+        return {
+            "name": "All",
+            "children": [{"name": "All", "context_id": None, "children": projects}],
+        }
 
     def get_projects_with_stats(
         self,
