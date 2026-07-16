@@ -2124,10 +2124,19 @@ class APIClient:
     # Audit
 
     def audit_totals(self, dry_run: bool = False) -> Dict:
-        """Recompute and persist totals for all projects and subprojects."""
-        if dry_run:
-            return self._request("POST", "/api/audit/", json={"dry_run": True})
-        return self._request("POST", "/api/audit/")
+        """Deprecated: totals are always derived server-side now.
+
+        Kept as a local no-op so old scripts don't break; the v1 audit
+        endpoint no longer exists.
+        """
+        return {
+            "ok": True,
+            "deprecated": True,
+            "message": (
+                "Deprecated: totals are always derived from sessions now; "
+                "there is nothing to audit."
+            ),
+        }
 
     # Project details and search
 

@@ -252,30 +252,21 @@ class TestImportData:
 
 
 class TestAuditTotals:
-    def test_audit_totals_calls_correct_endpoint(self, mock_client):
+    def test_audit_totals_is_a_local_deprecation_noop(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {
-                "ok": True,
-                "projects": {"count": 3, "changed": 1, "delta_total": 9.0},
-                "subprojects": {"count": 5, "changed": 2, "delta_total": 18.0}
-            }
-
             result = mock_client.audit_totals()
 
-            mock_req.assert_called_once_with("POST", "/api/audit/")
+            mock_req.assert_not_called()
             assert result["ok"] is True
-            assert result["projects"]["changed"] == 1
+            assert result["deprecated"] is True
+            assert "derived" in result["message"]
 
-    def test_audit_totals_dry_run_sends_payload(self, mock_client):
+    def test_audit_totals_dry_run_is_also_local(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True, "dry_run": True}
-
             result = mock_client.audit_totals(dry_run=True)
 
-            mock_req.assert_called_once_with(
-                "POST", "/api/audit/", json={"dry_run": True}
-            )
-            assert result["dry_run"] is True
+            mock_req.assert_not_called()
+            assert result["deprecated"] is True
 
 
 class TestStartTimer:
