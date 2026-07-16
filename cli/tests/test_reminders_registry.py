@@ -3,7 +3,7 @@ from __future__ import annotations
 from autumn_cli.utils import reminders_registry as rr
 
 
-def test_registry_add_and_remove(monkeypatch):
+def test_registry_add_and_remove(monkeypatch, tmp_path):
     # Keep everything in-memory by stubbing config load/save.
     state = {}
 
@@ -16,6 +16,7 @@ def test_registry_add_and_remove(monkeypatch):
 
     monkeypatch.setattr(rr, "load_config", fake_load_config)
     monkeypatch.setattr(rr, "save_config", fake_save_config)
+    monkeypatch.setattr(rr, "REMINDERS_FILE", tmp_path / "reminders.json")
 
     # Don't prune as part of add_entry/listing in this test.
     monkeypatch.setattr(rr, "_is_pid_alive", lambda pid: True)

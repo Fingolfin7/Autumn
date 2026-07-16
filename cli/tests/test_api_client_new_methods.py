@@ -223,15 +223,50 @@ class TestAuditTotals:
 
 class TestStartTimer:
     def test_start_timer_sends_stop_after_when_provided(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True}
+        resource = {
+            "id": 5,
+            "project": {"id": 7, "name": "MyProject"},
+            "subproject_allocations": [],
+            "start": "2026-07-16T08:00:00+00:00",
+            "end": None,
+            "active": True,
+            "auto_stop_at": None,
+            "duration_minutes": None,
+            "elapsed_minutes": 0.0,
+            "note": None,
+        }
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request", return_value=resource) as mock_req,
+        ):
 
-            mock_client.start_timer("MyProject", stop_after="25m")
+            result = mock_client.start_timer("MyProject", stop_after="25m")
 
             mock_req.assert_called_once_with(
-                "POST", "/api/timer/start/",
-                json={"project": "MyProject", "start": ANY, "stop_after": "25m"},
+                "POST", "/api/v2/timers/",
+                json={
+                    "project_id": 7,
+                    "start": ANY,
+                    "stop_after_minutes": "25m",
+                    "uuid": ANY,
+                },
+                retry_safe=True,
             )
+            assert result == {
+                "ok": True,
+                "session": {
+                    "id": 5,
+                    "p": "MyProject",
+                    "pid": 7,
+                    "subs": [],
+                    "start": "2026-07-16T08:00:00+00:00",
+                    "end": None,
+                    "stop_at": None,
+                    "active": True,
+                    "elapsed": 0.0,
+                    "note": None,
+                },
+            }
 
 
 class TestExcludeFilters:

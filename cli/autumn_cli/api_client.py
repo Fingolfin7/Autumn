@@ -3,8 +3,10 @@
 import json
 import time
 import requests
-from datetime import datetime, timezone
-from typing import Optional, Dict, List, Any
+from datetime import datetime, timedelta, timezone
+from json import JSONDecodeError
+from typing import Optional, Dict, List, Any, Tuple
+from uuid import uuid4
 from .config import get_api_key, get_base_url, get_wake_retry, get_wake_timeout_seconds
 from .utils.console import console
 
@@ -35,6 +37,9 @@ class APIClient:
         # background checks that must never block on a sleeping server).
         self._wake_retry_override = wake_retry
         self._server_awake = False
+        self._subproject_id_cache: Dict[
+            int, Tuple[float, List[Dict[str, Any]]]
+        ] = {}
 
         # Only support a simple TLS verify toggle.
         # Safe-by-default: verify=True unless explicitly configured insecure.
@@ -235,9 +240,13 @@ class APIClient:
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         retry_safe: bool = False,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Make HTTP request to API."""
         url = f"{self.base_url}{endpoint}"
+        request_headers = self._headers()
+        if headers:
+            request_headers.update(headers)
 
         response = None
         try:
@@ -245,15 +254,36 @@ class APIClient:
                 method,
                 url,
                 retry_safe=retry_safe,
-                headers=self._headers(),
+                headers=request_headers,
                 params=params,
                 json=json,
                 timeout=30,
                 verify=self._verify,
             )
             response.raise_for_status()
+            if endpoint.startswith("/api/v2/") and (
+                response.status_code == 204 or not response.content
+            ):
+                return {}
             return response.json()
         except requests.exceptions.HTTPError as e:
+            if endpoint.startswith("/api/v2/"):
+                error_data = {}
+                try:
+                    error_data = response.json() if response is not None else {}
+                except (JSONDecodeError, ValueError):
+                    pass
+                error_envelope = error_data.get("error")
+                if isinstance(error_envelope, dict):
+                    code = error_envelope.get("code")
+                    message = error_envelope.get("message") or str(e)
+                    if code == "version_conflict":
+                        raise APIError(
+                            "The timer changed on the server (someone else edited it?). "
+                            "Re-run the command."
+                        )
+                    raise APIError(message)
+
             if response is not None and response.status_code == 401:
                 raise APIError("Authentication failed. Check your API key.")
             try:
@@ -262,7 +292,7 @@ class APIClient:
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
-            except (json.JSONDecodeError, ValueError, KeyError):
+            except (JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
         except requests.exceptions.RequestException as e:
             # Keep network errors readable; urllib3 can be very verbose.
@@ -490,6 +520,158 @@ class APIClient:
 
     # Timer endpoints
 
+    @staticmethod
+    def _session_v2_to_compact(resource: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate one v2 session resource to the v1 compact session shape."""
+        project = resource.get("project") or {}
+        allocations = resource.get("subproject_allocations") or []
+        active = bool(resource.get("active"))
+        elapsed = (
+            resource.get("elapsed_minutes")
+            if active
+            else resource.get("duration_minutes")
+        )
+        return {
+            "id": resource.get("id"),
+            "p": project.get("name"),
+            "pid": project.get("id"),
+            "subs": [allocation.get("name") for allocation in allocations],
+            "start": resource.get("start"),
+            "end": resource.get("end"),
+            "stop_at": resource.get("auto_stop_at"),
+            "active": active,
+            "elapsed": elapsed,
+            "note": resource.get("note"),
+        }
+
+    @staticmethod
+    def _to_utc_datetime(value: str) -> datetime:
+        """Parse a supported v1 datetime value and return its UTC instant."""
+        from .utils.datetime_parse import parse_user_datetime
+
+        try:
+            parsed = parse_user_datetime(value).dt
+        except ValueError as original_error:
+            parsed = None
+            for date_format in ("%m-%d-%Y %H:%M:%S", "%m-%d-%Y"):
+                try:
+                    parsed = datetime.strptime(value, date_format)
+                    break
+                except ValueError:
+                    continue
+            if parsed is None:
+                raise original_error
+        return parsed.astimezone(timezone.utc)
+
+    @classmethod
+    def _to_utc_iso(cls, value: str) -> str:
+        return cls._to_utc_datetime(value).isoformat()
+
+    def _resolve_project_id(self, name: str) -> int:
+        """Resolve a project name through the existing TTL-backed discovery cache."""
+        def find_id(projects: List[Dict[str, Any]]) -> Optional[int]:
+            for project in projects:
+                project_name = project.get("name") or project.get("project")
+                if project_name and project_name.casefold() == name.casefold():
+                    project_id = (
+                        project.get("id")
+                        or project.get("pid")
+                        or project.get("project_id")
+                    )
+                    if project_id is not None:
+                        return int(project_id)
+            return None
+
+        snapshot = self.get_discovery_projects(refresh=False)
+        project_id = find_id(snapshot.get("projects", []))
+        if project_id is not None:
+            return project_id
+        if snapshot.get("cached"):
+            projects = self.get_discovery_projects(refresh=True).get("projects", [])
+            project_id = find_id(projects)
+            if project_id is not None:
+                return project_id
+        raise APIError(f"Project not found: {name}")
+
+    def _get_subprojects_for_resolution(
+        self, project: str, project_id: int, *, ttl_seconds: int = 300
+    ) -> List[Dict[str, Any]]:
+        now = time.monotonic()
+        cached = self._subproject_id_cache.get(project_id)
+        if cached is not None and now - cached[0] <= ttl_seconds:
+            return cached[1]
+
+        result = self.list_subprojects(project, compact=False)
+        subprojects = (
+            result.get("subprojects", []) if isinstance(result, dict) else result
+        )
+        normalized = [sub for sub in subprojects if isinstance(sub, dict)]
+        self._subproject_id_cache[project_id] = (now, normalized)
+        return normalized
+
+    def _resolve_subproject_ids(
+        self, project: str, project_id: int, names: Optional[List[str]]
+    ) -> Optional[List[int]]:
+        if names is None:
+            return None
+        if not names:
+            return []
+
+        known = self._get_subprojects_for_resolution(project, project_id)
+        ids_by_name = {}
+        for sub in known:
+            sub_name = sub.get("name") or sub.get("subproject")
+            sub_id = sub.get("id") or sub.get("subproject_id")
+            if sub_name and sub_id is not None:
+                ids_by_name[str(sub_name)] = sub_id
+        folded = {key.casefold(): value for key, value in ids_by_name.items()}
+        missing = [name for name in names if name.casefold() not in folded]
+        if missing:
+            raise APIError(f"Unknown subprojects: {', '.join(missing)}")
+        return [int(folded[name.casefold()]) for name in names]
+
+    def _active_timer_resources(self) -> List[Dict[str, Any]]:
+        result = self._request("GET", "/api/v2/timers/")
+        return list(result.get("timers") or [])
+
+    @staticmethod
+    def _newest_timer(resources: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not resources:
+            raise APIError("No active timer found.")
+
+        def sort_key(resource: Dict[str, Any]) -> Tuple[datetime, int]:
+            start = str(resource.get("start") or "")
+            try:
+                parsed = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                parsed = datetime.min.replace(tzinfo=timezone.utc)
+            return parsed, int(resource.get("id") or 0)
+
+        return max(
+            resources,
+            key=sort_key,
+        )
+
+    def _resolve_active_timer_target(
+        self, session_id: Optional[int], project: Optional[str]
+    ) -> Dict[str, Any]:
+        if session_id is not None:
+            return self._request("GET", f"/api/v2/sessions/{session_id}")
+
+        resources = self._active_timer_resources()
+        if project is not None:
+            matches = [
+                resource
+                for resource in resources
+                if ((resource.get("project") or {}).get("name") or "").casefold()
+                == project.casefold()
+            ]
+        else:
+            matches = resources
+        return self._newest_timer(matches)
+
     def start_timer(
         self,
         project: str,
@@ -499,14 +681,19 @@ class APIClient:
     ) -> Dict:
         """Start a new timer."""
         start = datetime.now(timezone.utc).isoformat()
-        data = {"project": project, "start": start}
-        if subprojects:
-            data["subprojects"] = subprojects
+        project_id = self._resolve_project_id(project)
+        subproject_ids = self._resolve_subproject_ids(project, project_id, subprojects)
+        data = {"project_id": project_id, "start": start, "uuid": str(uuid4())}
+        if subproject_ids:
+            data["subproject_ids"] = subproject_ids
         if note:
             data["note"] = note
         if stop_after is not None:
-            data["stop_after"] = stop_after
-        return self._request("POST", "/api/timer/start/", json=data)
+            data["stop_after_minutes"] = stop_after
+        resource = self._request(
+            "POST", "/api/v2/timers/", json=data, retry_safe=True
+        )
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     def stop_timer(
         self,
@@ -515,48 +702,76 @@ class APIClient:
         note: Optional[str] = None,
     ) -> Dict:
         """Stop the current timer."""
+        target = self._resolve_active_timer_target(session_id, project)
         end = datetime.now(timezone.utc).isoformat()
         data = {"end": end}
-        if session_id:
-            data["session_id"] = session_id
-        if project:
-            data["project"] = project
         if note is not None:
             data["note"] = note
-        return self._request(
-            "POST", "/api/timer/stop/", json=data, retry_safe=True
+        resource = self._request(
+            "POST",
+            f"/api/v2/timers/{target['id']}/stop/",
+            json=data,
+            retry_safe=True,
+            headers={"If-Match": str(target["version"])},
         )
+        compact = self._session_v2_to_compact(resource)
+        return {"ok": True, "session": compact, "duration": compact["elapsed"]}
 
     def get_timer_status(
         self, session_id: Optional[int] = None, project: Optional[str] = None
     ) -> Dict:
         """Get status of active timer(s)."""
-        params = {}
-        if session_id:
-            params["session_id"] = session_id
-        if project:
-            params["project"] = project
-        return self._request("GET", "/api/timer/status/", params=params)
+        resources = self._active_timer_resources()
+        if session_id is not None:
+            resources = [
+                resource for resource in resources if resource.get("id") == session_id
+            ]
+        if project is not None:
+            resources = [
+                resource
+                for resource in resources
+                if ((resource.get("project") or {}).get("name") or "").casefold()
+                == project.casefold()
+            ]
+        sessions = [
+            self._session_v2_to_compact(resource) for resource in resources
+        ]
+        return {"ok": True, "active": len(sessions), "sessions": sessions}
 
     def restart_timer(
         self, session_id: Optional[int] = None, project: Optional[str] = None
     ) -> Dict:
         """Restart a timer."""
+        target = self._resolve_active_timer_target(session_id, project)
         data = {"start": datetime.now(timezone.utc).isoformat()}
-        if session_id:
-            data["session_id"] = session_id
-        if project:
-            data["project"] = project
-        return self._request("POST", "/api/timer/restart/", json=data)
+        resource = self._request(
+            "POST",
+            f"/api/v2/timers/{target['id']}/restart/",
+            json=data,
+            headers={"If-Match": str(target["version"])},
+        )
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     def delete_timer(self, session_id: Optional[int] = None) -> Dict:
         """Delete a timer."""
-        params = {}
-        if session_id:
-            params["session_id"] = session_id
-        return self._request(
-            "DELETE", "/api/timer/delete/", params=params, retry_safe=True
+        resources = self._active_timer_resources()
+        matches = [
+            resource for resource in resources if resource.get("id") == session_id
+        ]
+        if session_id is None:
+            target = self._newest_timer(resources)
+            target_id = target["id"]
+        else:
+            target = matches[0] if matches else None
+            target_id = session_id
+        headers = (
+            {"If-Match": str(target["version"])} if target is not None else None
         )
+        request_kwargs: Dict[str, Any] = {"retry_safe": True}
+        if headers is not None:
+            request_kwargs["headers"] = headers
+        self._request("DELETE", f"/api/v2/timers/{target_id}", **request_kwargs)
+        return {"ok": True, "deleted": target_id}
 
     # Session endpoints
 
@@ -637,16 +852,28 @@ class APIClient:
         note: Optional[str] = None,
     ) -> Dict:
         """Track a completed session."""
+        project_id = self._resolve_project_id(project)
+        subproject_ids = self._resolve_subproject_ids(
+            project, project_id, subprojects
+        )
+        start_utc = self._to_utc_datetime(start)
+        end_utc = self._to_utc_datetime(end)
+        if end_utc < start_utc:
+            start_utc -= timedelta(days=1)
         data = {
-            "project": project,
-            "start": start,
-            "end": end,
+            "project_id": project_id,
+            "start": start_utc.isoformat(),
+            "end": end_utc.isoformat(),
+            "uuid": str(uuid4()),
         }
-        if subprojects:
-            data["subprojects"] = subprojects
+        if subproject_ids:
+            data["subproject_ids"] = subproject_ids
         if note:
             data["note"] = note
-        return self._request("POST", "/api/track/", json=data)
+        resource = self._request(
+            "POST", "/api/v2/sessions/", json=data, retry_safe=True
+        )
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     # Project endpoints
 
@@ -927,6 +1154,9 @@ class APIClient:
         for status in ("active", "paused", "complete", "archived"):
             for proj in projects_by_status.get(status, []):
                 proj_entry = {
+                    "id": (
+                        proj.get("id") or proj.get("pid") or proj.get("project_id")
+                    ),
                     "name": proj.get("name") or proj.get("project"),
                     "description": proj.get("description", ""),
                     "status": status,
@@ -1221,47 +1451,42 @@ class APIClient:
         compact: bool = True,
     ) -> Dict:
         """Edit an existing completed session."""
-        data = {}
+        current = self._request("GET", f"/api/v2/sessions/{session_id}")
+        current_project = current.get("project") or {}
+        effective_project = project or current_project.get("name")
         if project is not None:
-            data["project"] = project
+            project_id = self._resolve_project_id(project)
+        else:
+            project_id = current_project.get("id")
+
+        data: Dict[str, Any] = {}
+        if project is not None:
+            data["project_id"] = project_id
         if subprojects is not None:
-            data["subprojects"] = subprojects
+            data["subproject_ids"] = self._resolve_subproject_ids(
+                effective_project, int(project_id), subprojects
+            )
         if start is not None:
-            data["start"] = start
+            data["start"] = self._to_utc_iso(start)
         if end is not None:
-            data["end"] = end
+            data["end"] = self._to_utc_iso(end)
         if note is not None:
             data["note"] = note
 
-        params = {"compact": str(compact).lower()}
-        return self._request("PATCH", f"/api/session/{session_id}/", params=params, json=data)
+        resource = self._request(
+            "PATCH",
+            f"/api/v2/sessions/{session_id}",
+            json=data,
+            headers={"If-Match": str(current["version"])},
+        )
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     def delete_session(self, session_id: int) -> Dict:
         """Delete a completed/saved session by ID."""
-        endpoint = f"/api/delete_session/{session_id}/"
-        url = f"{self.base_url}{endpoint}"
-        try:
-            response = self._http(
-                "DELETE",
-                url,
-                retry_safe=True,
-                headers=self._headers(),
-                timeout=30,
-                verify=self._verify,
-            )
-            response.raise_for_status()
-            if response.status_code == 204 or not response.content:
-                return {"ok": True, "deleted": session_id}
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_data = response.json() if response is not None else {}
-                error_msg = error_data.get("error", str(e))
-                raise APIError(f"API error: {error_msg}")
-            except APIError:
-                raise
-            except (json.JSONDecodeError, ValueError, KeyError):
-                raise APIError(f"API error: {e}")
+        self._request(
+            "DELETE", f"/api/v2/sessions/{session_id}", retry_safe=True
+        )
+        return {"ok": True, "deleted": session_id}
 
     # Chart data endpoints
 

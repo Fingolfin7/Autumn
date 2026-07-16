@@ -33,7 +33,7 @@ def test_projects_cache_roundtrip_active_account_scope(tmp_path, monkeypatch):
     assert snap.projects[0]["name"] == "Project A"
 
 
-def test_projects_cache_legacy_schema_migrates_on_load(tmp_path, monkeypatch):
+def test_projects_cache_old_schema_is_discarded_on_load(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(cfg, "CONFIG_FILE", tmp_path / "config.yaml")
 
@@ -60,8 +60,7 @@ def test_projects_cache_legacy_schema_migrates_on_load(tmp_path, monkeypatch):
     assert stored["account_caches"]["alice"]["projects_cache"]["projects"][0]["name"] == "Legacy"
 
     snap = load_cached_projects(ttl_seconds=300)
-    assert snap is not None
-    assert snap.projects[0]["name"] == "Legacy"
+    assert snap is None
 
 
 def test_projects_cache_clear_clears_active_scope_only(tmp_path, monkeypatch):

@@ -9,6 +9,24 @@ import requests
 from autumn_cli.api_client import APIClient, APIError
 
 
+def _session_resource(*, active=True):
+    return {
+        "id": 11,
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "version": 3,
+        "project": {"id": 4, "name": "Work"},
+        "allocation_mode": "equal",
+        "subproject_allocations": [],
+        "start": "2026-07-16T08:30:00+00:00",
+        "end": None if active else "2026-07-16T09:00:00+00:00",
+        "active": active,
+        "auto_stop_at": None,
+        "duration_minutes": None if active else 30.0,
+        "elapsed_minutes": 0.0 if active else None,
+        "note": None,
+    }
+
+
 def _response(status_code=200, payload=None):
     response = MagicMock()
     response.status_code = status_code
@@ -31,7 +49,7 @@ def _client(monkeypatch, *, wake_retry=True, wake_timeout=120):
 
 def test_connection_error_wakes_server_then_retries(monkeypatch):
     client = _client(monkeypatch)
-    success = _response(payload={"ok": True})
+    success = _response(payload={"timers": []})
     monkeypatch.setattr(
         requests,
         "request",
@@ -41,7 +59,7 @@ def test_connection_error_wakes_server_then_retries(monkeypatch):
     get = MagicMock(return_value=health)
     monkeypatch.setattr(requests, "get", get)
 
-    assert client.get_timer_status() == {"ok": True}
+    assert client.get_timer_status() == {"ok": True, "active": 0, "sessions": []}
     assert requests.request.call_count == 2
     get.assert_called_once_with(
         "https://autumn.example/healthz/", timeout=10, verify=True
@@ -51,47 +69,59 @@ def test_connection_error_wakes_server_then_retries(monkeypatch):
 def test_503_wakes_server_then_retries(monkeypatch):
     client = _client(monkeypatch)
     unavailable = _response(503)
-    success = _response(payload={"sessions": []})
+    success = _response(payload={"timers": []})
     request = MagicMock(side_effect=[unavailable, success])
     monkeypatch.setattr(requests, "request", request)
     monkeypatch.setattr(requests, "get", MagicMock(return_value=_response(200)))
 
-    assert client.get_timer_status() == {"sessions": []}
+    assert client.get_timer_status() == {"ok": True, "active": 0, "sessions": []}
     assert request.call_count == 2
 
 
-def test_track_session_wakes_before_send_but_does_not_resend_503(monkeypatch):
+def test_track_session_503_wakes_and_resends_uuid_create(monkeypatch):
     client = _client(monkeypatch)
-    request = MagicMock(return_value=_response(503))
+    monkeypatch.setattr(client, "_resolve_project_id", lambda project: 4)
+    request = MagicMock(
+        side_effect=[_response(503), _response(payload=_session_resource(active=False))]
+    )
     monkeypatch.setattr(requests, "request", request)
-    probe = MagicMock(return_value=_response(503))
+    probe = MagicMock(return_value=_response(200))
     monkeypatch.setattr(requests, "get", probe)
     wake_server = MagicMock(return_value=True)
     monkeypatch.setattr(client, "_wake_server", wake_server)
 
-    with pytest.raises(APIError, match="may or may not have been applied"):
-        client.track_session(
-            "Work", "2026-07-16T09:00:00", "2026-07-16T10:00:00"
-        )
+    result = client.track_session(
+        "Work", "2026-07-16T09:00:00", "2026-07-16T10:00:00"
+    )
 
     probe.assert_called_once_with(
         "https://autumn.example/healthz/", timeout=5, verify=True
     )
     wake_server.assert_called_once_with()
-    assert request.call_count == 1
+    assert request.call_count == 2
+    assert result["session"]["elapsed"] == 30.0
+    assert (
+        request.call_args_list[0].kwargs["json"]["uuid"]
+        == request.call_args_list[1].kwargs["json"]["uuid"]
+    )
 
 
 def test_stop_timer_503_wakes_and_resends(monkeypatch):
     client = _client(monkeypatch)
+    monkeypatch.setattr(
+        client,
+        "_resolve_active_timer_target",
+        lambda session_id, project: _session_resource(),
+    )
     request = MagicMock(
-        side_effect=[_response(503), _response(payload={"stopped": True})]
+        side_effect=[_response(503), _response(payload=_session_resource(active=False))]
     )
     monkeypatch.setattr(requests, "request", request)
     monkeypatch.setattr(requests, "get", MagicMock(return_value=_response(200)))
     wake_server = MagicMock(return_value=True)
     monkeypatch.setattr(client, "_wake_server", wake_server)
 
-    assert client.stop_timer() == {"stopped": True}
+    assert client.stop_timer()["duration"] == 30.0
 
     wake_server.assert_called_once_with()
     assert request.call_count == 2
@@ -99,6 +129,11 @@ def test_stop_timer_503_wakes_and_resends(monkeypatch):
 
 def test_restart_timer_503_is_not_resent(monkeypatch):
     client = _client(monkeypatch)
+    monkeypatch.setattr(
+        client,
+        "_resolve_active_timer_target",
+        lambda session_id, project: _session_resource(),
+    )
     request = MagicMock(return_value=_response(503))
     monkeypatch.setattr(requests, "request", request)
     probe = MagicMock(return_value=_response(200))
@@ -192,20 +227,33 @@ def test_wake_retry_disabled_does_not_probe_wake_or_resend_mutation(monkeypatch)
     wake_server.assert_not_called()
 
 
-def test_post_read_timeout_does_not_retry(monkeypatch):
+def test_start_timer_503_wakes_and_retries_with_same_uuid(monkeypatch):
     client = _client(monkeypatch)
-    request = MagicMock(side_effect=requests.exceptions.ReadTimeout("timed out"))
+    monkeypatch.setattr(client, "_resolve_project_id", lambda project: 4)
+    request = MagicMock(
+        side_effect=[
+            _response(503),
+            _response(payload=_session_resource()),
+        ]
+    )
     monkeypatch.setattr(requests, "request", request)
     health = MagicMock(return_value=_response(200))
     monkeypatch.setattr(requests, "get", health)
+    wake_server = MagicMock(return_value=True)
+    monkeypatch.setattr(client, "_wake_server", wake_server)
 
-    with pytest.raises(APIError, match="Network error"):
-        client.start_timer("Work")
+    result = client.start_timer("Work")
 
-    assert request.call_count == 1
+    assert result["session"]["id"] == 11
+    assert request.call_count == 2
+    assert (
+        request.call_args_list[0].kwargs["json"]["uuid"]
+        == request.call_args_list[1].kwargs["json"]["uuid"]
+    )
     health.assert_called_once_with(
         "https://autumn.example/healthz/", timeout=5, verify=True
     )
+    wake_server.assert_called_once_with()
 
 
 def test_wake_budget_expiry_raises_friendly_error(monkeypatch):
@@ -243,12 +291,18 @@ def test_timer_instant_is_aware_utc_and_captured_before_probe(
 
     monkeypatch.setattr("autumn_cli.api_client.datetime", FakeDateTime)
     monkeypatch.setattr(requests, "get", probe)
-    request = MagicMock(return_value=_response(payload={"ok": True}))
+    request = MagicMock(return_value=_response(payload=_session_resource()))
     monkeypatch.setattr(requests, "request", request)
 
     if method_name == "start_timer":
+        monkeypatch.setattr(client, "_resolve_project_id", lambda project: 4)
         client.start_timer("Work")
     else:
+        monkeypatch.setattr(
+            client,
+            "_resolve_active_timer_target",
+            lambda session_id, project: _session_resource(),
+        )
         client.stop_timer()
 
     payload = request.call_args.kwargs["json"]
@@ -260,9 +314,14 @@ def test_timer_instant_is_aware_utc_and_captured_before_probe(
 
 def test_awake_probe_is_cached_across_mutations(monkeypatch):
     client = _client(monkeypatch)
+    monkeypatch.setattr(
+        client,
+        "_resolve_active_timer_target",
+        lambda session_id, project: _session_resource(),
+    )
     probe = MagicMock(return_value=_response(200))
     monkeypatch.setattr(requests, "get", probe)
-    request = MagicMock(return_value=_response(payload={"ok": True}))
+    request = MagicMock(return_value=_response(payload=_session_resource()))
     monkeypatch.setattr(requests, "request", request)
 
     client.restart_timer(project="Work")

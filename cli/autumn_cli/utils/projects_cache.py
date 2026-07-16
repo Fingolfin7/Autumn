@@ -20,6 +20,7 @@ from ..config import load_account_cache, save_account_cache, clear_account_cache
 
 
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
+CACHE_SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -51,6 +52,8 @@ def load_cached_projects(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Pro
     cache = load_account_cache("projects_cache") or {}
 
     try:
+        if cache.get("schema_version") != CACHE_SCHEMA_VERSION:
+            return None
         fetched_at_s = cache.get("fetched_at")
         if not fetched_at_s:
             return None
@@ -79,6 +82,7 @@ def save_cached_projects(projects: List[Dict[str, Any]]) -> None:
     _mem_snapshot = snap
 
     save_account_cache("projects_cache", {
+        "schema_version": CACHE_SCHEMA_VERSION,
         "fetched_at": snap.fetched_at.isoformat(),
         "projects": projects,
     })
