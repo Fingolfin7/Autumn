@@ -308,7 +308,7 @@ def login(username: str, password: str, base_url: str):
     set_base_url(base_url)
     client = APIClient(api_key=token, base_url=base_url)
 
-    # Validate by calling /api/me
+    # Validate by calling the v2 identity endpoint.
     try:
         me = client.get_cached_me(ttl_seconds=0, refresh=True).get("user", {})
         account_name = save_account(

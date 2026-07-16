@@ -1,6 +1,6 @@
 """Simple cache for projects discovery.
 
-This avoids calling /api/projects on every single command invocation.
+This avoids calling the v2 projects collection on every command invocation.
 
 Cache strategy:
 - In-memory cache for the current process

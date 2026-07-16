@@ -365,13 +365,25 @@ class APIClient:
         return token
 
     def get_me(self) -> Dict[str, Any]:
-        """Get the authenticated user's identity."""
-        return self._request("GET", "/api/me/")
+        """Get the authenticated user's identity in the legacy v1 shape."""
+        result = self._request("GET", "/api/v2/me/")
+        user = result.get("user") or {}
+        return {
+            "ok": True,
+            "id": user.get("id"),
+            "username": user.get("username"),
+            "email": user.get("email", ""),
+            # v2 does not expose name fields; keep the stable legacy keys so
+            # cached-user and account consumers need no special casing.
+            "first_name": "",
+            "last_name": "",
+            "timezone": user.get("timezone"),
+        }
 
     def get_cached_me(
         self, *, ttl_seconds: int = 3600, refresh: bool = False
     ) -> Dict[str, Any]:
-        """Get cached /api/me response for greetings."""
+        """Get cached v2 identity data for legacy greeting consumers."""
         from .utils.user_cache import load_cached_user, save_cached_user
 
         if not refresh:
@@ -1050,7 +1062,9 @@ class APIClient:
         }
 
     @staticmethod
-    def _subproject_v2_to_legacy(resource: Dict[str, Any]) -> Dict[str, Any]:
+    def _subproject_v2_to_legacy(
+        resource: Dict[str, Any], *, project_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         """Translate one v2 subproject resource to the legacy detail shape."""
         total_minutes = float(resource.get("total_minutes") or 0)
         session_count = int(resource.get("session_count") or 0)
@@ -1058,7 +1072,7 @@ class APIClient:
             "id": resource.get("id"),
             "name": resource.get("name"),
             "description": resource.get("description") or "",
-            "project_id": resource.get("project_id"),
+            "project_id": resource.get("project_id") or project_id,
             "total_time": total_minutes,
             "total_minutes": total_minutes,
             "last_updated": resource.get("last_activity"),
@@ -1072,11 +1086,27 @@ class APIClient:
     def _project_detail_v2_to_legacy(self, resource: Dict[str, Any]) -> Dict[str, Any]:
         project = self._project_v2_to_legacy(resource)
         project["subprojects"] = [
-            self._subproject_v2_to_legacy(subproject)
+            self._subproject_v2_to_legacy(
+                subproject, project_id=resource.get("id")
+            )
             for subproject in resource.get("subprojects") or []
             if isinstance(subproject, dict)
         ]
         return project
+
+    @staticmethod
+    def _days_since_project_activity(resource: Dict[str, Any]) -> int:
+        """Derive the non-negative v1 radar recency value from v2 dates."""
+        value = resource.get("last_activity") or resource.get("start_date")
+        if not value:
+            return 0
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return 0
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return max(0, (datetime.now(timezone.utc).date() - parsed.date()).days)
 
     def _metadata_ids(
         self,
@@ -1237,23 +1267,61 @@ class APIClient:
         project: str,
         *,
         description: Any = _UNSET,
+        status: Any = _UNSET,
         context: Any = _UNSET,
         tags: Any = _UNSET,
+        start_date: Any = _UNSET,
     ) -> Dict:
-        """Update a project's description, context, and/or complete tag set."""
-        data: Dict[str, Any] = {"project": project}
+        """Update project fields through v2 and return the legacy wrapper."""
+        project_id = self._resolve_project_id(project)
+        data: Dict[str, Any] = {}
         if description is not _UNSET:
             data["description"] = description
+        if status is not _UNSET:
+            data["status"] = status
         if context is not _UNSET:
-            data["context"] = context
+            if context is None or context == "":
+                context_id = None
+            else:
+                context_id, _ = self._metadata_ids(context=context)
+            data["context_id"] = context_id
         if tags is not _UNSET:
-            data["tags"] = tags
-        return self._request("PATCH", "/api/project/update/", json=data)
+            _, tag_ids = self._metadata_ids(tags=tags)
+            data["tag_ids"] = tag_ids
+        if start_date is not _UNSET:
+            data["start_date"] = start_date
+        resource = self._request(
+            "PATCH", f"/api/v2/projects/{project_id}", json=data
+        )
+        return {"ok": True, "project": self._project_v2_to_legacy(resource)}
 
     def list_subprojects(self, project: str, compact: bool = True) -> Dict:
-        """List subprojects for a project."""
-        params = {"project": project, "compact": str(compact).lower()}
-        return self._request("GET", "/api/subprojects/", params=params)
+        """List v2 project-detail subprojects in the legacy list shape."""
+        project_id = self._resolve_project_id(project)
+        resource = self._request("GET", f"/api/v2/projects/{project_id}")
+        subprojects = [
+            subproject
+            for subproject in resource.get("subprojects") or []
+            if isinstance(subproject, dict)
+        ]
+        if compact:
+            translated: List[Any] = [
+                subproject.get("name") for subproject in subprojects
+            ]
+        else:
+            translated = [
+                self._subproject_v2_to_legacy(
+                    subproject, project_id=project_id
+                )
+                for subproject in subprojects
+            ]
+        result = {
+            "project": resource.get("name") or project,
+            "subprojects": translated,
+        }
+        if not compact:
+            result["project_id"] = project_id
+        return result
 
     # Chart/analytics endpoints
 
@@ -1743,10 +1811,35 @@ class APIClient:
 
     def search_subprojects(
         self, project: str, search_term: str
-    ) -> Dict:
-        """Search subprojects by name within a project."""
-        params = {"project_name": project, "search_term": search_term}
-        return self._request("GET", "/api/search_subprojects/", params=params)
+    ) -> List[Dict[str, Any]]:
+        """Search project-detail subprojects with the legacy v1 semantics."""
+        project_id = self._resolve_project_id(project)
+        resource = self._request("GET", f"/api/v2/projects/{project_id}")
+        subprojects = [
+            subproject
+            for subproject in resource.get("subprojects") or []
+            if isinstance(subproject, dict)
+        ]
+        folded_term = search_term.casefold()
+        matches = [
+            subproject
+            for subproject in subprojects
+            if folded_term in str(subproject.get("name") or "").casefold()
+        ]
+        # v1 deliberately returned every subproject when a search had no hits.
+        if not matches:
+            matches = subprojects
+        return [
+            {
+                **self._subproject_v2_to_legacy(
+                    subproject, project_id=project_id
+                ),
+                "user": None,
+                "parent_project": project_id,
+                "start_date": None,
+            }
+            for subproject in matches
+        ]
 
     def merge_projects(
         self, project1: str, project2: str, new_project_name: str
@@ -1963,10 +2056,32 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> List[Dict]:
-        """Get projects with stats for radar chart visualization."""
-        params = {}
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
-        return self._request("GET", "/api/projects_with_stats/", params=params)
+        """Get v2 projects translated for the legacy radar-chart consumer."""
+        context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
+        params: Dict[str, Any] = {}
+        if context_id is not None:
+            params["context_ids"] = str(context_id)
+        if tag_ids:
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
+
+        resources = self._v2_projects(params)
+        translated = []
+        for resource in resources:
+            project_id = resource.get("id")
+            subproject_count = resource.get("subproject_count")
+            if subproject_count is None and project_id is not None:
+                detail = self._request("GET", f"/api/v2/projects/{project_id}")
+                subproject_count = len(detail.get("subprojects") or [])
+            total_minutes = float(resource.get("total_minutes") or 0)
+            translated.append(
+                {
+                    "name": resource.get("name"),
+                    "total_time": total_minutes,
+                    "computed_total_time": total_minutes,
+                    "session_count": int(resource.get("session_count") or 0),
+                    "subproject_count": int(subproject_count or 0),
+                    "days_since_update": self._days_since_project_activity(resource),
+                    "status": resource.get("status"),
+                }
+            )
+        return translated

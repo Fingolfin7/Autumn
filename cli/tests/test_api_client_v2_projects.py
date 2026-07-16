@@ -1,5 +1,6 @@
 """v2 project/subproject API façade tests."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -371,3 +372,169 @@ def test_grouped_listing_applies_v1_window_semantics_client_side(client, monkeyp
     names = [p["name"] for p in grouped["projects"]["active"]]
     assert names == ["In", "Empty"]
     assert grouped["summary"]["total"] == 2
+
+
+def test_update_project_maps_all_legacy_fields_and_wraps_v2_resource(
+    client, monkeypatch
+):
+    resolve = MagicMock(return_value=7)
+    metadata = MagicMock(side_effect=[(3, None), (None, [5, 6])])
+    request = MagicMock(return_value=_project(status="paused"))
+    monkeypatch.setattr(client, "_resolve_project_id", resolve)
+    monkeypatch.setattr(client, "_metadata_ids", metadata)
+    monkeypatch.setattr(client, "_request", request)
+
+    result = client.update_project_metadata(
+        "Deep Work",
+        description="Changed",
+        status="paused",
+        context="Work",
+        tags=["Focus", "CLI"],
+        start_date="2026-02-03",
+    )
+
+    resolve.assert_called_once_with("Deep Work")
+    assert metadata.call_args_list == [
+        call(context="Work"),
+        call(tags=["Focus", "CLI"]),
+    ]
+    request.assert_called_once_with(
+        "PATCH",
+        "/api/v2/projects/7",
+        json={
+            "description": "Changed",
+            "status": "paused",
+            "context_id": 3,
+            "tag_ids": [5, 6],
+            "start_date": "2026-02-03",
+        },
+    )
+    assert result["ok"] is True
+    assert result["project"]["name"] == "Deep Work"
+    assert result["project"]["context"] == "Work"
+    assert result["project"]["tags"] == ["Focus"]
+
+
+def test_update_project_maps_empty_context_to_v2_null(client, monkeypatch):
+    monkeypatch.setattr(client, "_resolve_project_id", lambda name: 7)
+    metadata = MagicMock()
+    request = MagicMock(return_value=_project())
+    monkeypatch.setattr(client, "_metadata_ids", metadata)
+    monkeypatch.setattr(client, "_request", request)
+
+    client.update_project_metadata("Deep Work", context="")
+
+    metadata.assert_not_called()
+    request.assert_called_once_with(
+        "PATCH", "/api/v2/projects/7", json={"context_id": None}
+    )
+
+
+def test_list_subprojects_uses_v2_detail_and_preserves_compact_and_full_shapes(
+    client, monkeypatch
+):
+    detail = _project()
+    detail["subprojects"] = [_subproject()]
+    request = MagicMock(return_value=detail)
+    monkeypatch.setattr(client, "_resolve_project_id", MagicMock(return_value=7))
+    monkeypatch.setattr(client, "_request", request)
+
+    compact = client.list_subprojects("Deep Work")
+    full = client.list_subprojects("Deep Work", compact=False)
+
+    assert request.call_args_list == [
+        call("GET", "/api/v2/projects/7"),
+        call("GET", "/api/v2/projects/7"),
+    ]
+    assert compact == {
+        "project": "Deep Work",
+        "subprojects": ["Build"],
+    }
+    assert full["project"] == "Deep Work"
+    assert full["project_id"] == 7
+    assert full["subprojects"][0] == {
+        "id": 11,
+        "name": "Build",
+        "description": "Implementation",
+        "project_id": 7,
+        "total_time": 62.25,
+        "total_minutes": 62.25,
+        "last_updated": "2026-07-14",
+        "last_activity": "2026-07-14",
+        "session_count": 2,
+        "avg_session_duration": 31.12,
+    }
+
+
+def test_search_subprojects_uses_v2_detail_and_v1_icontains_shape(
+    client, monkeypatch
+):
+    detail = _project()
+    detail["subprojects"] = [
+        _subproject(11, "Build API"),
+        _subproject(12, "Write docs"),
+    ]
+    monkeypatch.setattr(client, "_resolve_project_id", lambda name: 7)
+    request = MagicMock(return_value=detail)
+    monkeypatch.setattr(client, "_request", request)
+
+    result = client.search_subprojects("Deep Work", "BUILD")
+
+    request.assert_called_once_with("GET", "/api/v2/projects/7")
+    assert [item["name"] for item in result] == ["Build API"]
+    assert result[0]["parent_project"] == 7
+    assert result[0]["project_id"] == 7
+    assert result[0]["total_time"] == 62.25
+    assert result[0]["last_updated"] == "2026-07-14"
+    assert result[0]["user"] is None
+    assert result[0]["start_date"] is None
+
+
+def test_search_subprojects_keeps_v1_no_match_fallback(client, monkeypatch):
+    detail = _project()
+    detail["subprojects"] = [
+        _subproject(11, "Build"),
+        _subproject(12, "Write docs"),
+    ]
+    monkeypatch.setattr(client, "_resolve_project_id", lambda name: 7)
+    monkeypatch.setattr(client, "_request", MagicMock(return_value=detail))
+
+    result = client.search_subprojects("Deep Work", "missing")
+
+    assert [item["name"] for item in result] == ["Build", "Write docs"]
+
+
+def test_projects_with_stats_uses_v2_list_and_builds_radar_consumer_shape(
+    client, monkeypatch
+):
+    last_activity = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
+    resource = _project(total_minutes=125.5, session_count=4)
+    resource["last_activity"] = last_activity
+    fetch = MagicMock(return_value=[resource])
+    metadata = MagicMock(return_value=(3, [5]))
+    request = MagicMock(
+        return_value={
+            **resource,
+            "subprojects": [_subproject(), _subproject(12, "Test")],
+        }
+    )
+    monkeypatch.setattr(client, "_v2_projects", fetch)
+    monkeypatch.setattr(client, "_metadata_ids", metadata)
+    monkeypatch.setattr(client, "_request", request)
+
+    result = client.get_projects_with_stats(context="Work", tags=["Focus"])
+
+    metadata.assert_called_once_with(context="Work", tags=["Focus"])
+    fetch.assert_called_once_with({"context_ids": "3", "tag_ids": "5"})
+    request.assert_called_once_with("GET", "/api/v2/projects/7")
+    assert result == [
+        {
+            "name": "Deep Work",
+            "total_time": 125.5,
+            "computed_total_time": 125.5,
+            "session_count": 4,
+            "subproject_count": 2,
+            "days_since_update": 2,
+            "status": "active",
+        }
+    ]
