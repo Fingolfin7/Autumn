@@ -542,7 +542,7 @@ class APIClient:
         self, session_id: Optional[int] = None, project: Optional[str] = None
     ) -> Dict:
         """Restart a timer."""
-        data = {}
+        data = {"start": datetime.now(timezone.utc).isoformat()}
         if session_id:
             data["session_id"] = session_id
         if project:
