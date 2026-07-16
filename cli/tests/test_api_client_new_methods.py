@@ -16,103 +16,125 @@ def mock_client():
 
 class TestCreateSubproject:
     def test_create_subproject_sends_correct_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True, "subproject": {"name": "NewSub"}}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 8, "name": "NewSub", "project_id": 7}
 
             result = mock_client.create_subproject("MyProject", "NewSub", "A description")
 
             mock_req.assert_called_once_with(
                 "POST",
-                "/api/create_subproject/",
-                json={"parent_project": "MyProject", "name": "NewSub", "description": "A description"}
+                "/api/v2/projects/7/subprojects/",
+                json={"name": "NewSub", "description": "A description"}
             )
             assert result["ok"] is True
+            assert result["subproject"]["name"] == "NewSub"
 
     def test_create_subproject_without_description(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 8, "name": "NewSub", "project_id": 7}
 
             mock_client.create_subproject("MyProject", "NewSub")
 
             mock_req.assert_called_once_with(
                 "POST",
-                "/api/create_subproject/",
-                json={"parent_project": "MyProject", "name": "NewSub"}
+                "/api/v2/projects/7/subprojects/",
+                json={"name": "NewSub"}
             )
 
 
 class TestMarkProjectStatus:
     def test_mark_project_status_sends_correct_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True, "project": "MyProject", "status": "paused"}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 7, "name": "MyProject", "status": "paused"}
 
             result = mock_client.mark_project_status("MyProject", "paused")
 
             mock_req.assert_called_once_with(
-                "POST",
-                "/api/mark/",
-                json={"project": "MyProject", "status": "paused"}
+                "PATCH",
+                "/api/v2/projects/7",
+                json={"status": "paused"}
             )
             assert result["status"] == "paused"
 
 
 class TestRenameProject:
     def test_rename_project_sends_correct_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True, "project": "NewName"}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 7, "name": "NewName"}
 
             result = mock_client.rename_project("OldName", "NewName")
 
             mock_req.assert_called_once_with(
-                "POST",
-                "/api/rename/",
-                json={"type": "project", "project": "OldName", "new_name": "NewName"}
+                "PATCH",
+                "/api/v2/projects/7",
+                json={"name": "NewName"}
             )
             assert result["project"] == "NewName"
 
 
 class TestRenameSubproject:
     def test_rename_subproject_sends_correct_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"ok": True, "project": "Parent", "subproject": "NewSub"}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_resolve_subproject_ids", return_value=[8]),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 8, "name": "NewSub", "project_id": 7}
 
             result = mock_client.rename_subproject("Parent", "OldSub", "NewSub")
 
             mock_req.assert_called_once_with(
-                "POST",
-                "/api/rename/",
-                json={"type": "subproject", "project": "Parent", "subproject": "OldSub", "new_name": "NewSub"}
+                "PATCH",
+                "/api/v2/subprojects/8",
+                json={"name": "NewSub"}
             )
             assert result["subproject"] == "NewSub"
 
 
 class TestDeleteProject:
     def test_delete_project_returns_ok_on_204(self, mock_client):
-        with patch("requests.request") as mock_req:
-            mock_response = MagicMock()
-            mock_response.status_code = 204
-            mock_response.raise_for_status = MagicMock()
-            mock_req.return_value = mock_response
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request", return_value={}) as mock_req,
+        ):
 
             result = mock_client.delete_project("MyProject")
 
             assert result["ok"] is True
             assert result["deleted"] == "MyProject"
+            mock_req.assert_called_once_with(
+                "DELETE", "/api/v2/projects/7", retry_safe=True
+            )
 
 
 class TestDeleteSubproject:
     def test_delete_subproject_returns_ok_on_204(self, mock_client):
-        with patch("requests.request") as mock_req:
-            mock_response = MagicMock()
-            mock_response.status_code = 204
-            mock_response.raise_for_status = MagicMock()
-            mock_req.return_value = mock_response
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_resolve_subproject_ids", return_value=[8]),
+            patch.object(mock_client, "_request", return_value={}) as mock_req,
+        ):
 
             result = mock_client.delete_subproject("MyProject", "MySub")
 
             assert result["ok"] is True
             assert result["deleted"] == "MySub"
             assert result["project"] == "MyProject"
+            mock_req.assert_called_once_with(
+                "DELETE", "/api/v2/subprojects/8", retry_safe=True
+            )
 
 
 class TestDeleteSession:
@@ -295,15 +317,18 @@ class TestExcludeFilters:
             )
 
     def test_list_projects_grouped_sends_exclude_param(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"projects": {}}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=9),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"count": 0, "total": 0, "projects": []}
 
             mock_client.list_projects_grouped(exclude=["Admin"])
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/projects/grouped/",
-                params={"compact": "false", "exclude": "Admin"},
+                "/api/v2/projects/",
+                params={"exclude_project_ids": "9", "limit": 100, "offset": 0},
             )
 
     def test_list_sessions_sends_exclude_param(self, mock_client):
@@ -378,32 +403,38 @@ class TestGetProjectTotals:
 class TestSearchProjects:
     def test_search_projects_sends_correct_params(self, mock_client):
         with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"projects": []}
+            mock_req.return_value = {"count": 0, "total": 0, "projects": []}
 
             mock_client.search_projects("web", status="active")
 
             mock_req.assert_called_once_with(
                 "GET",
-                "/api/search_projects/",
-                params={"search_term": "web", "status": "active"}
+                "/api/v2/projects/",
+                params={"search": "web", "status": "active", "limit": 100, "offset": 0}
             )
 
 
 class TestGetProject:
     def test_get_project_calls_correct_endpoint(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"name": "MyProject", "status": "active"}
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=7),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 7, "name": "MyProject", "status": "active", "subprojects": []}
 
             result = mock_client.get_project("MyProject")
 
-            mock_req.assert_called_once_with("GET", "/api/get_project/MyProject/")
+            mock_req.assert_called_once_with("GET", "/api/v2/projects/7")
             assert result["name"] == "MyProject"
 
-    def test_get_project_url_encodes_special_chars(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
-            mock_req.return_value = {"name": "My Project"}
+    def test_get_project_resolves_name_to_numeric_v2_url(self, mock_client):
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=11) as resolve,
+            patch.object(mock_client, "_request") as mock_req,
+        ):
+            mock_req.return_value = {"id": 11, "name": "My Project", "subprojects": []}
 
             mock_client.get_project("My Project")
 
-            # URL encoding: space becomes %20
-            mock_req.assert_called_once_with("GET", "/api/get_project/My%20Project/")
+            resolve.assert_called_once_with("My Project")
+            mock_req.assert_called_once_with("GET", "/api/v2/projects/11")

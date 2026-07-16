@@ -251,31 +251,34 @@ def test_delete_session_uses_retry_safe_v2_delete(client, monkeypatch):
     )
 
 
-def test_project_and_subproject_name_resolution_uses_cached_v1_metadata(client, monkeypatch):
-    projects = MagicMock(
-        return_value={
-            "projects": [{"id": 8, "name": "Deep Work", "status": "active"}],
-            "cached": True,
-        }
+def test_project_and_subproject_name_resolution_uses_v2_resources(client, monkeypatch):
+    request = MagicMock(
+        side_effect=[
+            {
+                "count": 1,
+                "total": 1,
+                "projects": [{"id": 8, "name": "Deep Work"}],
+            },
+            {"id": 8, "name": "Deep Work", "subprojects": [{"id": 31, "name": "Build"}]},
+        ]
     )
-    subprojects = MagicMock(
-        return_value={"subprojects": [{"id": 31, "name": "Build"}]}
-    )
-    monkeypatch.setattr(client, "get_discovery_projects", projects)
-    monkeypatch.setattr(client, "list_subprojects", subprojects)
+    monkeypatch.setattr(client, "_request", request)
 
     assert client._resolve_project_id("deep work") == 8
     assert client._resolve_subproject_ids("Deep Work", 8, ["build"]) == [31]
     assert client._resolve_subproject_ids("Deep Work", 8, ["Build"]) == [31]
-    subprojects.assert_called_once_with("Deep Work", compact=False)
+    assert request.call_args_list == [
+        call(
+            "GET",
+            "/api/v2/projects/",
+            params={"search": "deep work", "limit": 100, "offset": 0},
+        ),
+        call("GET", "/api/v2/projects/8"),
+    ]
 
 
 def test_unknown_project_keeps_friendly_error(client, monkeypatch):
-    monkeypatch.setattr(
-        client,
-        "get_discovery_projects",
-        lambda refresh=False: {"projects": [], "cached": False},
-    )
+    monkeypatch.setattr(client, "_v2_projects", lambda params=None: [])
     with pytest.raises(APIError, match="^Project not found: Missing$"):
         client._resolve_project_id("Missing")
 

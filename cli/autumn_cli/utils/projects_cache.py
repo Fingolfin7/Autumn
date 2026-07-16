@@ -20,7 +20,7 @@ from ..config import load_account_cache, save_account_cache, clear_account_cache
 
 
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 
 
 @dataclass

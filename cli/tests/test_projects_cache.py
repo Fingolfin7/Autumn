@@ -2,6 +2,7 @@
 
 import autumn_cli.config as cfg
 from autumn_cli.utils.projects_cache import (
+    CACHE_SCHEMA_VERSION,
     load_cached_projects,
     save_cached_projects,
     clear_cached_projects,
@@ -26,6 +27,7 @@ def test_projects_cache_roundtrip_active_account_scope(tmp_path, monkeypatch):
     snap = load_cached_projects(ttl_seconds=300)
     assert snap is not None
     assert len(snap.projects) == 2
+    assert CACHE_SCHEMA_VERSION == 3
 
     pc._mem_snapshot = None
     snap = load_cached_projects(ttl_seconds=300)

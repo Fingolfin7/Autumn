@@ -37,6 +37,7 @@ class APIClient:
         # background checks that must never block on a sleeping server).
         self._wake_retry_override = wake_retry
         self._server_awake = False
+        self._project_id_cache: Dict[str, Tuple[float, int]] = {}
         self._subproject_id_cache: Dict[
             int, Tuple[float, List[Dict[str, Any]]]
         ] = {}
@@ -567,30 +568,60 @@ class APIClient:
     def _to_utc_iso(cls, value: str) -> str:
         return cls._to_utc_datetime(value).isoformat()
 
-    def _resolve_project_id(self, name: str) -> int:
-        """Resolve a project name through the existing TTL-backed discovery cache."""
-        def find_id(projects: List[Dict[str, Any]]) -> Optional[int]:
-            for project in projects:
-                project_name = project.get("name") or project.get("project")
-                if project_name and project_name.casefold() == name.casefold():
-                    project_id = (
-                        project.get("id")
-                        or project.get("pid")
-                        or project.get("project_id")
-                    )
-                    if project_id is not None:
-                        return int(project_id)
-            return None
+    def _v2_projects(
+        self, params: Optional[Dict[str, Any]] = None, *, page_size: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Fetch every page from the ordered v2 project collection."""
+        projects: List[Dict[str, Any]] = []
+        offset = 0
+        base_params = dict(params or {})
 
-        snapshot = self.get_discovery_projects(refresh=False)
-        project_id = find_id(snapshot.get("projects", []))
-        if project_id is not None:
+        while True:
+            page_params = {**base_params, "limit": page_size, "offset": offset}
+            page = self._request("GET", "/api/v2/projects/", params=page_params)
+            resources = list(page.get("projects") or [])
+            projects.extend(
+                resource for resource in resources if isinstance(resource, dict)
+            )
+            total = int(page.get("total", len(projects)))
+            if not resources or len(projects) >= total:
+                break
+            offset += len(resources)
+
+        return projects
+
+    def _resolve_project_id(self, name: str, *, ttl_seconds: int = 300) -> int:
+        """Resolve a project name through v2 search, caching exact matches briefly."""
+        cache_key = name.casefold()
+        now = time.monotonic()
+        cached = self._project_id_cache.get(cache_key)
+        if cached is not None and now - cached[0] <= ttl_seconds:
+            return cached[1]
+
+        candidates = self._v2_projects({"search": name})
+        # An icontains search can return many similarly named projects. In that
+        # case, scan the complete ordered collection before choosing an exact name.
+        if len(candidates) > 1:
+            candidates = self._v2_projects()
+
+        folded_matches = [
+            project
+            for project in candidates
+            if str(project.get("name") or "").casefold() == cache_key
+        ]
+        if len(folded_matches) > 1:
+            case_matches = [
+                project for project in folded_matches if project.get("name") == name
+            ]
+            if len(case_matches) == 1:
+                folded_matches = case_matches
+            else:
+                raise APIError(f"Project name is ambiguous: {name}")
+
+        if folded_matches:
+            project_id = int(folded_matches[0]["id"])
+            self._project_id_cache[cache_key] = (now, project_id)
             return project_id
-        if snapshot.get("cached"):
-            projects = self.get_discovery_projects(refresh=True).get("projects", [])
-            project_id = find_id(projects)
-            if project_id is not None:
-                return project_id
         raise APIError(f"Project not found: {name}")
 
     def _get_subprojects_for_resolution(
@@ -601,10 +632,8 @@ class APIClient:
         if cached is not None and now - cached[0] <= ttl_seconds:
             return cached[1]
 
-        result = self.list_subprojects(project, compact=False)
-        subprojects = (
-            result.get("subprojects", []) if isinstance(result, dict) else result
-        )
+        result = self._request("GET", f"/api/v2/projects/{project_id}")
+        subprojects = result.get("subprojects", [])
         normalized = [sub for sub in subprojects if isinstance(sub, dict)]
         self._subproject_id_cache[project_id] = (now, normalized)
         return normalized
@@ -877,6 +906,160 @@ class APIClient:
 
     # Project endpoints
 
+    @staticmethod
+    def _project_v2_to_legacy(resource: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate one v2 project resource to the full legacy project shape."""
+        total_minutes = float(resource.get("total_minutes") or 0)
+        session_count = int(resource.get("session_count") or 0)
+        context = resource.get("context") or {}
+        tags = resource.get("tags") or []
+        return {
+            "id": resource.get("id"),
+            "name": resource.get("name"),
+            "description": resource.get("description") or "",
+            "status": resource.get("status"),
+            "total_time": total_minutes,
+            "total_minutes": total_minutes,
+            "start_date": resource.get("start_date"),
+            "last_updated": resource.get("last_activity"),
+            "last_activity": resource.get("last_activity"),
+            "session_count": session_count,
+            "avg_session_duration": round(total_minutes / session_count, 2)
+            if session_count
+            else 0,
+            "context": context.get("name"),
+            "tags": [tag.get("name") for tag in tags if isinstance(tag, dict)],
+        }
+
+    @staticmethod
+    def _subproject_v2_to_legacy(resource: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate one v2 subproject resource to the legacy detail shape."""
+        total_minutes = float(resource.get("total_minutes") or 0)
+        session_count = int(resource.get("session_count") or 0)
+        return {
+            "id": resource.get("id"),
+            "name": resource.get("name"),
+            "description": resource.get("description") or "",
+            "project_id": resource.get("project_id"),
+            "total_time": total_minutes,
+            "total_minutes": total_minutes,
+            "last_updated": resource.get("last_activity"),
+            "last_activity": resource.get("last_activity"),
+            "session_count": session_count,
+            "avg_session_duration": round(total_minutes / session_count, 2)
+            if session_count
+            else 0,
+        }
+
+    def _project_detail_v2_to_legacy(self, resource: Dict[str, Any]) -> Dict[str, Any]:
+        project = self._project_v2_to_legacy(resource)
+        project["subprojects"] = [
+            self._subproject_v2_to_legacy(subproject)
+            for subproject in resource.get("subprojects") or []
+            if isinstance(subproject, dict)
+        ]
+        return project
+
+    def _metadata_ids(
+        self,
+        *,
+        context: Optional[Any] = None,
+        tags: Optional[List[Any]] = None,
+    ) -> Tuple[Optional[int], Optional[List[int]]]:
+        """Resolve legacy context/tag names (or numeric strings) through v1 metadata."""
+        context_id: Optional[int] = None
+        tag_ids: Optional[List[int]] = None
+        needs_context_lookup = context is not None and not str(context).isdigit()
+        needs_tag_lookup = tags is not None and any(
+            not str(tag).isdigit() for tag in tags
+        )
+        meta = (
+            self.get_discovery_meta(ttl_seconds=300, refresh=False)
+            if needs_context_lookup or needs_tag_lookup
+            else {"contexts": [], "tags": []}
+        )
+
+        if context is not None and str(context).casefold() != "all":
+            if str(context).isdigit():
+                context_id = int(context)
+            else:
+                match = next(
+                    (
+                        item
+                        for item in meta.get("contexts", [])
+                        if str(item.get("name") or "").casefold()
+                        == str(context).casefold()
+                    ),
+                    None,
+                )
+                if not match or match.get("id") is None:
+                    raise APIError(f"Unknown context: {context}")
+                context_id = int(match["id"])
+
+        if tags is not None:
+            known_tags = {
+                str(item.get("name") or "").casefold(): item.get("id")
+                for item in meta.get("tags", [])
+            }
+            tag_ids = []
+            missing = []
+            for tag in tags:
+                if str(tag).isdigit():
+                    tag_ids.append(int(tag))
+                    continue
+                tag_id = known_tags.get(str(tag).casefold())
+                if tag_id is None:
+                    missing.append(str(tag))
+                else:
+                    tag_ids.append(int(tag_id))
+            if missing:
+                raise APIError(f"Unknown tags: {', '.join(missing)}")
+
+        return context_id, tag_ids
+
+    @staticmethod
+    def _parse_window_date(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        for fmt in ("%Y-%m-%d", "%m-%d-%Y"):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+        raise APIError(f"Unrecognized date: {value!r} (use YYYY-MM-DD)")
+
+    def _filter_project_window(
+        self,
+        resources: List[Dict[str, Any]],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """Replicate v1's project date-window semantics client-side.
+
+        v1 kept projects wholly contained in the window: start_date >= start
+        AND last activity <= end + 1 day. A project with no completed
+        sessions falls back to its start_date as its last activity.
+        """
+        start = self._parse_window_date(start_date)
+        end = self._parse_window_date(end_date)
+        if end is not None:
+            end = end + timedelta(days=1)
+
+        kept = []
+        for resource in resources:
+            project_start = self._parse_window_date(resource.get("start_date"))
+            last_activity = self._parse_window_date(
+                resource.get("last_activity") or resource.get("start_date")
+            )
+            if project_start is None:
+                continue
+            if start is not None and project_start < start:
+                continue
+            if end is not None and (last_activity is None or last_activity > end):
+                continue
+            kept.append(resource)
+        return kept
+
     def list_projects_grouped(
         self,
         start_date: Optional[str] = None,
@@ -885,19 +1068,32 @@ class APIClient:
         tags: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
     ) -> Dict:
-        """List projects grouped by status."""
-        params = {"compact": "false"}  # Request full project metadata
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
+        """List v2 projects rebuilt into the full legacy grouped shape."""
+        context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
+        params: Dict[str, Any] = {}
+        if context_id is not None:
+            params["context_ids"] = str(context_id)
+        if tag_ids:
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
         if exclude:
-            params["exclude"] = ",".join(exclude)
-        return self._request("GET", "/api/projects/grouped/", params=params)
+            excluded_ids = [self._resolve_project_id(name) for name in exclude]
+            params["exclude_project_ids"] = ",".join(
+                str(project_id) for project_id in excluded_ids
+            )
+
+        resources = self._v2_projects(params)
+        if start_date or end_date:
+            resources = self._filter_project_window(resources, start_date, end_date)
+        status_order = ("active", "paused", "complete", "archived")
+        grouped: Dict[str, List[Dict[str, Any]]] = {
+            status: [] for status in status_order
+        }
+        for resource in resources:
+            status = str(resource.get("status") or "")
+            grouped.setdefault(status, []).append(self._project_v2_to_legacy(resource))
+        summary = {status: len(projects) for status, projects in grouped.items()}
+        summary["total"] = len(resources)
+        return {"summary": summary, "projects": grouped}
 
     def create_project(
         self,
@@ -907,14 +1103,16 @@ class APIClient:
         tags: Optional[List[str]] = None,
     ) -> Dict:
         """Create a new project."""
-        data = {"name": name}
+        context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
+        data: Dict[str, Any] = {"name": name}
         if description:
             data["description"] = description
-        if context is not None:
-            data["context"] = context
-        if tags is not None:
-            data["tags"] = tags
-        return self._request("POST", "/api/create_project/", json=data)
+        if context_id is not None:
+            data["context_id"] = context_id
+        if tag_ids is not None:
+            data["tag_ids"] = tag_ids
+        resource = self._request("POST", "/api/v2/projects/", json=data)
+        return self._project_v2_to_legacy(resource)
 
     def update_project_metadata(
         self,
@@ -1146,21 +1344,15 @@ class APIClient:
             if snap is not None:
                 return {"projects": snap.projects, "cached": True}
 
-        # Fetch grouped projects and flatten into a single list with status attached
+        # Fetch the v2 grouped-equivalent façade and flatten its translated resources.
         grouped = self.list_projects_grouped()
         projects_by_status = grouped.get("projects", {})
         projects = []
 
         for status in ("active", "paused", "complete", "archived"):
             for proj in projects_by_status.get(status, []):
-                proj_entry = {
-                    "id": (
-                        proj.get("id") or proj.get("pid") or proj.get("project_id")
-                    ),
-                    "name": proj.get("name") or proj.get("project"),
-                    "description": proj.get("description", ""),
-                    "status": status,
-                }
+                proj_entry = dict(proj)
+                proj_entry["status"] = status
                 projects.append(proj_entry)
 
         try:
@@ -1179,98 +1371,76 @@ class APIClient:
         description: Optional[str] = None,
     ) -> Dict:
         """Create a new subproject under an existing project."""
-        data = {"parent_project": parent_project, "name": name}
+        project_id = self._resolve_project_id(parent_project)
+        data = {"name": name}
         if description:
             data["description"] = description
-        return self._request("POST", "/api/create_subproject/", json=data)
+        resource = self._request(
+            "POST", f"/api/v2/projects/{project_id}/subprojects/", json=data
+        )
+        return {"ok": True, "subproject": self._subproject_v2_to_legacy(resource)}
 
     # Project status management
 
     def mark_project_status(self, project: str, status: str) -> Dict:
         """Mark a project with a new status (active, paused, complete, archived)."""
-        data = {"project": project, "status": status}
-        return self._request("POST", "/api/mark/", json=data)
+        project_id = self._resolve_project_id(project)
+        resource = self._request(
+            "PATCH", f"/api/v2/projects/{project_id}", json={"status": status}
+        )
+        return {
+            "ok": True,
+            "project": resource.get("name"),
+            "status": resource.get("status"),
+        }
 
     # Rename operations
 
     def rename_project(self, old_name: str, new_name: str) -> Dict:
         """Rename a project."""
-        data = {"type": "project", "project": old_name, "new_name": new_name}
-        return self._request("POST", "/api/rename/", json=data)
+        project_id = self._resolve_project_id(old_name)
+        resource = self._request(
+            "PATCH", f"/api/v2/projects/{project_id}", json={"name": new_name}
+        )
+        return {"ok": True, "project": resource.get("name")}
 
     def rename_subproject(
         self, project: str, old_subproject: str, new_subproject: str
     ) -> Dict:
         """Rename a subproject within a project."""
-        data = {
-            "type": "subproject",
+        project_id = self._resolve_project_id(project)
+        subproject_id = self._resolve_subproject_ids(
+            project, project_id, [old_subproject]
+        )[0]
+        resource = self._request(
+            "PATCH",
+            f"/api/v2/subprojects/{subproject_id}",
+            json={"name": new_subproject},
+        )
+        return {
+            "ok": True,
             "project": project,
-            "subproject": old_subproject,
-            "new_name": new_subproject,
+            "subproject": resource.get("name"),
         }
-        return self._request("POST", "/api/rename/", json=data)
 
     # Delete operations
 
     def delete_project(self, project: str) -> Dict:
         """Delete a project and all its sessions."""
-        data = {"project": project}
-        # This endpoint returns 204 No Content, so we handle it specially
-        url = f"{self.base_url}/api/project/delete/"
-        try:
-            response = self._http(
-                "DELETE",
-                url,
-                retry_safe=True,
-                headers=self._headers(),
-                json=data,
-                timeout=30,
-                verify=self._verify,
-            )
-            response.raise_for_status()
-            # 204 returns no body
-            if response.status_code == 204:
-                return {"ok": True, "deleted": project}
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_data = response.json() if response is not None else {}
-                error_msg = error_data.get("error", str(e))
-                raise APIError(f"API error: {error_msg}")
-            except APIError:
-                raise
-            except (json.JSONDecodeError, ValueError, KeyError):
-                raise APIError(f"API error: {e}")
+        project_id = self._resolve_project_id(project)
+        self._request("DELETE", f"/api/v2/projects/{project_id}", retry_safe=True)
+        return {"ok": True, "deleted": project}
 
     def delete_subproject(self, project: str, subproject: str) -> Dict:
         """Delete a subproject from a project."""
-        from urllib.parse import quote
-
-        endpoint = f"/api/delete_subproject/{quote(project, safe='')}/{quote(subproject, safe='')}/"
-        # This endpoint likely returns 204 No Content
-        url = f"{self.base_url}{endpoint}"
-        try:
-            response = self._http(
-                "DELETE",
-                url,
-                retry_safe=True,
-                headers=self._headers(),
-                timeout=30,
-                verify=self._verify,
-            )
-            response.raise_for_status()
-            if response.status_code == 204:
-                return {"ok": True, "deleted": subproject, "project": project}
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_data = response.json() if response is not None else {}
-                error_msg = error_data.get("error", str(e))
-                raise APIError(f"API error: {error_msg}")
-            except APIError:
-                raise
-            except (json.JSONDecodeError, ValueError, KeyError):
-                raise APIError(f"API error: {e}")
+        project_id = self._resolve_project_id(project)
+        subproject_id = self._resolve_subproject_ids(
+            project, project_id, [subproject]
+        )[0]
+        self._request(
+            "DELETE", f"/api/v2/subprojects/{subproject_id}", retry_safe=True
+        )
+        return {"ok": True, "deleted": subproject, "project": project}
 
     # Export
 
@@ -1353,19 +1523,21 @@ class APIClient:
 
     def get_project(self, name: str) -> Dict:
         """Get detailed information about a single project."""
-        from urllib.parse import quote
-
-        endpoint = f"/api/get_project/{quote(name, safe='')}/"
-        return self._request("GET", endpoint)
+        project_id = self._resolve_project_id(name)
+        resource = self._request("GET", f"/api/v2/projects/{project_id}")
+        return self._project_detail_v2_to_legacy(resource)
 
     def search_projects(
         self, search_term: str, status: Optional[str] = None
     ) -> Dict:
         """Search projects by name with optional status filter."""
-        params = {"search_term": search_term}
+        params = {"search": search_term}
         if status:
             params["status"] = status
-        return self._request("GET", "/api/search_projects/", params=params)
+        resources = self._v2_projects(params)
+        return {
+            "projects": [self._project_v2_to_legacy(resource) for resource in resources]
+        }
 
     def get_project_totals(
         self,
@@ -1398,24 +1570,46 @@ class APIClient:
         self, project1: str, project2: str, new_project_name: str
     ) -> Dict:
         """Merge two projects into a new one."""
-        data = {
-            "project1": project1,
-            "project2": project2,
-            "new_project_name": new_project_name,
+        source_ids = [
+            self._resolve_project_id(project1),
+            self._resolve_project_id(project2),
+        ]
+        resource = self._request(
+            "POST",
+            "/api/v2/projects/merge/",
+            json={"source_ids": source_ids, "new_name": new_project_name},
+        )
+        return {
+            "message": (
+                f"Successfully merged {project1} and {project2} into "
+                f"{new_project_name}"
+            ),
+            "project": self._project_v2_to_legacy(resource),
         }
-        return self._request("POST", "/api/merge_projects/", json=data)
 
     def merge_subprojects(
         self, project_id: int, subproject1: str, subproject2: str, new_subproject_name: str
     ) -> Dict:
         """Merge two subprojects into a new one within a project."""
-        data = {
-            "project_id": project_id,
-            "subproject1": subproject1,
-            "subproject2": subproject2,
-            "new_subproject_name": new_subproject_name,
+        source_ids = self._resolve_subproject_ids(
+            "", project_id, [subproject1, subproject2]
+        )
+        resource = self._request(
+            "POST",
+            "/api/v2/subprojects/merge/",
+            json={
+                "project_id": project_id,
+                "source_ids": source_ids,
+                "new_name": new_subproject_name,
+            },
+        )
+        return {
+            "message": (
+                f"Successfully merged {subproject1} and {subproject2} into "
+                f"{new_subproject_name}"
+            ),
+            "subproject": self._subproject_v2_to_legacy(resource),
         }
-        return self._request("POST", "/api/merge_subprojects/", json=data)
 
     def list_projects_flat(
         self,
@@ -1427,18 +1621,28 @@ class APIClient:
         compact: bool = True,
     ) -> Dict:
         """List projects as a flat (ungrouped) list with optional filters."""
-        params = {"compact": str(compact).lower()}
+        context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
+        params: Dict[str, Any] = {}
         if status:
             params["status"] = status
-        if context:
-            params["context"] = context
-        if tags:
-            params["tags"] = ",".join(tags)
+        if context_id is not None:
+            params["context_ids"] = str(context_id)
+        if tag_ids:
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
         if search:
             params["search"] = search
         if exclude:
-            params["exclude"] = ",".join(exclude)
-        return self._request("GET", "/api/projects/", params=params)
+            excluded_ids = [self._resolve_project_id(name) for name in exclude]
+            params["exclude_project_ids"] = ",".join(
+                str(project_id) for project_id in excluded_ids
+            )
+        resources = self._v2_projects(params)
+        projects: List[Any]
+        if compact:
+            projects = [resource.get("name") for resource in resources]
+        else:
+            projects = [self._project_v2_to_legacy(resource) for resource in resources]
+        return {"count": len(projects), "projects": projects}
 
     def edit_session(
         self,
