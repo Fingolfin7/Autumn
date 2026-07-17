@@ -1,4 +1,4 @@
-"""Cache for /api/me user metadata.
+"""Cache for v2 identity user metadata.
 
 Used for greetings and account display.
 Stored in the same YAML config file as api_key/base_url.

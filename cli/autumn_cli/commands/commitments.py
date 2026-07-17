@@ -81,6 +81,40 @@ def _status_markup(status: str) -> str:
     return f"[{style}]{status}[/]"
 
 
+def _pending_note(pending_revision: Any) -> str:
+    if not isinstance(pending_revision, dict):
+        return ""
+    changes = pending_revision.get("changes") or {}
+    summaries = []
+    for field, value in changes.items():
+        label = str(field).replace("_", "-")
+        if isinstance(value, (dict, list)):
+            summaries.append(label)
+        else:
+            summaries.append(f"{label}={value}")
+    effective_from = str(pending_revision.get("effective_from") or "?")[:10]
+    fields = ", ".join(summaries) or "changes"
+    return f"[autumn.warn](pending: {fields} from {effective_from})[/]"
+
+
+def _resolve_commitment_id(client: APIClient, target: str) -> int:
+    if target.isdigit():
+        return int(target)
+    items = client.list_commitments(active=None, compact=True).get("commitments", [])
+    matches = [
+        item
+        for item in items
+        if str(item.get("name") or "").casefold() == target.casefold()
+    ]
+    if not matches:
+        raise APIError(f"Commitment target not found: {target}")
+    if len(matches) > 1:
+        raise APIError(
+            f"Commitment target is ambiguous: {target}. Use the commitment ID."
+        )
+    return int(matches[0]["id"])
+
+
 def _resolve_project(client: APIClient, name: str) -> str:
     projects = client.get_discovery_projects().get("projects", [])
     resolved = resolve_project_param(project=name, projects=projects)
@@ -98,6 +132,7 @@ def _new_payload(
     commitment_type: str,
     period: Optional[str],
     start_date: Optional[str],
+    timezone: Optional[str],
     no_banking: Optional[bool],
     max_balance: Optional[str],
     min_balance: Optional[str],
@@ -135,6 +170,8 @@ def _new_payload(
         data["period"] = period
     if start_date is not None:
         data["start_date"] = start_date
+    if timezone is not None:
+        data["timezone"] = timezone
     if no_banking is not None:
         data["banking_enabled"] = not no_banking
     if max_balance is not None:
@@ -200,9 +237,16 @@ def commitments_list(include_inactive: bool, json_out: bool, streak: bool) -> No
             except (TypeError, ValueError):
                 signed = str(bal)
             balance = _amount_text(signed, ctype)
+            target_text = (
+                f"[autumn.project]{item.get('name', '')}[/] "
+                f"[autumn.muted]({item.get('agg', '')})[/]"
+            )
+            pending_note = _pending_note(item.get("pending_revision"))
+            if pending_note:
+                target_text = f"{target_text}\n{pending_note}"
             row = [
                 str(item.get("id", "-")),
-                f"[autumn.project]{item.get('name', '')}[/] [autumn.muted]({item.get('agg', '')})[/]",
+                target_text,
                 goal,
                 progress_text,
                 balance,
@@ -237,6 +281,9 @@ def commitments_show(commitment_id: int) -> None:
         console.print(f"[autumn.label]Period window:[/] {progress.get('effective_period_start') or progress.get('period_start', '-')} to {progress.get('period_end', '-')}")
         console.print(f"[autumn.label]Banking:[/] {'enabled' if item.get('banking_enabled') else 'disabled'}")
         console.print(f"[autumn.label]Active:[/] {'yes' if item.get('active') else 'no'}")
+        pending_note = _pending_note(item.get("pending_revision"))
+        if pending_note:
+            console.print(pending_note)
         rules = item.get("rules") or []
         console.print("[autumn.label]Rules:[/]")
         if rules:
@@ -259,6 +306,7 @@ def _commitment_options(required_target_value: bool):
         fn = click.option("--min-balance", help="Minimum balance (duration for time commitments)")(fn)
         fn = click.option("--max-balance", help="Maximum balance (duration for time commitments)")(fn)
         fn = click.option("--no-banking", flag_value=True, default=None, help="Disable balance banking")(fn)
+        fn = click.option("--timezone", help="IANA timezone name")(fn)
         fn = click.option("--start-date", help="Start date (YYYY-MM-DD)")(fn)
         fn = click.option("--period", type=click.Choice(PERIODS), default="weekly" if required_target_value else None, show_default=required_target_value)(fn)
         fn = click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES), default="time" if required_target_value else None, show_default=required_target_value)(fn)
@@ -331,6 +379,82 @@ def commitments_delete(commitment_id: int, yes: bool) -> None:
             return
         APIClient().delete_commitment(commitment_id)
         console.print(f"[autumn.ok]Commitment deleted:[/] #[autumn.id]{commitment_id}[/]")
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@commitments.command("restart")
+@click.argument("target")
+@click.option(
+    "--keep-balance", is_flag=True, help="Carry the current balance into the restart"
+)
+@click.option(
+    "--reset-balance", is_flag=True, help="Reset the balance for the new generation"
+)
+@click.option("--period", type=click.Choice(PERIODS))
+@click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES))
+@click.option("--start-date", help="Start date (YYYY-MM-DD)")
+@click.option("--timezone", help="IANA timezone name")
+def commitments_restart(
+    target: str,
+    keep_balance: bool,
+    reset_balance: bool,
+    period: Optional[str],
+    commitment_type: Optional[str],
+    start_date: Optional[str],
+    timezone: Optional[str],
+) -> None:
+    """Restart a commitment into a new generation."""
+    if keep_balance == reset_balance:
+        raise click.UsageError(
+            "Specify exactly one of --keep-balance or --reset-balance."
+        )
+    try:
+        client = APIClient()
+        commitment_id = _resolve_commitment_id(client, target)
+        changes = {
+            key: value
+            for key, value in {
+                "period": period,
+                "commitment_type": commitment_type,
+                "start_date": start_date,
+                "timezone": timezone,
+            }.items()
+            if value is not None
+        }
+        result = client.restart_commitment(
+            commitment_id,
+            keep_balance=keep_balance,
+            changes=changes or None,
+        )
+        item = result.get("commitment", {})
+        console.print(
+            f"[autumn.ok]Commitment restarted:[/] "
+            f"#[autumn.id]{item.get('id', commitment_id)}[/]"
+        )
+    except APIError as exc:
+        console.print(f"[autumn.err]Error:[/] {exc}")
+        raise click.Abort()
+
+
+@commitments.command("adjust")
+@click.argument("target")
+@click.option("--amount", type=int, required=True, help="Adjustment amount in minutes")
+@click.option("--reason", help="Reason for the adjustment")
+def commitments_adjust(target: str, amount: int, reason: Optional[str]) -> None:
+    """Apply a manual adjustment to a commitment balance."""
+    try:
+        client = APIClient()
+        commitment_id = _resolve_commitment_id(client, target)
+        result = client.adjust_commitment(
+            commitment_id, amount=amount, reason=reason
+        )
+        adjustment = result.get("adjustment", {})
+        console.print(
+            f"[autumn.ok]Commitment adjusted.[/] "
+            f"[autumn.label]Balance:[/] {_time_text(adjustment.get('balance', 0))}"
+        )
     except APIError as exc:
         console.print(f"[autumn.err]Error:[/] {exc}")
         raise click.Abort()

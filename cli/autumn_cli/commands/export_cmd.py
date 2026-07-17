@@ -106,6 +106,11 @@ def _generate_export_filename(project: Optional[str] = None) -> str:
 @click.option("--stdout", is_flag=True, help="Output to stdout instead of file")
 @click.option("--compress", is_flag=True, help="Compress output")
 @click.option("--pick", is_flag=True, help="Interactively pick project")
+@click.option(
+    "--legacy",
+    is_flag=True,
+    help="Export the heritage format-1 document instead of format 2",
+)
 def export(
     project: Optional[str],
     start_date: Optional[str],
@@ -117,6 +122,7 @@ def export(
     stdout: bool,
     compress: bool,
     pick: bool,
+    legacy: bool,
 ):
     """Export sessions and projects data as JSON.
 
@@ -171,6 +177,12 @@ def export(
                 except ValueError:
                     console.print(f"[autumn.warn]Warning:[/] Tag must be an integer ID for export. Skipping '{t}'")
 
+        if legacy and not stdout:
+            console.print(
+                "[autumn.warn]Legacy format 1 is lossy: it does not carry "
+                "session identity (uuid) or subproject allocations.[/]"
+            )
+
         result = client.export_data(
             project=resolved_project,
             start_date=start_date,
@@ -178,7 +190,8 @@ def export(
             context=context_id,
             tags=tag_ids,
             compress=compress,
-            autumn_compatible=False,  # Use standard format for full data
+            autumn_compatible=False,  # Standard format-1 when --legacy is used
+            legacy=legacy,
         )
 
         # Format output

@@ -130,53 +130,24 @@ def log(
             # Server interprets period=week as "since Monday"; we want "last 7 days".
             normalized_period = period.lower() if period else "week"
 
-            # For standard server-supported periods, prefer passing `period` directly
-            # (unless the user provided explicit start/end).
-            server_periods = {"day", "week", "month", "all"}
+            calculated_start_date = start_date
+            calculated_end_date = end_date
+            if not start_date and not end_date:
+                from ..utils.periods import period_to_dates
 
-            if not start_date and not end_date and normalized_period in server_periods:
-                result = client.log_activity(
-                    period=normalized_period,
-                    project=resolved_project,
-                    start_date=None,
-                    end_date=None,
-                    context=resolved_context,
-                    tags=resolved_tags,
-                    exclude=excluded_projects,
+                calculated_start_date, calculated_end_date = period_to_dates(
+                    normalized_period
                 )
-            else:
-                # For custom periods (fortnight/lunar cycle/quarter/year) or explicit dates,
-                # calculate a concrete date window.
-                calculated_start_date = start_date
-                calculated_end_date = end_date
 
-                if not start_date and not end_date and normalized_period != "all":
-                    from ..utils.periods import period_to_dates
-
-                    derived_start, derived_end = period_to_dates(normalized_period)
-                    calculated_start_date = derived_start
-                    calculated_end_date = derived_end
-
-                if normalized_period == "all" and not (calculated_start_date or calculated_end_date):
-                    result = client.log_activity(
-                        period="all",
-                        project=resolved_project,
-                        start_date=None,
-                        end_date=None,
-                        context=resolved_context,
-                        tags=resolved_tags,
-                        exclude=excluded_projects,
-                    )
-                else:
-                    result = client.log_activity(
-                        period=None,
-                        project=resolved_project,
-                        start_date=calculated_start_date,
-                        end_date=calculated_end_date,
-                        context=resolved_context,
-                        tags=resolved_tags,
-                        exclude=excluded_projects,
-                    )
+            result = client.log_activity(
+                period=None,
+                project=resolved_project,
+                start_date=calculated_start_date,
+                end_date=calculated_end_date,
+                context=resolved_context,
+                tags=resolved_tags,
+                exclude=excluded_projects,
+            )
 
             logs = result.get("logs", [])
             count = result.get("count", len(logs))

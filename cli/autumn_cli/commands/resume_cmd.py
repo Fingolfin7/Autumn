@@ -33,9 +33,7 @@ def resume(stop_current: bool, with_subprojects: bool) -> None:
                 )
             client.stop_timer()
 
-        # Find the most recent completed session.
-        # The /api/sessions/search/ endpoint requires at least one filter, so we
-        # use the log endpoint instead.
+        # Find the most recent completed session in a one-week window.
         result = client.log_activity(period="week")
         logs = result.get("logs", [])
         if not logs:
