@@ -393,6 +393,5 @@ def test_only_allowed_non_v2_api_urls_remain():
     routes = set(re.findall(r'["\'](/api/[^"\']+)', source))
     non_v2 = {route for route in routes if not route.startswith("/api/v2/")}
 
-    # /api/export/ and /api/import/ remain only behind the explicit --legacy
-    # format-1 paths; everything else is v2. The audit passthrough is gone.
-    assert non_v2 == {"/api/export/", "/api/import/"}
+    # S12 complete: the CLI's entire runtime surface is API v2.
+    assert non_v2 == set()

@@ -187,7 +187,10 @@ class TestExportData:
             mock_req.assert_called_once_with("GET", "/api/v2/export/", params={})
 
     def test_export_data_legacy_keeps_v1_payload(self, mock_client):
-        with patch.object(mock_client, "_request") as mock_req:
+        with (
+            patch.object(mock_client, "_resolve_project_id", return_value=9),
+            patch.object(mock_client, "_request") as mock_req,
+        ):
             mock_req.return_value = {"sessions": [], "projects": []}
 
             mock_client.export_data(
@@ -199,15 +202,16 @@ class TestExportData:
             )
 
             mock_req.assert_called_once_with(
-                "POST",
-                "/api/export/",
-                json={
-                    "project_name": "MyProject",
+                "GET",
+                "/api/v2/export/",
+                params={
+                    "export_format": "1",
+                    "autumn_compatible": "true",
+                    "project_ids": "9",
                     "start_date": "2026-01-01",
                     "end_date": "2026-01-31",
-                    "compress": True,
-                    "autumn_compatible": True
-                }
+                    "compress": "true",
+                },
             )
 
 
@@ -226,7 +230,7 @@ class TestImportData:
 
             mock_req.assert_called_once_with(
                 "POST",
-                "/api/import/",
+                "/api/v2/import/",
                 json={
                     "data": {"Project A": {}},
                     "force": True,

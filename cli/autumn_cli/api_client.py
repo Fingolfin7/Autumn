@@ -2046,25 +2046,12 @@ class APIClient:
         Note: context must be an integer ID, not a name.
         Tags should be a list of tag IDs.
         """
-        if legacy:
-            data = {}
-            if project:
-                data["project_name"] = project
-            if start_date:
-                data["start_date"] = start_date
-            if end_date:
-                data["end_date"] = end_date
-            if context is not None:
-                data["context"] = context
-            if tags:
-                data["tags"] = tags
-            if compress:
-                data["compress"] = True
-            if autumn_compatible:
-                data["autumn_compatible"] = True
-            return self._request("POST", "/api/export/", json=data)
-
         params: Dict[str, Any] = {}
+        if legacy:
+            # Heritage format-1 document via the v2 endpoint.
+            params["export_format"] = "1"
+            if autumn_compatible:
+                params["autumn_compatible"] = "true"
         if project:
             params["project_ids"] = str(self._resolve_project_id(project))
         if start_date:
@@ -2107,6 +2094,8 @@ class APIClient:
                 "POST", "/api/v2/import/", json={"data": data, "force": force}
             )
 
+        # Heritage format-1 payloads go to the v2 endpoint too (it accepts the
+        # legacy merge/tolerance/autumn_import/context options for format 1).
         payload: Dict[str, Any] = {
             "force": force,
             "merge": merge,
@@ -2119,7 +2108,7 @@ class APIClient:
             payload["data_compressed"] = data_compressed
         if context is not None:
             payload["context"] = context
-        return self._request("POST", "/api/import/", json=payload)
+        return self._request("POST", "/api/v2/import/", json=payload)
 
     # Audit
 
