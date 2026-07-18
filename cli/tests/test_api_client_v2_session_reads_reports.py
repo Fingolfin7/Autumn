@@ -31,8 +31,13 @@ def _resource(*, session_id=21, project_id=8, project="Deep Work", note="Focus")
 def _legacy(*, session_id=21, project="Deep Work", note="Focus"):
     return {
         "id": session_id,
+        "version": 4,
         "project": project,
         "subprojects": ["Build", "Review"],
+        "subproject_allocations": [
+            {"subproject_id": 31, "name": "Build", "allocation_bp": 6000},
+            {"subproject_id": 32, "name": "Review", "allocation_bp": 4000},
+        ],
         "start_time": "2026-07-16T08:00:00+00:00",
         "end_time": "2026-07-16T08:45:00+00:00",
         "duration_minutes": 45.0,

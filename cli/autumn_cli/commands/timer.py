@@ -7,7 +7,7 @@ from typing import Optional
 from ..api_client import APIClient, APIError
 from ..utils.console import console
 from ..utils.formatters import format_duration_minutes, parse_utc_to_local
-from ..utils.log_render import render_active_timers_list
+from ..utils.log_render import render_active_timers_list, format_subprojects_bracketed
 from ..utils.duration_parse import parse_duration_to_seconds
 from ..utils.datetime_parse import parse_user_datetime
 from ..utils.notify import send_notification
@@ -16,6 +16,7 @@ from ..utils.reminder_spawner import spawn_reminder
 from ..utils.auto_stop import session_still_active_after_auto_stop
 from ..utils.reminders_registry import add_entry
 from ..utils.resolvers import resolve_project_param, resolve_subproject_params
+from ..utils.splits import even_basis_points, parse_split, resolve_split_selection
 
 
 def _format_subs_bracketed(subs: list[str]) -> str:
@@ -222,8 +223,7 @@ def start(
         )
 
         if not result.get("ok"):
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
-            return
+            raise click.ClickException(result.get("error", "Unknown error"))
 
         session = result.get("session", {})
         session_id = session.get("id")
@@ -434,22 +434,67 @@ def start(
 @click.option("--session-id", "-i", type=int, help="Specific session ID to stop")
 @click.option("--project", "-p", help="Project name to stop timer for")
 @click.option("--note", "-n", help="Note to add when stopping")
-def stop(session_id: Optional[int], project: Optional[str], note: Optional[str]):
+@click.option(
+    "--split",
+    help='Set the final subproject split (for example "api=60,frontend=40" or "even")',
+)
+def stop(
+    session_id: Optional[int],
+    project: Optional[str],
+    note: Optional[str],
+    split: Optional[str],
+):
     """Stop the current timer (or a specific one)."""
     try:
+        split_spec = parse_split(split)
+    except ValueError as error:
+        raise click.BadParameter(str(error), param_hint="--split") from None
+
+    try:
         client = APIClient()
-        result = client.stop_timer(session_id, project, note)
+        allocations = None
+        if split_spec is not None:
+            status_result = client.get_timer_status(session_id, project)
+            active_sessions = status_result.get("sessions") or []
+            if not active_sessions:
+                raise APIError("No active timer found.")
+            target = max(
+                active_sessions,
+                key=lambda session: (
+                    str(session.get("start") or ""),
+                    int(session.get("id") or 0),
+                ),
+            )
+            target_project = target.get("p") or target.get("project") or project
+            if not target_project:
+                raise APIError("Could not determine the timer's project.")
+            subprojects_list, allocations, warnings = resolve_split_selection(
+                client,
+                target_project,
+                (),
+                split_spec,
+                even_fallback=target.get("subs") or target.get("subprojects") or [],
+            )
+            for warning in warnings:
+                console.print(f"[autumn.warn]Warning:[/] {warning}")
+            if split_spec.even:
+                allocations = client.resolve_subproject_allocations(
+                    target_project, even_basis_points(subprojects_list or [])
+                )
+
+        stop_kwargs = {"allocations": allocations} if allocations is not None else {}
+        result = client.stop_timer(session_id, project, note, **stop_kwargs)
 
         if result.get("ok"):
             session = result.get("session", {})
             duration = result.get("duration", session.get("elapsed", 0))
             sess_project = session.get("p") or session.get("project") or project or ""
-            subs = session.get("subs") or session.get("subprojects") or []
             sid = session.get("id") or session_id
 
             console.print("[autumn.ok]Timer stopped.[/]", highlight=True)
             console.print(
-                f"Stopped {_format_project_with_subs(sess_project, list(subs))}, "
+                f"Stopped [autumn.project]{sess_project}[/] "
+                f"{format_subprojects_bracketed(session)}, "
                 f"[autumn.duration]{format_duration_minutes(duration)}[/]"
             )
             console.print(_format_session_id_line(sid))
@@ -457,7 +502,7 @@ def stop(session_id: Optional[int], project: Optional[str], note: Optional[str])
                 console.print(f"[autumn.label]Note:[/] [autumn.note]{session.get('note')}[/]")
 
         else:
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.ClickException(result.get("error", "Unknown error"))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -483,7 +528,7 @@ def status(session_id: Optional[int], project: Optional[str]):
             console.print(f"[autumn.label]Active timers:[/] [autumn.ok]{active_count}[/]", highlight=True)
             console.print(render_active_timers_list(sessions))
         else:
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.ClickException(result.get("error", "Unknown error"))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -511,7 +556,7 @@ def restart(session_id: Optional[int], project: Optional[str]):
             _print_auto_stop_line(session)
 
         else:
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.ClickException(result.get("error", "Unknown error"))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()
@@ -529,7 +574,7 @@ def delete(session_id: Optional[int]):
             deleted_id = result.get("deleted")
             console.print(f"[autumn.warn]Timer deleted[/] (Session ID: {deleted_id})", highlight=True)
         else:
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.ClickException(result.get("error", "Unknown error"))
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
         raise click.Abort()

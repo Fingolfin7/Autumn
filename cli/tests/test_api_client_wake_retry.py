@@ -15,7 +15,6 @@ def _session_resource(*, active=True):
         "uuid": "00000000-0000-0000-0000-000000000001",
         "version": 3,
         "project": {"id": 4, "name": "Work"},
-        "allocation_mode": "equal",
         "subproject_allocations": [],
         "start": "2026-07-16T08:30:00+00:00",
         "end": None if active else "2026-07-16T09:00:00+00:00",

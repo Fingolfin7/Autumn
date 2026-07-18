@@ -27,6 +27,7 @@ from .config import (
     get_banner_enabled,
 )
 from .api_client import APIClient, APIError
+from .errors import AutumnError
 from .commands.timer import start, stop, restart, delete, status as timer_status
 from .commands.sessions import log, track, edit_session, delete_session
 from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
@@ -45,9 +46,22 @@ from .commands.export_cmd import export
 from .commands.import_cmd import import_cmd
 from .commands.meta import meta_audit
 from .commands.alias_cmd import alias
+from .commands.note import note
 
 
-@click.group(invoke_without_command=True)
+class AutumnGroup(click.Group):
+    """Root command group that renders expected API failures cleanly."""
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except AutumnError as error:
+            # Expected operational errors are user-facing failures, not CLI bugs.
+            # Converting them here gives every command one message and exit code.
+            raise click.ClickException(str(error)) from None
+
+
+@click.group(cls=AutumnGroup, invoke_without_command=True)
 @click.version_option(version="1.0.0")
 @click.pass_context
 def cli(ctx: click.Context):
@@ -403,6 +417,8 @@ cli.add_command(stop, name="stop")
 cli.add_command(timer_status, name="status")  # Timer status
 cli.add_command(restart, name="restart")
 cli.add_command(delete, name="delete")
+cli.add_command(note, name="note")
+cli.add_command(note, name="n")
 
 # Session commands
 cli.add_command(log, name="log")

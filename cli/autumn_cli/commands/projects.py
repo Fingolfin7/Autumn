@@ -218,10 +218,7 @@ def subprojects(project: str, desc: bool, search: Optional[str]):
         # If the API explicitly returns ok: false, show the error.
         # Otherwise, assume it's a successful response (either a list or a dict).
         if isinstance(result, dict) and result.get("ok") is False:
-            console.print(
-                f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}"
-            )
-            return
+            raise click.ClickException(result.get("error", "Unknown error"))
 
         # Check if result is a list (non-compact) or dict
         if isinstance(result, list):

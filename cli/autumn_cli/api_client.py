@@ -6,18 +6,29 @@ import requests
 from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
 from typing import Optional, Dict, List, Any, Tuple
+from urllib.parse import urlparse
 from uuid import uuid4
 from .config import get_api_key, get_base_url, get_wake_retry, get_wake_timeout_seconds
+from .errors import AutumnError
 from .utils.console import console
 
 
 _UNSET = object()
 
 
-class APIError(Exception):
+class APIError(AutumnError):
     """Exception raised for API errors."""
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: Optional[str] = None,
+        details: Any = None,
+    ):
+        super().__init__(message)
+        self.code = code
+        self.details = details
 
 
 class APIClient:
@@ -31,7 +42,19 @@ class APIClient:
         wake_retry: Optional[bool] = None,
     ):
         self.api_key = api_key or get_api_key()
-        self.base_url = (base_url or get_base_url()).rstrip("/")
+        configured_base_url = base_url if base_url is not None else get_base_url()
+        if not isinstance(configured_base_url, str):
+            raise APIError(
+                "Invalid base URL in configuration. Set an http:// or https:// URL "
+                "with 'autumn auth setup'."
+            )
+        self.base_url = configured_base_url.strip().rstrip("/")
+        parsed_base_url = urlparse(self.base_url)
+        if parsed_base_url.scheme not in ("http", "https") or not parsed_base_url.netloc:
+            raise APIError(
+                f"Invalid base URL '{self.base_url}'. Include http:// or https:// "
+                "and a host."
+            )
         self.quiet = quiet
         # None -> defer to config; False forces fast-fail (for opportunistic
         # background checks that must never block on a sleeping server).
@@ -74,6 +97,65 @@ class APIClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+
+    @staticmethod
+    def _error_detail(data: Any, fallback: str) -> str:
+        """Turn common API error payload shapes into one readable sentence."""
+        if isinstance(data, str):
+            return data.strip() or fallback
+        if isinstance(data, (list, tuple)):
+            details = [APIClient._error_detail(item, "") for item in data]
+            return "; ".join(detail for detail in details if detail) or fallback
+        if isinstance(data, dict):
+            for key in ("detail", "message", "error", "non_field_errors"):
+                if key in data:
+                    detail = APIClient._error_detail(data[key], "")
+                    if detail:
+                        return detail
+            details = []
+            for key, value in data.items():
+                detail = APIClient._error_detail(value, "")
+                if detail:
+                    details.append(f"{key}: {detail}")
+            return "; ".join(details) or fallback
+        if data is not None:
+            return str(data)
+        return fallback
+
+    @staticmethod
+    def _network_error(
+        error: requests.exceptions.RequestException, url: str
+    ) -> APIError:
+        """Convert requests' verbose transport exceptions into a CLI-safe error."""
+        host = None
+        try:
+            from urllib.parse import urlparse
+
+            host = urlparse(url).hostname
+        except (ValueError, AttributeError):
+            pass
+
+        if isinstance(
+            error,
+            (
+                requests.exceptions.InvalidURL,
+                requests.exceptions.MissingSchema,
+                requests.exceptions.URLRequired,
+            ),
+        ):
+            hint = "Invalid base URL"
+        elif APIClient._is_dns_error(error):
+            hint = "DNS lookup failed"
+        elif isinstance(error, requests.exceptions.Timeout):
+            hint = "Request timed out"
+        else:
+            hint = "Network error"
+
+        host_part = f" (host={host})" if host else ""
+        return APIError(
+            f"{hint}{host_part}. Check your internet connection and base_url "
+            f"(autumn auth status). Details: {error}"
+        )
 
     @staticmethod
     def _is_dns_error(error: requests.exceptions.ConnectionError) -> bool:
@@ -183,7 +265,7 @@ class APIClient:
             if not wake_retry_enabled or not self._is_wake_trigger(
                 method, retry_safe=retry_safe, error=error
             ):
-                raise
+                raise self._network_error(error, url) from None
             if not retry_eligible:
                 raise self._uncertain_mutation_error()
             response = None
@@ -212,7 +294,7 @@ class APIClient:
                     "Server did not wake up in time. Try again in a minute, or check "
                     f"{self.base_url}."
                 )
-            raise
+            raise self._network_error(error, url) from None
 
         if retry_response.status_code < 400:
             self._server_awake = True
@@ -257,7 +339,12 @@ class APIClient:
                 response.status_code == 204 or not response.content
             ):
                 return {}
-            return response.json()
+            try:
+                return response.json()
+            except (JSONDecodeError, ValueError):
+                raise APIError(
+                    "Invalid response from server: expected JSON data."
+                ) from None
         except requests.exceptions.HTTPError as e:
             if endpoint.startswith("/api/v2/"):
                 error_data = {}
@@ -265,7 +352,9 @@ class APIClient:
                     error_data = response.json() if response is not None else {}
                 except (JSONDecodeError, ValueError):
                     pass
-                error_envelope = error_data.get("error")
+                error_envelope = (
+                    error_data.get("error") if isinstance(error_data, dict) else None
+                )
                 if isinstance(error_envelope, dict):
                     code = error_envelope.get("code")
                     message = error_envelope.get("message") or str(e)
@@ -277,7 +366,9 @@ class APIClient:
                         )
                         raise APIError(
                             f"The {subject} changed on the server (someone else edited it?). "
-                            "Re-run the command."
+                            "Re-run the command.",
+                            code=code,
+                            details=error_envelope.get("details"),
                         )
                     if code == "restart_required" and endpoint.startswith(
                         "/api/v2/commitments/"
@@ -292,33 +383,14 @@ class APIClient:
                 raise APIError("Authentication failed. Check your API key.")
             try:
                 error_data = response.json() if response is not None else {}
-                error_msg = error_data.get("error", str(e))
+                error_msg = self._error_detail(error_data, str(e))
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
             except (JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
         except requests.exceptions.RequestException as e:
-            # Keep network errors readable; urllib3 can be very verbose.
-            host = None
-            try:
-                from urllib.parse import urlparse
-
-                host = urlparse(url).hostname
-            except (ValueError, AttributeError):
-                host = None
-
-            msg = str(e)
-            # Common Windows DNS failure: getaddrinfo failed
-            if "getaddrinfo failed" in msg or "NameResolutionError" in msg:
-                hint = "DNS lookup failed"
-            else:
-                hint = "Network error"
-
-            host_part = f" (host={host})" if host else ""
-            raise APIError(
-                f"{hint}{host_part}. Check your internet connection and base_url (autumn auth status). Details: {msg}"
-            )
+            raise self._network_error(e, url) from None
 
     def _delete_no_content(self, endpoint: str, *, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Delete an endpoint which normally returns HTTP 204 No Content."""
@@ -337,16 +409,23 @@ class APIClient:
             response.raise_for_status()
             if response.status_code == 204 or not response.content:
                 return {"ok": True}
-            return response.json()
+            try:
+                return response.json()
+            except (json.JSONDecodeError, ValueError):
+                raise APIError(
+                    "Invalid response from server: expected JSON data."
+                ) from None
         except requests.exceptions.HTTPError as e:
             try:
                 error_data = response.json() if response is not None else {}
-                error_msg = error_data.get("error", str(e))
+                error_msg = self._error_detail(error_data, str(e))
                 raise APIError(f"API error: {error_msg}")
             except APIError:
                 raise
             except (json.JSONDecodeError, ValueError, KeyError):
                 raise APIError(f"API error: {e}")
+        except requests.exceptions.RequestException as e:
+            raise self._network_error(e, url) from None
 
     def get_token_with_password(self, username_or_email: str, password: str) -> str:
         """Fetch an auth token using username/email + password.
@@ -365,12 +444,19 @@ class APIClient:
         if resp.status_code >= 400:
             try:
                 data = resp.json()
-                detail = data.get("detail") or data.get("error") or str(data)
+                detail = self._error_detail(data, str(data))
             except (json.JSONDecodeError, ValueError):
-                detail = resp.text
+                detail = resp.text.strip() or f"HTTP {resp.status_code}"
             raise APIError(f"Login failed: {detail}")
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError):
+            raise APIError(
+                "Login failed: server returned an invalid JSON response."
+            ) from None
+        if not isinstance(data, dict):
+            raise APIError("Login failed: server returned an invalid response.")
         token = data.get("token")
         if not token:
             raise APIError("Login failed: server did not return a token")
@@ -547,11 +633,22 @@ class APIClient:
             if active
             else resource.get("duration_minutes")
         )
+        compact_allocations = [
+            {
+                "subproject_id": allocation.get("subproject_id"),
+                "name": allocation.get("name"),
+                "allocation_bp": allocation.get("allocation_bp"),
+            }
+            for allocation in allocations
+            if isinstance(allocation, dict)
+        ]
         return {
             "id": resource.get("id"),
+            "version": resource.get("version"),
             "p": project.get("name"),
             "pid": project.get("id"),
-            "subs": [allocation.get("name") for allocation in allocations],
+            "subs": [allocation.get("name") for allocation in compact_allocations],
+            "subproject_allocations": compact_allocations,
             "start": resource.get("start"),
             "end": resource.get("end"),
             "stop_at": resource.get("auto_stop_at"),
@@ -570,9 +667,19 @@ class APIClient:
             duration = resource.get("elapsed_minutes")
         return {
             "id": resource.get("id"),
+            "version": resource.get("version"),
             "project": project.get("name"),
             "subprojects": [
                 allocation.get("name")
+                for allocation in allocations
+                if isinstance(allocation, dict)
+            ],
+            "subproject_allocations": [
+                {
+                    "subproject_id": allocation.get("subproject_id"),
+                    "name": allocation.get("name"),
+                    "allocation_bp": allocation.get("allocation_bp"),
+                }
                 for allocation in allocations
                 if isinstance(allocation, dict)
             ],
@@ -760,6 +867,29 @@ class APIClient:
             raise APIError(f"Unknown subprojects: {', '.join(missing)}")
         return [int(folded[name.casefold()]) for name in names]
 
+    def resolve_subproject_allocations(
+        self, project: str, allocations: List[Tuple[str, int]]
+    ) -> List[Tuple[int, int]]:
+        """Resolve user-facing subproject names in an allocation list to IDs."""
+        project_id = self._resolve_project_id(project)
+        names = [name for name, _allocation_bp in allocations]
+        subproject_ids = self._resolve_subproject_ids(project, project_id, names) or []
+        return [
+            (subproject_id, allocation_bp)
+            for subproject_id, (_name, allocation_bp) in zip(
+                subproject_ids, allocations
+            )
+        ]
+
+    @staticmethod
+    def _allocation_payload(
+        allocations: List[Tuple[int, int]],
+    ) -> List[Dict[str, int]]:
+        return [
+            {"subproject_id": int(subproject_id), "allocation_bp": int(allocation_bp)}
+            for subproject_id, allocation_bp in allocations
+        ]
+
     def _active_timer_resources(self) -> List[Dict[str, Any]]:
         result = self._request("GET", "/api/v2/timers/")
         return list(result.get("timers") or [])
@@ -830,6 +960,7 @@ class APIClient:
         session_id: Optional[int] = None,
         project: Optional[str] = None,
         note: Optional[str] = None,
+        allocations: Optional[List[Tuple[int, int]]] = None,
     ) -> Dict:
         """Stop the current timer."""
         target = self._resolve_active_timer_target(session_id, project)
@@ -837,6 +968,8 @@ class APIClient:
         data = {"end": end}
         if note is not None:
             data["note"] = note
+        if allocations is not None:
+            data["subproject_allocations"] = self._allocation_payload(allocations)
         resource = self._request(
             "POST",
             f"/api/v2/timers/{target['id']}/stop/",
@@ -867,6 +1000,18 @@ class APIClient:
             self._session_v2_to_compact(resource) for resource in resources
         ]
         return {"ok": True, "active": len(sessions), "sessions": sessions}
+
+    def update_timer_note(
+        self, session_id: int, note: str, version: int
+    ) -> Dict:
+        """Replace the note of an active timer using optimistic concurrency."""
+        resource = self._request(
+            "PATCH",
+            f"/api/v2/timers/{session_id}/",
+            json={"note": note},
+            headers={"If-Match": str(version)},
+        )
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     def restart_timer(
         self, session_id: Optional[int] = None, project: Optional[str] = None
@@ -904,6 +1049,11 @@ class APIClient:
         return {"ok": True, "deleted": target_id}
 
     # Session endpoints
+
+    def get_session(self, session_id: int) -> Dict:
+        """Get one session in the compact CLI shape."""
+        resource = self._request("GET", f"/api/v2/sessions/{session_id}")
+        return {"ok": True, "session": self._session_v2_to_compact(resource)}
 
     def log_activity(
         self,
@@ -1021,12 +1171,15 @@ class APIClient:
         end: str,
         subprojects: Optional[List[str]] = None,
         note: Optional[str] = None,
+        allocations: Optional[List[Tuple[int, int]]] = None,
     ) -> Dict:
         """Track a completed session."""
         project_id = self._resolve_project_id(project)
-        subproject_ids = self._resolve_subproject_ids(
-            project, project_id, subprojects
-        )
+        subproject_ids = None
+        if allocations is None:
+            subproject_ids = self._resolve_subproject_ids(
+                project, project_id, subprojects
+            )
         start_utc = self._to_utc_datetime(start)
         end_utc = self._to_utc_datetime(end)
         if end_utc < start_utc:
@@ -1037,7 +1190,9 @@ class APIClient:
             "end": end_utc.isoformat(),
             "uuid": str(uuid4()),
         }
-        if subproject_ids:
+        if allocations is not None:
+            data["subproject_allocations"] = self._allocation_payload(allocations)
+        elif subproject_ids:
             data["subproject_ids"] = subproject_ids
         if note:
             data["note"] = note
@@ -2308,6 +2463,7 @@ class APIClient:
         end: Optional[str] = None,
         note: Optional[str] = None,
         compact: bool = True,
+        allocations: Optional[List[Tuple[int, int]]] = None,
     ) -> Dict:
         """Edit an existing completed session."""
         current = self._request("GET", f"/api/v2/sessions/{session_id}")
@@ -2321,7 +2477,9 @@ class APIClient:
         data: Dict[str, Any] = {}
         if project is not None:
             data["project_id"] = project_id
-        if subprojects is not None:
+        if allocations is not None:
+            data["subproject_allocations"] = self._allocation_payload(allocations)
+        elif subprojects is not None:
             data["subproject_ids"] = self._resolve_subproject_ids(
                 effective_project, int(project_id), subprojects
             )

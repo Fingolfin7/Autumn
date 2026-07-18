@@ -308,9 +308,11 @@ class TestStartTimer:
                 "ok": True,
                 "session": {
                     "id": 5,
+                    "version": None,
                     "p": "MyProject",
                     "pid": 7,
                     "subs": [],
+                    "subproject_allocations": [],
                     "start": "2026-07-16T08:00:00+00:00",
                     "end": None,
                     "stop_at": None,

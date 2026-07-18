@@ -1,9 +1,12 @@
 """Configuration management for Autumn CLI."""
 
 import os
+import tempfile
 import yaml
 from pathlib import Path
 from typing import Optional, Any
+
+from .errors import ConfigError
 
 
 CONFIG_DIR = Path.home() / ".autumn"
@@ -29,34 +32,66 @@ LEGACY_CACHE_KEYS = (
 
 def ensure_config_dir():
     """Create config directory if it doesn't exist."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise ConfigError(
+            f"Could not access configuration directory '{CONFIG_DIR}': {error}"
+        ) from None
 
 
 def _write_config_file(config: dict) -> None:
     ensure_config_dir()
-    with open(CONFIG_FILE, "w") as f:
-        yaml.dump(config, f, default_flow_style=False)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=CONFIG_DIR,
+            prefix="config-",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            yaml.safe_dump(config, temporary, default_flow_style=False)
+        os.replace(temporary_path, CONFIG_FILE)
+    except (OSError, yaml.YAMLError) as error:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise ConfigError(
+            f"Could not save configuration file '{CONFIG_FILE}': {error}"
+        ) from None
 
 
 def load_config() -> dict:
     """Load configuration from file."""
-    ensure_config_dir()
-
-    if not CONFIG_FILE.exists():
-        return {}
-
     try:
-        with open(CONFIG_FILE, "r") as f:
+        ensure_config_dir()
+        if not CONFIG_FILE.exists():
+            return {}
+
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
             # If config is corrupted (e.g. YAML root is a list), repair by resetting.
             if not isinstance(data, dict):
                 return {}
             data, changed = _migrate_legacy_config(data)
-            if changed:
-                _write_config_file(data)
-            return data
-    except (OSError, yaml.YAMLError):
-        return {}
+        if changed:
+            _write_config_file(data)
+        return data
+    except ConfigError:
+        raise
+    except OSError as error:
+        raise ConfigError(
+            f"Could not read configuration file '{CONFIG_FILE}': {error}"
+        ) from None
+    except yaml.YAMLError as error:
+        raise ConfigError(
+            f"Could not parse configuration file '{CONFIG_FILE}': {error}"
+        ) from None
 
 
 def save_config(config: dict):

@@ -23,7 +23,6 @@ def _resource(
         "uuid": "00000000-0000-0000-0000-000000000021",
         "version": version,
         "project": {"id": project_id, "name": project},
-        "allocation_mode": "equal",
         "subproject_allocations": [
             {"subproject_id": 31, "name": "Build", "allocation_bp": 10000}
         ],
@@ -40,9 +39,13 @@ def _resource(
 def _compact(*, active=True):
     return {
         "id": 21,
+        "version": 4,
         "p": "Deep Work",
         "pid": 8,
         "subs": ["Build"],
+        "subproject_allocations": [
+            {"subproject_id": 31, "name": "Build", "allocation_bp": 10000}
+        ],
         "start": "2026-07-16T08:00:00+00:00",
         "end": None if active else "2026-07-16T08:45:00+00:00",
         "stop_at": "2026-07-16T09:00:00+00:00" if active else None,
@@ -238,6 +241,8 @@ def test_edit_session_gets_version_then_patches_v2(client, monkeypatch):
         "active",
         "elapsed",
         "note",
+        "version",
+        "subproject_allocations",
     }
 
 

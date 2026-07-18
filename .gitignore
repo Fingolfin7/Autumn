@@ -149,3 +149,7 @@ Source/projects.json
 /Source/Backups/
 /Source/sync.txt
 active_timers.pkl
+
+# Personal/local data dirs (not for remote)
+autumn_artifacts/
+reports/

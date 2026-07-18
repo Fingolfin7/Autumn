@@ -37,7 +37,7 @@ def _redact(cfg: dict) -> dict:
     if isinstance(accounts, dict):
         redacted_accounts = {}
         for name, entry in accounts.items():
-            redacted_entry = dict(entry or {})
+            redacted_entry = dict(entry) if isinstance(entry, dict) else {}
             if redacted_entry.get("api_key"):
                 redacted_entry["api_key"] = "***"
             redacted_accounts[name] = redacted_entry
@@ -107,7 +107,7 @@ def config_open() -> None:
 
         console.print(f"[autumn.ok]Opened[/] {cfg_path}")
     except Exception as e:
-        console.print(f"[autumn.err]Failed to open file explorer: {e}[/]")
+        raise click.ClickException(f"Failed to open file explorer: {e}") from None
 
 
 @config.command("get")
@@ -137,16 +137,24 @@ def config_set(key: str, value: str, type_: str) -> None:
     """Set a config value by dotted path."""
     type_ = type_.lower()
 
-    if type_ == "int":
-        parsed = int(value)
-    elif type_ == "float":
-        parsed = float(value)
-    elif type_ == "bool":
-        parsed = value.strip().lower() in ("1", "true", "yes", "y", "on")
-    elif type_ == "json":
-        parsed = json.loads(value)
-    else:
-        parsed = value
+    try:
+        if type_ == "int":
+            parsed = int(value)
+        elif type_ == "float":
+            parsed = float(value)
+        elif type_ == "bool":
+            normalized = value.strip().lower()
+            if normalized not in ("1", "true", "yes", "y", "on", "0", "false", "no", "n", "off"):
+                raise ValueError("expected true/false, yes/no, on/off, or 1/0")
+            parsed = normalized in ("1", "true", "yes", "y", "on")
+        elif type_ == "json":
+            parsed = json.loads(value)
+        else:
+            parsed = value
+    except (ValueError, json.JSONDecodeError) as error:
+        raise click.BadParameter(
+            f"Could not parse as {type_}: {error}", param_hint="VALUE"
+        ) from None
 
     set_config_value(key, parsed)
     console.print(f"[autumn.ok]Updated[/] {key}")

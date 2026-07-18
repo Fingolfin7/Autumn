@@ -89,6 +89,19 @@ def _session_subs(session: Dict[str, Any]) -> List[str]:
     return list(subs) if subs else []
 
 
+def _is_even_allocation(allocation_bp: List[int]) -> bool:
+    if not allocation_bp:
+        return True
+    base, remainder = divmod(10000, len(allocation_bp))
+    expected = [base + 1] * remainder + [base] * (len(allocation_bp) - remainder)
+    return sorted(allocation_bp) == sorted(expected)
+
+
+def _format_allocation_percent(allocation_bp: int) -> str:
+    percent = allocation_bp / 100
+    return f"{percent:g}%"
+
+
 def _wrap_note(note: str, *, width: int = 90) -> List[str]:
     note = _normalize_ws(note)
     if not note:
@@ -99,10 +112,33 @@ def _wrap_note(note: str, *, width: int = 90) -> List[str]:
     return wrap(note, width=width, break_long_words=False, break_on_hyphens=False)
 
 
-def _format_subs_bracketed(subs: List[str]) -> str:
-    """Format subprojects as `[sub1, sub2]` with each element colored."""
+def format_subprojects_bracketed(session: Dict[str, Any]) -> str:
+    """Format a session's subprojects, showing percentages only when non-even."""
+    subs = _session_subs(session)
     if not subs:
         return "[]"
+
+    allocations = session.get("subproject_allocations") or []
+    usable_allocations = [
+        allocation
+        for allocation in allocations
+        if isinstance(allocation, dict)
+        and allocation.get("name") is not None
+        and isinstance(allocation.get("allocation_bp"), int)
+    ]
+    allocation_bp = [
+        allocation["allocation_bp"] for allocation in usable_allocations
+    ]
+    if len(usable_allocations) == len(subs) and not _is_even_allocation(allocation_bp):
+        inner = " · ".join(
+            "[autumn.subproject]"
+            f"{rich_escape(str(allocation['name']))} "
+            f"{_format_allocation_percent(allocation['allocation_bp'])}"
+            "[/]"
+            for allocation in usable_allocations
+        )
+        return f"[{inner}]"
+
     inner = ", ".join([f"[autumn.subproject]{s}[/]" for s in subs])
     return f"[{inner}]"
 
@@ -245,7 +281,7 @@ def render_sessions_list(
             subs = _session_subs(s)
             note_raw = s.get("note") or ""
 
-            subs_bracket = _format_subs_bracketed(subs)
+            subs_bracket = format_subprojects_bracketed(s)
 
             session_id = s.get("id")
             id_prefix = (
@@ -295,7 +331,7 @@ def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
         subs = _session_subs(s)
         dur_str = format_duration_minutes(_duration_minutes(s))
 
-        subs_bracket = _format_subs_bracketed(subs)
+        subs_bracket = format_subprojects_bracketed(s)
 
         stop_at_raw = s.get("stop_at") or s.get("auto_stop_at")
         auto_stop_info = ""

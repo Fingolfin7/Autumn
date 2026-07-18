@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console
-from ..utils.log_render import render_sessions_list
+from ..utils.log_render import render_sessions_list, format_subprojects_bracketed
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param, resolve_subproject_params
 from ..utils.datetime_parse import parse_user_datetime, format_server_datetime
+from ..utils.splits import parse_split, resolve_split_selection
 
 
 def _format_subs_bracketed(subs: list[str]) -> str:
@@ -280,6 +281,10 @@ def log_search(
 @click.argument("project", required=False)
 @click.option("--subprojects", "-s", multiple=True, help="Subproject names (can specify multiple)")
 @click.option(
+    "--split",
+    help='Set the subproject split (for example "api=60,frontend=40" or "even")',
+)
+@click.option(
     "--start",
     required=True,
     help="Start time (e.g. 2026-01-11T22:18:11-05:00, 2026-01-11T22:18:11Z, or 2026-01-11 22:18:11)",
@@ -291,8 +296,21 @@ def log_search(
 )
 @click.option("--note", "-n", help="Note for the session")
 @click.option("--pick", is_flag=True, help="Interactively pick project/subprojects")
-def track(project: Optional[str], subprojects: tuple, start: str, end: str, note: Optional[str], pick: bool):
+def track(
+    project: Optional[str],
+    subprojects: tuple,
+    split: Optional[str],
+    start: str,
+    end: str,
+    note: Optional[str],
+    pick: bool,
+):
     """Track a completed session (manually log time)."""
+    try:
+        split_spec = parse_split(split)
+    except ValueError as error:
+        raise click.BadParameter(str(error), param_hint="--split") from None
+
     try:
         start_iso, end_iso = _normalize_track_window(start, end)
 
@@ -322,30 +340,29 @@ def track(project: Optional[str], subprojects: tuple, start: str, end: str, note
             console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
         resolved_project = proj_res.value or project
 
-        # Resolve subprojects (case-insensitive + alias support)
-        subprojects_list = None
-        if subprojects:
-            try:
-                known_subs_res = client.list_subprojects(resolved_project)
-                known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
-            except APIError:
-                known_subs = []
-            resolved_subs, sub_warnings = resolve_subproject_params(
-                subprojects=subprojects, known_subprojects=known_subs, project=resolved_project
-            )
-            for w in sub_warnings:
-                console.print(f"[autumn.warn]Warning:[/] {w}")
-            subprojects_list = resolved_subs if resolved_subs else None
+        subprojects_list, allocations, sub_warnings = resolve_split_selection(
+            client, resolved_project, subprojects, split_spec
+        )
+        for warning in sub_warnings:
+            console.print(f"[autumn.warn]Warning:[/] {warning}")
 
-        result = client.track_session(resolved_project, start_iso, end_iso, subprojects_list, note)
+        track_kwargs = {"allocations": allocations} if allocations is not None else {}
+        result = client.track_session(
+            resolved_project,
+            start_iso,
+            end_iso,
+            subprojects_list,
+            note,
+            **track_kwargs,
+        )
 
         if result.get("ok"):
             session = result.get("session", {})
             duration = session.get("elapsed") or session.get("duration_minutes", 0)
-            subs = session.get("subs") or session.get("subprojects") or subprojects_list or []
             console.print("[autumn.ok]Session tracked.[/]")
             console.print(
-                f"Tracked {_format_project_with_subs(resolved_project, list(subs))}, "
+                f"Tracked [autumn.project]{resolved_project}[/] "
+                f"{format_subprojects_bracketed(session)}, "
                 f"[autumn.duration]{duration} minutes[/]"
             )
             console.print(_format_session_id_line(session.get("id")))
@@ -426,7 +443,11 @@ def _parse_time_only(raw: str):
 @click.command("edit")
 @click.argument("session_id", type=int)
 @click.option("-p", "--project", help="Change the project")
-@click.option("-s", "--subproject", "subprojects", multiple=True, help="Change subprojects (can use multiple times)")
+@click.option("-s", "--subproject", "--subprojects", "subprojects", multiple=True, help="Change subprojects (can use multiple times)")
+@click.option(
+    "--split",
+    help='Set the subproject split (for example "api=60,frontend=40" or "even")',
+)
 @click.option("--start", help="Change start time (YYYY-MM-DD HH:MM:SS or relative like 'now-1h')")
 @click.option("--end", help="Change end time (YYYY-MM-DD HH:MM:SS or relative like 'now')")
 @click.option("-n", "--note", help="Change the note")
@@ -435,6 +456,7 @@ def edit_session(
     session_id: int,
     project: Optional[str],
     subprojects: tuple,
+    split: Optional[str],
     start: Optional[str],
     end: Optional[str],
     note: Optional[str],
@@ -450,6 +472,11 @@ def edit_session(
         autumn edit 123 --start "2026-01-15 09:00:00" --end "2026-01-15 10:30:00"
         autumn edit 123 -s Frontend -s Backend
     """
+    try:
+        split_spec = parse_split(split)
+    except ValueError as error:
+        raise click.BadParameter(str(error), param_hint="--split") from None
+
     try:
         client = APIClient()
 
@@ -474,7 +501,20 @@ def edit_session(
             if picked_sub:
                 subprojects = (picked_sub,)
 
-        if subprojects and resolved_project:
+        allocations = None
+        if split_spec is not None:
+            effective_project = resolved_project
+            if not effective_project:
+                current = client.get_session(session_id).get("session", {})
+                effective_project = current.get("p") or current.get("project")
+            if not effective_project:
+                raise APIError("Could not determine the session's project.")
+            subprojects_list, allocations, sub_warnings = resolve_split_selection(
+                client, effective_project, subprojects, split_spec
+            )
+            for warning in sub_warnings:
+                console.print(f"[autumn.warn]Warning:[/] {warning}")
+        elif subprojects and resolved_project:
             try:
                 known_subs_res = client.list_subprojects(resolved_project)
                 known_subs = known_subs_res.get("subprojects", []) if isinstance(known_subs_res, dict) else known_subs_res
@@ -494,6 +534,7 @@ def edit_session(
         start_iso = _normalize_datetime(start) if start else None
         end_iso = _normalize_datetime(end) if end else None
 
+        edit_kwargs = {"allocations": allocations} if allocations is not None else {}
         result = client.edit_session(
             session_id=session_id,
             project=resolved_project,
@@ -501,6 +542,7 @@ def edit_session(
             start=start_iso,
             end=end_iso,
             note=note,
+            **edit_kwargs,
         )
 
         if result.get("ok"):
@@ -555,7 +597,7 @@ def delete_session(session_id: int, yes: bool):
                 highlight=True,
             )
         else:
-            console.print(f"[autumn.err]Error:[/] {result.get('error', 'Unknown error')}")
+            raise click.ClickException(result.get("error", "Unknown error"))
             raise click.Abort()
     except APIError as e:
         console.print(f"[autumn.err]Error:[/] {e}")
