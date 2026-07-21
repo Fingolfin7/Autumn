@@ -450,7 +450,8 @@ def _parse_time_only(raw: str):
 )
 @click.option("--start", help="Change start time (YYYY-MM-DD HH:MM:SS or relative like 'now-1h')")
 @click.option("--end", help="Change end time (YYYY-MM-DD HH:MM:SS or relative like 'now')")
-@click.option("-n", "--note", help="Change the note")
+@click.option("-n", "--note", help="Replace the note")
+@click.option("-a", "--append-note", help="Append text to the existing note")
 @click.option("--pick", is_flag=True, help="Interactively pick project/subprojects")
 def edit_session(
     session_id: int,
@@ -460,14 +461,18 @@ def edit_session(
     start: Optional[str],
     end: Optional[str],
     note: Optional[str],
+    append_note: Optional[str],
     pick: bool,
 ):
-    """Edit an existing completed session.
+    """Edit an existing completed session in place.
 
-    Note: The session will get a new ID after editing.
+    The session keeps the same ID after editing.
+
+    To append to a live timer instead, use `autumn note TEXT`.
 
     Examples:
         autumn edit 123 --note "Updated note"
+        autumn edit 123 -a "Added follow-up context"
         autumn edit 123 -p "New Project"
         autumn edit 123 --start "2026-01-15 09:00:00" --end "2026-01-15 10:30:00"
         autumn edit 123 -s Frontend -s Backend
@@ -476,6 +481,15 @@ def edit_session(
         split_spec = parse_split(split)
     except ValueError as error:
         raise click.BadParameter(str(error), param_hint="--split") from None
+
+    if note is not None and append_note is not None:
+        raise click.UsageError("Use either --note or --append-note, not both.")
+    if append_note is not None:
+        append_note = append_note.strip()
+        if not append_note:
+            raise click.BadParameter(
+                "Appended note text cannot be empty.", param_hint="--append-note"
+            )
 
     try:
         client = APIClient()
@@ -542,17 +556,21 @@ def edit_session(
             start=start_iso,
             end=end_iso,
             note=note,
+            append_note=append_note,
             **edit_kwargs,
         )
 
         if result.get("ok"):
             session = result.get("session", {})
-            new_id = session.get("id")
+            updated_id = session.get("id", session_id)
             proj_name = session.get("p") or session.get("project")
             duration = session.get("elapsed") or session.get("dur") or 0
 
             console.print("[autumn.ok]Session updated.[/]")
-            console.print(f"[autumn.label]New ID:[/] [autumn.id]{new_id}[/]")
+            console.print(
+                f"[autumn.label]Session ID:[/] [autumn.id]{updated_id}[/] "
+                "[autumn.muted](unchanged)[/]"
+            )
             console.print(f"[autumn.label]Project:[/] [autumn.project]{proj_name}[/]")
             console.print(f"[autumn.label]Duration:[/] [autumn.duration]{duration:.1f} minutes[/]")
 

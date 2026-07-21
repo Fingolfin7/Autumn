@@ -246,6 +246,22 @@ def test_edit_session_gets_version_then_patches_v2(client, monkeypatch):
     }
 
 
+def test_edit_session_appends_note_in_place(client, monkeypatch):
+    current = _resource(active=False)
+    current["note"] = "Existing context"
+    edited = {**current, "note": "Existing context\n\nFollow-up"}
+    request = MagicMock(side_effect=[current, edited])
+    monkeypatch.setattr(client, "_request", request)
+
+    result = client.edit_session(21, append_note="Follow-up")
+
+    assert request.call_args_list[1].kwargs["json"] == {
+        "note": "Existing context\n\nFollow-up"
+    }
+    assert request.call_args_list[1].kwargs["headers"] == {"If-Match": "4"}
+    assert result["session"]["id"] == 21
+
+
 def test_delete_session_uses_retry_safe_v2_delete(client, monkeypatch):
     request = MagicMock(return_value={})
     monkeypatch.setattr(client, "_request", request)

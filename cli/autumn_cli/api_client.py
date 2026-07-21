@@ -2464,8 +2464,9 @@ class APIClient:
         note: Optional[str] = None,
         compact: bool = True,
         allocations: Optional[List[Tuple[int, int]]] = None,
+        append_note: Optional[str] = None,
     ) -> Dict:
-        """Edit an existing completed session."""
+        """Edit an existing completed session in place."""
         current = self._request("GET", f"/api/v2/sessions/{session_id}")
         current_project = current.get("project") or {}
         effective_project = project or current_project.get("name")
@@ -2489,6 +2490,11 @@ class APIClient:
             data["end"] = self._to_utc_iso(end)
         if note is not None:
             data["note"] = note
+        elif append_note is not None:
+            current_note = str(current.get("note") or "")
+            data["note"] = (
+                f"{current_note}\n\n{append_note}" if current_note else append_note
+            )
 
         resource = self._request(
             "PATCH",

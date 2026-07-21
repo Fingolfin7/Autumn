@@ -294,6 +294,56 @@ def test_cli_note_happy_path(monkeypatch):
     assert _NoteClient.calls[0][1].endswith("— 12:34 — hello there")
 
 
+class _EditNoteClient:
+    received = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def edit_session(self, **kwargs):
+        type(self).received = kwargs
+        return {
+            "ok": True,
+            "session": {
+                "id": kwargs["session_id"],
+                "p": "Deep Work",
+                "elapsed": 60,
+            },
+        }
+
+
+def test_edit_help_describes_in_place_edits_and_note_append():
+    result = CliRunner().invoke(cli, ["edit", "--help"])
+    assert result.exit_code == 0
+    assert "keeps the same ID" in result.output
+    assert "-a, --append-note" in result.output
+    assert "autumn note TEXT" in result.output
+    assert "new ID" not in result.output
+
+
+def test_edit_appends_note_with_shorthand_and_reports_unchanged_id(monkeypatch):
+    _EditNoteClient.received = None
+    monkeypatch.setattr("autumn_cli.commands.sessions.APIClient", _EditNoteClient)
+
+    result = CliRunner().invoke(
+        cli, ["edit", "21", "-a", "  Follow-up context  "]
+    )
+
+    assert result.exit_code == 0
+    assert _EditNoteClient.received["append_note"] == "Follow-up context"
+    assert "Session ID:" in result.output
+    assert "21 (unchanged)" in result.output
+
+
+def test_edit_rejects_replace_and_append_together():
+    result = CliRunner().invoke(
+        cli,
+        ["edit", "21", "--note", "Replacement", "--append-note", "Append"],
+    )
+    assert result.exit_code != 0
+    assert "either --note or --append-note" in result.output
+
+
 class _StopSplitClient:
     received = None
 

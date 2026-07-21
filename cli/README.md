@@ -14,7 +14,7 @@ The Click + Rich command-line client for AutumnWeb.
 | Sessions | `autumn log` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-x`, `-t`, `-c`, `--show-ids` |
 | | `autumn log search` | Search sessions | `--note-snippet`, `--start-date`, `--end-date` |
 | | `autumn track <project>` | Manually log a session | `--start`, `--end`, `-s`, `-n`, `--split` |
-| | `autumn edit <session-id>` | Edit a saved session | `-p`, `-s`, `--start`, `--end`, `-n`, `--split` |
+| | `autumn edit <session-id>` | Edit a saved session in place | `-p`, `-s`, `--start`, `--end`, `-n`, `-a`/`--append-note`, `--split` |
 | | `autumn delete-session <session-id>` | Delete a saved session | `-y` |
 | Projects | `autumn projects` (`autumn p`) | List projects | `--status`, `--search`, `-x` |
 | | `autumn project <name>` | Show or edit project metadata | `edit` |
@@ -60,6 +60,14 @@ For `stop --split even`, the CLI evenly divides the active timer's currently
 attached subprojects.
 
 ## Notes as you go
+
+Saved sessions are edited in place, so `autumn edit` preserves the session ID.
+Use `--note` to replace a saved session's note or `--append-note` to add text
+after its existing note:
+
+```console
+autumn edit 123 -a "Added follow-up context"
+```
 
 Append text to the newest active timer without stopping it:
 
