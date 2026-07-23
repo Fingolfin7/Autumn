@@ -112,7 +112,7 @@ def test_password_login_converts_network_error(monkeypatch):
     )
 
     with pytest.raises(APIError, match="Request timed out"):
-        client.get_token_with_password("kuda", "secret")
+        client.get_token_with_password("kuda", "x")
 
 
 def test_password_login_rejects_malformed_success(monkeypatch):
@@ -122,7 +122,7 @@ def test_password_login_rejects_malformed_success(monkeypatch):
     monkeypatch.setattr(client, "_http", MagicMock(return_value=response))
 
     with pytest.raises(APIError, match="invalid JSON response"):
-        client.get_token_with_password("kuda", "secret")
+        client.get_token_with_password("kuda", "x")
 
 
 @pytest.mark.parametrize(

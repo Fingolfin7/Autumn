@@ -7,7 +7,7 @@ name = "autumn-cli"
 version = "1.0.0"
 description = "Command-line interface for AutumnWeb - time tracking and project management"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Henry", email = "mushunjek@gmail.com"}
@@ -18,26 +18,28 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
-    "click>=8.0.0",
-    "requests>=2.28.0",
+    "click>=8.3.3",
+    "requests>=2.33.0",
+    "idna>=3.15",
+    "urllib3>=2.7.0",
     "pyyaml>=6.0",
     "matplotlib>=3.5.0",
     "seaborn>=0.12.0",
     "pandas>=1.5.0",
     "numpy>=1.20.0",
+    "pillow>=12.3.0",
     "tabulate>=0.9.0",
     "python-dateutil>=2.8.0",
     "wordcloud>=1.9.0",
     "squarify>=0.4.3",
     "rich>=13.0.0",
+    "pygments>=2.20.0",
     "astral>=2.2.0",
     "plyer>=2.1.0",
 ]
