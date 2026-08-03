@@ -23,7 +23,7 @@ The Click + Rich command-line client for AutumnWeb.
 | | `autumn mark` | Change project status | `<project> <status>` |
 | Metadata | `autumn context` | Manage contexts | `list`, `new`, `rename`, `edit`, `delete` |
 | | `autumn tag` | Manage tags | `list`, `new`, `rename`, `edit`, `delete` |
-| Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `delete` |
+| Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
 | | `autumn chart` | Render activity charts | `--type`, `-P` |
 | | `autumn export` / `autumn import` | Move Autumn data | See `--help` |
 | | `autumn config` | Manage CLI settings | `show`, `set`, `open` |

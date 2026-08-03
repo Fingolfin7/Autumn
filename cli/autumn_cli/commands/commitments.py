@@ -339,14 +339,15 @@ def commitments_edit(commitment_id: int, **options: Any) -> None:
     """Patch selected commitment fields; target and aggregation cannot change."""
     try:
         client = APIClient()
+        requested_ctype = options.pop("commitment_type")
         existing: dict[str, Any] = {}
         needs_existing = (
-            options.get("commitment_type") is None
+            requested_ctype is None
             and any(options.get(key) is not None for key in ("target_value", "max_balance", "min_balance"))
         ) or options.get("include") or options.get("exclude")
         if needs_existing:
             existing = client.get_commitment(commitment_id).get("commitment", {})
-        ctype = options.get("commitment_type") or existing.get("commitment_type", "time")
+        ctype = requested_ctype or existing.get("commitment_type", "time")
         aggregation_type = existing.get("aggregation_type", "project")
         data = _new_payload(
             client,
@@ -356,7 +357,7 @@ def commitments_edit(commitment_id: int, **options: Any) -> None:
             editing=True,
             **options,
         )
-        if options.get("commitment_type") is None:
+        if requested_ctype is None:
             data.pop("commitment_type", None)
         if not data:
             raise click.UsageError("Specify at least one field to update.")
@@ -394,6 +395,10 @@ def commitments_delete(commitment_id: int, yes: bool) -> None:
 )
 @click.option("--period", type=click.Choice(PERIODS))
 @click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES))
+@click.option(
+    "--target-value",
+    help="Goal duration (for time) or session count; required when changing type",
+)
 @click.option("--start-date", help="Start date (YYYY-MM-DD)")
 @click.option("--timezone", help="IANA timezone name")
 def commitments_restart(
@@ -402,10 +407,11 @@ def commitments_restart(
     reset_balance: bool,
     period: Optional[str],
     commitment_type: Optional[str],
+    target_value: Optional[str],
     start_date: Optional[str],
     timezone: Optional[str],
 ) -> None:
-    """Restart a commitment into a new generation."""
+    """Restart into a new generation, setting unit-specific target values together."""
     if keep_balance == reset_balance:
         raise click.UsageError(
             "Specify exactly one of --keep-balance or --reset-balance."
@@ -413,11 +419,32 @@ def commitments_restart(
     try:
         client = APIClient()
         commitment_id = _resolve_commitment_id(client, target)
+        current_ctype: Optional[str] = None
+        if (commitment_type is None) != (target_value is None):
+            existing = client.get_commitment(commitment_id).get("commitment", {})
+            current_ctype = existing.get("commitment_type", "time")
+        if (
+            commitment_type is not None
+            and target_value is None
+            and commitment_type != current_ctype
+        ):
+            raise click.UsageError(
+                "--target-value is required when changing --commitment-type; "
+                "the stored number cannot be safely reinterpreted in new units."
+            )
+        parsed_target = None
+        if target_value is not None:
+            parsed_target = _minutes_or_sessions(
+                target_value,
+                commitment_type or current_ctype or "time",
+                "target value",
+            )
         changes = {
             key: value
             for key, value in {
                 "period": period,
                 "commitment_type": commitment_type,
+                "target_value": parsed_target,
                 "start_date": start_date,
                 "timezone": timezone,
             }.items()

@@ -9,6 +9,7 @@ from autumn_cli.commands.meta import context, tag
 
 class _CommitmentClient:
     created = None
+    updated = None
 
     def __init__(self, *args, **kwargs):
         pass
@@ -39,6 +40,20 @@ class _CommitmentClient:
         type(self).created = data
         return {"ok": True, "commitment": {"id": 12}}
 
+    def get_commitment(self, commitment_id):
+        return {
+            "ok": True,
+            "commitment": {
+                "id": commitment_id,
+                "aggregation_type": "project",
+                "commitment_type": "time",
+            },
+        }
+
+    def update_commitment(self, commitment_id, data):
+        type(self).updated = (commitment_id, data)
+        return {"ok": True, "commitment": {"id": commitment_id}}
+
 
 def test_commitments_list_renders_goal_and_progress(monkeypatch):
     monkeypatch.setattr("autumn_cli.commands.commitments.APIClient", _CommitmentClient)
@@ -67,6 +82,34 @@ def test_commitments_new_converts_duration_to_minutes(monkeypatch):
         "commitment_type": "time",
         "period": "weekly",
     }
+
+
+def test_commitments_edit_converts_target_using_existing_type(monkeypatch):
+    _CommitmentClient.updated = None
+    monkeypatch.setattr("autumn_cli.commands.commitments.APIClient", _CommitmentClient)
+
+    result = CliRunner().invoke(
+        commitments, ["edit", "12", "--target-value", "5h"]
+    )
+
+    assert result.exit_code == 0
+    assert _CommitmentClient.updated == (12, {"target_value": 300})
+
+
+def test_commitments_edit_accepts_explicit_type_without_duplicate_keyword(monkeypatch):
+    _CommitmentClient.updated = None
+    monkeypatch.setattr("autumn_cli.commands.commitments.APIClient", _CommitmentClient)
+
+    result = CliRunner().invoke(
+        commitments,
+        ["edit", "12", "--commitment-type", "time", "--target-value", "5h"],
+    )
+
+    assert result.exit_code == 0
+    assert _CommitmentClient.updated == (
+        12,
+        {"target_value": 300, "commitment_type": "time"},
+    )
 
 
 class _PendingCommitmentClient(_CommitmentClient):
@@ -133,6 +176,14 @@ class _CommitmentActionClient:
     def list_commitments(self, **kwargs):
         return {"commitments": [{"id": 12, "name": "Deep Work"}]}
 
+    def get_commitment(self, commitment_id):
+        return {
+            "commitment": {
+                "id": commitment_id,
+                "commitment_type": "sessions",
+            }
+        }
+
     def restart_commitment(self, commitment_id, *, keep_balance, changes=None):
         type(self).restarted = (commitment_id, keep_balance, changes)
         return {"ok": True, "commitment": {"id": commitment_id}}
@@ -190,6 +241,56 @@ def test_commitments_restart_resolves_name_and_sends_restart_fields(monkeypatch)
             "timezone": "UTC",
         },
     )
+
+
+def test_commitments_restart_changes_type_and_target_together(monkeypatch):
+    _CommitmentActionClient.restarted = None
+    monkeypatch.setattr(
+        "autumn_cli.commands.commitments.APIClient", _CommitmentActionClient
+    )
+
+    result = CliRunner().invoke(
+        commitments,
+        [
+            "restart",
+            "Deep Work",
+            "--reset-balance",
+            "--commitment-type",
+            "time",
+            "--target-value",
+            "5h",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert _CommitmentActionClient.restarted == (
+        12,
+        False,
+        {"commitment_type": "time", "target_value": 300},
+    )
+
+
+def test_commitments_restart_rejects_type_change_without_target(monkeypatch):
+    _CommitmentActionClient.restarted = None
+    monkeypatch.setattr(
+        "autumn_cli.commands.commitments.APIClient", _CommitmentActionClient
+    )
+
+    result = CliRunner().invoke(
+        commitments,
+        [
+            "restart",
+            "Deep Work",
+            "--reset-balance",
+            "--commitment-type",
+            "time",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "--target-value is required" in result.output
+    assert "cannot be safely reinterpreted" in result.output
+    assert _CommitmentActionClient.restarted is None
 
 
 def test_commitments_adjust_accepts_negative_minutes_and_displays_balance(monkeypatch):
