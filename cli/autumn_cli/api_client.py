@@ -1586,7 +1586,13 @@ class APIClient:
                 continue
             context = {"id": resource.get("id"), "name": resource.get("name")}
             if not compact:
-                context["project_count"] = resource.get("project_count", 0)
+                context.update(
+                    description=resource.get("description"),
+                    project_count=resource.get("project_count", 0),
+                    session_count=resource.get("session_count", 0),
+                    total_minutes=resource.get("total_minutes", 0),
+                    avg_session_minutes=resource.get("avg_session_minutes", 0),
+                )
             contexts.append(context)
         return {"count": result.get("count", len(contexts)), "contexts": contexts}
 
@@ -1599,7 +1605,13 @@ class APIClient:
                 continue
             tag = {"id": resource.get("id"), "name": resource.get("name")}
             if not compact:
-                tag["project_count"] = resource.get("project_count", 0)
+                tag.update(
+                    color=resource.get("color"),
+                    project_count=resource.get("project_count", 0),
+                    session_count=resource.get("session_count", 0),
+                    total_minutes=resource.get("total_minutes", 0),
+                    avg_session_minutes=resource.get("avg_session_minutes", 0),
+                )
             tags.append(tag)
         return {"count": result.get("count", len(tags)), "tags": tags}
 

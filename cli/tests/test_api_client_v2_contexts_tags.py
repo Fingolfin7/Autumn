@@ -27,10 +27,21 @@ def client():
 def test_metadata_lists_use_v2_and_preserve_compact_legacy_shapes(
     client, monkeypatch, method_name, key, endpoint
 ):
+    extra_field = "description" if key == "contexts" else "color"
     request = MagicMock(
         return_value={
             "count": 1,
-            key: [{"id": 3, "name": "Focus", "project_count": 4}],
+            key: [
+                {
+                    "id": 3,
+                    "name": "Focus",
+                    extra_field: "Deep work",
+                    "project_count": 4,
+                    "session_count": 2,
+                    "total_minutes": 120.0,
+                    "avg_session_minutes": 60.0,
+                }
+            ],
         }
     )
     monkeypatch.setattr(client, "_request", request)
@@ -41,7 +52,17 @@ def test_metadata_lists_use_v2_and_preserve_compact_legacy_shapes(
     assert compact == {"count": 1, key: [{"id": 3, "name": "Focus"}]}
     assert full == {
         "count": 1,
-        key: [{"id": 3, "name": "Focus", "project_count": 4}],
+        key: [
+            {
+                "id": 3,
+                "name": "Focus",
+                extra_field: "Deep work",
+                "project_count": 4,
+                "session_count": 2,
+                "total_minutes": 120.0,
+                "avg_session_minutes": 60.0,
+            }
+        ],
     }
     assert request.call_args_list == [call("GET", endpoint), call("GET", endpoint)]
 
@@ -196,6 +217,37 @@ class _MissingMetadataClient:
 
     def list_tags(self, compact=False):
         return {"count": 1, "tags": [{"id": 5, "name": "Focus"}]}
+
+
+class _TagStatsClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def list_tags(self, compact=False):
+        return {
+            "count": 1,
+            "tags": [
+                {
+                    "id": 5,
+                    "name": "Focus",
+                    "project_count": 4,
+                    "session_count": 2,
+                    "total_minutes": 120.0,
+                    "avg_session_minutes": 60.0,
+                }
+            ],
+        }
+
+
+def test_tag_list_renders_restored_session_stats(monkeypatch):
+    monkeypatch.setattr("autumn_cli.commands.meta.APIClient", _TagStatsClient)
+
+    result = CliRunner().invoke(tag, ["list"])
+
+    assert result.exit_code == 0
+    assert "Sessions" in result.output
+    assert "2h 0m" in result.output
+    assert "1h 0m" in result.output
 
 
 @pytest.mark.parametrize(
