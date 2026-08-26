@@ -316,7 +316,7 @@ def test_v2_version_conflict_envelope_is_friendly(client, monkeypatch):
         }
     }
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("409")
-    monkeypatch.setattr(requests, "request", MagicMock(return_value=response))
+    monkeypatch.setattr(client._session, "request", MagicMock(return_value=response))
 
     with pytest.raises(
         APIError,
@@ -337,7 +337,7 @@ def test_v2_uuid_conflict_uses_server_message(client, monkeypatch):
         }
     }
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("409")
-    monkeypatch.setattr(requests, "request", MagicMock(return_value=response))
+    monkeypatch.setattr(client._session, "request", MagicMock(return_value=response))
 
     with pytest.raises(APIError, match="^That UUID belongs to a different session\\.$"):
         client._request("POST", "/api/v2/sessions/", json={})

@@ -4,24 +4,6 @@ import click
 from typing import Optional
 from pathlib import Path
 from ..api_client import APIClient, APIError
-from ..utils.charts import (
-    render_pie_chart,
-    render_bar_chart,
-    render_scatter_chart,
-    render_line_chart,
-    render_heatmap,
-    render_calendar_chart,
-    render_wordcloud_chart,
-    render_stacked_area_chart,
-    render_cumulative_chart,
-    render_treemap_chart,
-    render_sunburst_chart,
-    render_status_chart,
-    render_context_chart,
-    render_histogram_chart,
-    render_radar_chart,
-    render_tag_bubble_chart,
-)
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
 
 
@@ -117,6 +99,28 @@ def chart(
       radar      - Spider chart comparing top projects
       bubble     - Tag bubble chart (projects vs hours vs avg time)
     """
+    # The plotting stack is intentionally imported only when this command runs.
+    # Importing it at module load time made every Autumn command pay the startup
+    # cost of matplotlib, seaborn, pandas, numpy, Pillow, and wordcloud.
+    from ..utils.charts import (
+        render_pie_chart,
+        render_bar_chart,
+        render_scatter_chart,
+        render_line_chart,
+        render_heatmap,
+        render_calendar_chart,
+        render_wordcloud_chart,
+        render_stacked_area_chart,
+        render_cumulative_chart,
+        render_treemap_chart,
+        render_sunburst_chart,
+        render_status_chart,
+        render_context_chart,
+        render_histogram_chart,
+        render_radar_chart,
+        render_tag_bubble_chart,
+    )
+
     type = type.lower()  # Normalize case
 
     # Derive start/end from period if not explicitly supplied

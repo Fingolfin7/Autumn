@@ -40,6 +40,7 @@ class APIClient:
         base_url: Optional[str] = None,
         quiet: bool = False,
         wake_retry: Optional[bool] = None,
+        session: Optional[requests.Session] = None,
     ):
         self.api_key = api_key or get_api_key()
         configured_base_url = base_url if base_url is not None else get_base_url()
@@ -56,6 +57,10 @@ class APIClient:
                 "and a host."
             )
         self.quiet = quiet
+        # Reuse TCP/TLS connections across the several API calls that many CLI
+        # commands make. Tests and embedding callers may inject their own
+        # session-compatible transport.
+        self._session = session if session is not None else requests.Session()
         # None -> defer to config; False forces fast-fail (for opportunistic
         # background checks that must never block on a sleeping server).
         self._wake_retry_override = wake_retry
@@ -196,7 +201,9 @@ class APIClient:
 
         while True:
             try:
-                response = requests.get(health_url, timeout=10, verify=self._verify)
+                response = self._session.get(
+                    health_url, timeout=10, verify=self._verify
+                )
                 if response.status_code == 200:
                     self._server_awake = True
                     if not self.quiet:
@@ -224,7 +231,7 @@ class APIClient:
 
         health_url = f"{self.base_url}/healthz/"
         try:
-            response = requests.get(health_url, timeout=5, verify=self._verify)
+            response = self._session.get(health_url, timeout=5, verify=self._verify)
             if response.status_code == 200:
                 self._server_awake = True
                 return
@@ -260,7 +267,7 @@ class APIClient:
             self._ensure_server_awake()
 
         try:
-            response = requests.request(method=method, url=url, **kwargs)
+            response = self._session.request(method=method, url=url, **kwargs)
         except requests.exceptions.RequestException as error:
             if not wake_retry_enabled or not self._is_wake_trigger(
                 method, retry_safe=retry_safe, error=error
@@ -287,7 +294,9 @@ class APIClient:
             )
 
         try:
-            retry_response = requests.request(method=method, url=url, **kwargs)
+            retry_response = self._session.request(
+                method=method, url=url, **kwargs
+            )
         except requests.exceptions.RequestException as error:
             if self._is_wake_trigger(method, retry_safe=retry_safe, error=error):
                 raise APIError(

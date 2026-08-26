@@ -139,7 +139,7 @@ class TestDeleteSubproject:
 
 class TestDeleteSession:
     def test_delete_session_returns_ok_on_204(self, mock_client):
-        with patch("requests.request") as mock_req:
+        with patch.object(mock_client._session, "request") as mock_req:
             mock_response = MagicMock()
             mock_response.status_code = 204
             mock_response.content = b""

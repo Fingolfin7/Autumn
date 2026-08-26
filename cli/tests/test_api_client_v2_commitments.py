@@ -349,7 +349,7 @@ def test_restart_required_envelope_names_the_cli_restart_command(client, monkeyp
         }
     }
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("400")
-    monkeypatch.setattr(requests, "request", MagicMock(return_value=response))
+    monkeypatch.setattr(client._session, "request", MagicMock(return_value=response))
 
     with pytest.raises(
         APIError,
@@ -374,7 +374,7 @@ def test_commitment_version_conflict_uses_established_friendly_error(
         }
     }
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("409")
-    monkeypatch.setattr(requests, "request", MagicMock(return_value=response))
+    monkeypatch.setattr(client._session, "request", MagicMock(return_value=response))
 
     with pytest.raises(
         APIError,

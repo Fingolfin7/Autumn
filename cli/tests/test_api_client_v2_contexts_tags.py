@@ -142,7 +142,7 @@ def test_duplicate_name_conflict_uses_friendly_server_message(
     client, monkeypatch, method_name
 ):
     monkeypatch.setattr(
-        requests,
+        client._session,
         "request",
         MagicMock(
             return_value=_error_response(
@@ -162,7 +162,7 @@ def test_commitment_target_delete_conflict_uses_friendly_server_message(
     client, monkeypatch, method_name
 ):
     monkeypatch.setattr(
-        requests,
+        client._session,
         "request",
         MagicMock(
             return_value=_error_response(

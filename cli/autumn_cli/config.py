@@ -1,5 +1,6 @@
 """Configuration management for Autumn CLI."""
 
+from copy import deepcopy
 import os
 import tempfile
 import yaml
@@ -11,6 +12,19 @@ from .errors import ConfigError
 
 CONFIG_DIR = Path.home() / ".autumn"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
+
+# PyYAML's C-backed safe loader/dumper are substantially faster for the
+# account-scoped metadata caches stored alongside the CLI settings. Source
+# installs without LibYAML keep the same behavior through the safe fallback.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_YAML_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
+
+# A command consults several config accessors during startup. Cache one parsed
+# snapshot per process, keyed by the file identity, while returning deep copies
+# so callers can keep their existing mutate-then-save behavior safely.
+_CONFIG_CACHE_PATH: Path | None = None
+_CONFIG_CACHE_SIGNATURE: tuple[int, int] | None = None
+_CONFIG_CACHE_DATA: dict | None = None
 
 
 DEFAULT_GREETING_GENERAL_WEIGHT = 0.4
@@ -40,6 +54,38 @@ def ensure_config_dir():
         ) from None
 
 
+def _config_signature(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _cache_config(path: Path, signature: tuple[int, int] | None, config: dict) -> None:
+    global _CONFIG_CACHE_PATH, _CONFIG_CACHE_SIGNATURE, _CONFIG_CACHE_DATA
+    _CONFIG_CACHE_PATH = path
+    _CONFIG_CACHE_SIGNATURE = signature
+    _CONFIG_CACHE_DATA = deepcopy(config)
+
+
+def _clear_config_cache() -> None:
+    global _CONFIG_CACHE_PATH, _CONFIG_CACHE_SIGNATURE, _CONFIG_CACHE_DATA
+    _CONFIG_CACHE_PATH = None
+    _CONFIG_CACHE_SIGNATURE = None
+    _CONFIG_CACHE_DATA = None
+
+
+def _cached_config(path: Path, signature: tuple[int, int] | None) -> dict | None:
+    if (
+        _CONFIG_CACHE_DATA is None
+        or _CONFIG_CACHE_PATH != path
+        or _CONFIG_CACHE_SIGNATURE != signature
+    ):
+        return None
+    return deepcopy(_CONFIG_CACHE_DATA)
+
+
 def _write_config_file(config: dict) -> None:
     ensure_config_dir()
     temporary_path = None
@@ -53,8 +99,17 @@ def _write_config_file(config: dict) -> None:
             delete=False,
         ) as temporary:
             temporary_path = Path(temporary.name)
-            yaml.safe_dump(config, temporary, default_flow_style=False)
+            yaml.dump(
+                config,
+                temporary,
+                Dumper=_YAML_DUMPER,
+                default_flow_style=False,
+            )
         os.replace(temporary_path, CONFIG_FILE)
+        # A direct save may contain legacy fields which load_config still needs
+        # to migrate. Invalidate here; load_config will repopulate the cache
+        # after applying those semantics.
+        _clear_config_cache()
     except (OSError, yaml.YAMLError) as error:
         if temporary_path is not None:
             try:
@@ -70,17 +125,27 @@ def load_config() -> dict:
     """Load configuration from file."""
     try:
         ensure_config_dir()
-        if not CONFIG_FILE.exists():
+        path = Path(CONFIG_FILE)
+        signature = _config_signature(path)
+        if signature is None:
+            _clear_config_cache()
             return {}
 
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+        cached = _cached_config(path, signature)
+        if cached is not None:
+            return cached
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.load(f, Loader=_YAML_LOADER) or {}
             # If config is corrupted (e.g. YAML root is a list), repair by resetting.
             if not isinstance(data, dict):
                 return {}
             data, changed = _migrate_legacy_config(data)
         if changed:
             _write_config_file(data)
+            _cache_config(path, _config_signature(path), data)
+        else:
+            _cache_config(path, signature, data)
         return data
     except ConfigError:
         raise

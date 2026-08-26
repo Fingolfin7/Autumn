@@ -337,7 +337,7 @@ def test_delete_project_conflict_envelope_uses_friendly_server_message(client, m
         }
     }
     response.raise_for_status.side_effect = requests.exceptions.HTTPError("409")
-    monkeypatch.setattr(requests, "request", MagicMock(return_value=response))
+    monkeypatch.setattr(client._session, "request", MagicMock(return_value=response))
 
     with pytest.raises(APIError, match=r"^Project is targeted by a commitment\.$"):
         client.delete_project("Deep Work")

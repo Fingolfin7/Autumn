@@ -106,7 +106,7 @@ def test_password_login_converts_network_error(monkeypatch):
         wake_retry=False,
     )
     monkeypatch.setattr(
-        requests,
+        client._session,
         "request",
         MagicMock(side_effect=requests.exceptions.ConnectTimeout("timed out")),
     )

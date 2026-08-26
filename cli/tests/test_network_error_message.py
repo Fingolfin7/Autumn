@@ -15,11 +15,11 @@ def test_dns_error_message_is_readable(monkeypatch):
             "NameResolutionError(… getaddrinfo failed …)"
         )
 
-    monkeypatch.setattr(requests, "request", _boom)
     monkeypatch.setattr("autumn_cli.api_client.get_api_key", lambda: "k")
     monkeypatch.setattr("autumn_cli.api_client.get_base_url", lambda: "https://example.invalid")
 
     c = APIClient()
+    monkeypatch.setattr(c._session, "request", _boom)
     with pytest.raises(APIError) as e:
         c.get_timer_status()
 
