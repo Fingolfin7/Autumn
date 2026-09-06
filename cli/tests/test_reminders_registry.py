@@ -3,6 +3,21 @@ from __future__ import annotations
 from autumn_cli.utils import reminders_registry as rr
 
 
+def test_registry_reads_fallback_config_once(monkeypatch, tmp_path):
+    calls = 0
+
+    def fake_load_config():
+        nonlocal calls
+        calls += 1
+        return {}
+
+    monkeypatch.setattr(rr, "load_config", fake_load_config)
+    monkeypatch.setattr(rr, "REMINDERS_FILE", tmp_path / "reminders.json")
+
+    assert rr.load_entries(prune_dead=False) == []
+    assert calls == 1
+
+
 def test_registry_add_and_remove(monkeypatch, tmp_path):
     # Keep everything in-memory by stubbing config load/save.
     state = {}

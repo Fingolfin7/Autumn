@@ -50,7 +50,80 @@ from .commands.note import note
 
 
 class AutumnGroup(click.Group):
-    """Root command group that renders expected API failures cleanly."""
+    """Root command group with compact help and backwards-compatible aliases."""
+
+    aliases = {
+        "cmt": "commitments",
+        "ls": "log",
+        "n": "note",
+        "p": "projects",
+        "subs": "subprojects",
+    }
+
+    command_sections = (
+        ("Timers", ("start", "stop", "status", "restart", "resume", "note")),
+        ("Sessions", ("log", "track", "edit", "delete-session")),
+        (
+            "Projects",
+            (
+                "projects",
+                "project",
+                "new",
+                "subprojects",
+                "mark",
+                "rename",
+                "totals",
+                "commitments",
+            ),
+        ),
+        ("Reminders", ("remind", "reminders", "notify")),
+        ("Data and reports", ("chart", "export", "import", "audit")),
+        ("Metadata", ("context", "tag", "alias", "meta")),
+        ("Setup", ("auth", "config", "open")),
+        (
+            "Advanced operations",
+            ("merge", "merge-subs", "delete", "delete-project", "delete-sub"),
+        ),
+    )
+
+    def get_command(self, ctx: click.Context, cmd_name: str):
+        """Resolve short aliases without advertising them as separate commands."""
+        return super().get_command(ctx, self.aliases.get(cmd_name, cmd_name))
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter):
+        """Show root commands in task-oriented sections instead of one long list."""
+        shown: set[str] = set()
+        for heading, names in self.command_sections:
+            rows = []
+            for name in names:
+                command = super().get_command(ctx, name)
+                if command is None or command.hidden:
+                    continue
+                rows.append((name, command.get_short_help_str(limit=formatter.width)))
+                shown.add(name)
+            if rows:
+                with formatter.section(heading):
+                    formatter.write_dl(rows)
+
+        # Keep future commands discoverable even if their section is overlooked.
+        remaining = []
+        for name in self.list_commands(ctx):
+            if name in shown:
+                continue
+            command = super().get_command(ctx, name)
+            if command is not None and not command.hidden:
+                remaining.append(
+                    (name, command.get_short_help_str(limit=formatter.width))
+                )
+        if remaining:
+            with formatter.section("Other"):
+                formatter.write_dl(remaining)
+
+        formatter.write_paragraph()
+        formatter.write_text(
+            "Short aliases: cmt=commitments, ls=log, n=note, p=projects, "
+            "subs=subprojects"
+        )
 
     def invoke(self, ctx: click.Context):
         try:
@@ -103,7 +176,6 @@ def cli(ctx: click.Context):
             )
 
             # Build greeting text (plain, for width calculation)
-            greeting_plain = g.line.format(username=username)
             greeting_styled = g.line.format(username=f"[autumn.user]{username}[/]")
 
             # Show ASCII banner with greeting inside if enabled
@@ -259,7 +331,7 @@ def verify():
 
         # Try to verify by making a simple API call
         client = APIClient()
-        result = client.get_timer_status()
+        client.get_timer_status()
 
         click.echo("✓ Authentication successful!")
         click.echo(f"  Base URL: {base_url}")
@@ -275,7 +347,6 @@ def verify():
 @auth.command()
 def status():
     """Show current configuration status."""
-    config = load_config()
     api_key = get_api_key()
     base_url = get_base_url()
 
@@ -418,20 +489,16 @@ cli.add_command(timer_status, name="status")  # Timer status
 cli.add_command(restart, name="restart")
 cli.add_command(delete, name="delete")
 cli.add_command(note, name="note")
-cli.add_command(note, name="n")
 
 # Session commands
 cli.add_command(log, name="log")
-cli.add_command(log, name="ls")
 cli.add_command(track, name="track")
 cli.add_command(edit_session, name="edit")
 cli.add_command(delete_session, name="delete-session")
 
 # Project commands
 cli.add_command(projects_list, name="projects")
-cli.add_command(projects_list, name="p")
 cli.add_command(subprojects, name="subprojects")
-cli.add_command(subprojects, name="subs")
 cli.add_command(new_project, name="new")
 cli.add_command(mark, name="mark")
 cli.add_command(rename, name="rename")
@@ -442,7 +509,6 @@ cli.add_command(project_details, name="project")
 cli.add_command(merge, name="merge")
 cli.add_command(merge_subs, name="merge-subs")
 cli.add_command(commitments, name="commitments")
-cli.add_command(commitments, name="cmt")
 
 
 # Chart command

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
 from ..config import CONFIG_DIR, load_config, save_config
@@ -67,21 +67,21 @@ def _serialize_entries(entries: List[ReminderEntry]) -> list[dict]:
     ]
 
 
-def _load_raw_entries() -> tuple[list, bool]:
-    """Load raw reminder entries from file when available, else from config."""
+def _load_raw_entries() -> tuple[list, bool, dict]:
+    """Load reminder entries and retain any config already read for fallback."""
     if REMINDERS_FILE.exists():
         try:
             with open(REMINDERS_FILE, "r") as f:
                 data = json.load(f)
-            return (data if isinstance(data, list) else []), True
+            return (data if isinstance(data, list) else []), True, {}
         except (OSError, json.JSONDecodeError):
             pass
 
     cfg = load_config() or {}
     legacy = cfg.get("reminders")
     if isinstance(legacy, list):
-        return list(legacy), False
-    return [], False
+        return list(legacy), False, cfg
+    return [], False, cfg
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -92,8 +92,6 @@ def _is_pid_alive(pid: int) -> bool:
 
     We keep it conservative: if we can't check, assume alive.
     """
-
-    import os
 
     if pid <= 0:
         return False
@@ -191,10 +189,11 @@ def _session_active(session_id: int | None) -> bool:
 
 def load_entries(*, prune_dead: bool = True) -> List[ReminderEntry]:
     # 1. Load from reminders.json when possible; otherwise fall back to config.
-    raw_list, loaded_from_file = _load_raw_entries()
+    raw_list, loaded_from_file, cfg = _load_raw_entries()
 
     # 2. Migration: Check config.yaml for legacy reminders
-    cfg = load_config() or {}
+    if loaded_from_file:
+        cfg = load_config() or {}
     legacy_reminders = cfg.get("reminders")
     migrated = False
     if loaded_from_file and legacy_reminders and isinstance(legacy_reminders, list):

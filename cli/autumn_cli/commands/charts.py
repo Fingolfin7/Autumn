@@ -27,6 +27,16 @@ CHART_TYPES = [
     "bubble",
 ]
 
+CHART_DEPENDENCY_MODULES = {
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "PIL",
+    "seaborn",
+    "squarify",
+    "wordcloud",
+}
+
 
 @click.command()
 @click.option(
@@ -102,24 +112,33 @@ def chart(
     # The plotting stack is intentionally imported only when this command runs.
     # Importing it at module load time made every Autumn command pay the startup
     # cost of matplotlib, seaborn, pandas, numpy, Pillow, and wordcloud.
-    from ..utils.charts import (
-        render_pie_chart,
-        render_bar_chart,
-        render_scatter_chart,
-        render_line_chart,
-        render_heatmap,
-        render_calendar_chart,
-        render_wordcloud_chart,
-        render_stacked_area_chart,
-        render_cumulative_chart,
-        render_treemap_chart,
-        render_sunburst_chart,
-        render_status_chart,
-        render_context_chart,
-        render_histogram_chart,
-        render_radar_chart,
-        render_tag_bubble_chart,
-    )
+    try:
+        from ..utils.charts import (
+            render_pie_chart,
+            render_bar_chart,
+            render_scatter_chart,
+            render_line_chart,
+            render_heatmap,
+            render_calendar_chart,
+            render_wordcloud_chart,
+            render_stacked_area_chart,
+            render_cumulative_chart,
+            render_treemap_chart,
+            render_sunburst_chart,
+            render_status_chart,
+            render_context_chart,
+            render_histogram_chart,
+            render_radar_chart,
+            render_tag_bubble_chart,
+        )
+    except ModuleNotFoundError as exc:
+        missing_module = (exc.name or "").partition(".")[0]
+        if missing_module not in CHART_DEPENDENCY_MODULES:
+            raise
+        raise click.ClickException(
+            "Charts require optional dependencies. From the repository's cli "
+            'directory, run: python -m pip install -e ".[charts]"'
+        ) from None
 
     type = type.lower()  # Normalize case
 

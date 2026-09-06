@@ -2,6 +2,52 @@
 
 The Click + Rich command-line client for AutumnWeb.
 
+## Installation
+
+Install the everyday time-tracking CLI from this `cli` directory:
+
+```console
+python -m pip install -e .
+```
+
+Charts use a separate plotting extra so regular CLI installs stay small:
+
+```console
+python -m pip install -e ".[charts]"
+```
+
+Existing installs that use `autumn chart` should reinstall from the checkout
+with the `charts` extra once; all non-chart commands continue to use the base
+install.
+
+## Quick start
+
+```console
+autumn auth login
+autumn start AutumnWeb
+autumn status
+autumn note "Working on timer cleanup"
+autumn stop
+autumn log
+```
+
+Use `autumn projects` to find project names and `autumn resume` to restart the
+most recently used project. `autumn context`, `autumn tag`, and
+`autumn commitments` list their current entries; their subcommands create or
+edit them.
+
+The root help groups commands by everyday task:
+
+```console
+autumn --help
+autumn start --help
+autumn context --help
+```
+
+Short aliases remain available for frequent commands: `p` for `projects`, `ls`
+for `log`, `n` for `note`, `subs` for `subprojects`, and `cmt` for
+`commitments`.
+
 ## Command reference
 
 | Area | Command | What it does | Common options |
@@ -23,11 +69,12 @@ The Click + Rich command-line client for AutumnWeb.
 | | `autumn mark` | Change project status | `<project> <status>` |
 | Metadata | `autumn context` | Manage contexts | `list`, `new`, `rename`, `edit`, `delete` |
 | | `autumn tag` | Manage tags | `list`, `new`, `rename`, `edit`, `delete` |
-| Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
-| | `autumn chart` | Render activity charts | `--type`, `-P` |
+| Reminders | `autumn remind` / `autumn reminders` | Schedule and manage desktop reminders | See `--help` |
+| Data and reports | `autumn chart` | Render activity charts | `--type`, `-P` |
 | | `autumn export` / `autumn import` | Move Autumn data | See `--help` |
-| | `autumn config` | Manage CLI settings | `show`, `set`, `open` |
-| | `autumn auth` | Manage API accounts | `setup`, `status`, `accounts`, `switch`, `remove` |
+| Setup | `autumn config` | Manage CLI settings | `show`, `get`, `set`, `open` |
+| | `autumn auth` | Manage API accounts | `login`, `logout`, `status`, `accounts`, `switch` |
+| Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
 
 Run `autumn <command> --help` for the complete option list.
 

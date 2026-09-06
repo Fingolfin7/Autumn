@@ -70,9 +70,12 @@ def _print_changed_subprojects(changed_subprojects: list[dict]) -> None:
         )
 
 
-@click.group()
-def context() -> None:
+@click.group(invoke_without_command=True)
+@click.pass_context
+def context(ctx: click.Context) -> None:
     """Context-related commands."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(context_list)
 
 
 @context.command("list")
@@ -170,9 +173,12 @@ def context_delete(name: str, yes: bool) -> None:
         raise click.Abort()
 
 
-@click.group()
-def tag() -> None:
+@click.group(invoke_without_command=True)
+@click.pass_context
+def tag(ctx: click.Context) -> None:
     """Tag-related commands."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(tag_list)
 
 
 @tag.command("list")

@@ -62,25 +62,27 @@ dependencies = [
     { name = "astral" },
     { name = "click" },
     { name = "idna" },
-    { name = "matplotlib" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pandas" },
-    { name = "pillow" },
     { name = "plyer" },
     { name = "pygments" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },
-    { name = "seaborn" },
-    { name = "squarify" },
     { name = "tabulate" },
     { name = "urllib3" },
-    { name = "wordcloud" },
 ]
 
 [package.optional-dependencies]
+charts = [
+    { name = "matplotlib" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pandas" },
+    { name = "pillow" },
+    { name = "seaborn" },
+    { name = "squarify" },
+    { name = "wordcloud" },
+]
 mcp = [
     { name = "mcp" },
 ]
@@ -95,24 +97,24 @@ requires-dist = [
     { name = "astral", specifier = ">=2.2.0" },
     { name = "click", specifier = ">=8.3.3" },
     { name = "idna", specifier = ">=3.15" },
-    { name = "matplotlib", specifier = ">=3.5.0" },
+    { name = "matplotlib", marker = "extra == 'charts'", specifier = ">=3.5.0" },
     { name = "mcp", marker = "extra == 'mcp'" },
-    { name = "numpy", specifier = ">=1.20.0" },
-    { name = "pandas", specifier = ">=1.5.0" },
-    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "numpy", marker = "extra == 'charts'", specifier = ">=1.20.0" },
+    { name = "pandas", marker = "extra == 'charts'", specifier = ">=1.5.0" },
+    { name = "pillow", marker = "extra == 'charts'", specifier = ">=12.3.0" },
     { name = "plyer", specifier = ">=2.1.0" },
     { name = "pygments", specifier = ">=2.20.0" },
     { name = "python-dateutil", specifier = ">=2.8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "rich", specifier = ">=13.0.0" },
-    { name = "seaborn", specifier = ">=0.12.0" },
-    { name = "squarify", specifier = ">=0.4.3" },
+    { name = "seaborn", marker = "extra == 'charts'", specifier = ">=0.12.0" },
+    { name = "squarify", marker = "extra == 'charts'", specifier = ">=0.4.3" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "urllib3", specifier = ">=2.7.0" },
-    { name = "wordcloud", specifier = ">=1.9.0" },
+    { name = "wordcloud", marker = "extra == 'charts'", specifier = ">=1.9.0" },
 ]
-provides-extras = ["mcp"]
+provides-extras = ["charts", "mcp"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.0" }]
