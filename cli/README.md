@@ -71,12 +71,70 @@ for `log`, `n` for `note`, `subs` for `subprojects`, and `cmt` for
 | | `autumn tag` | Manage tags | `list`, `new`, `rename`, `edit`, `delete` |
 | Reminders | `autumn remind` / `autumn reminders` | Schedule and manage desktop reminders | See `--help` |
 | Data and reports | `autumn chart` | Render activity charts | `--type`, `-P` |
+| | `autumn garden` | Visit a seasonal woodland grown from saved history | `--project`, `--at`, `--page`, `--all`, `--save` |
 | | `autumn export` / `autumn import` | Move Autumn data | See `--help` |
 | Setup | `autumn config` | Manage CLI settings | `show`, `get`, `set`, `open` |
 | | `autumn auth` | Manage API accounts | `login`, `logout`, `status`, `accounts`, `switch` |
 | Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
 
 Run `autumn <command> --help` for the complete option list.
+
+## Your garden
+
+`autumn garden` draws a coloured terminal woodland from your live project
+history. Oaks, pines, birches, willows, wildflowers, and ferns grow as saved time
+accumulates. Time away never shrinks them. Completed projects get a small
+star keepsake; each day brings a little visitor.
+
+```console
+autumn garden
+autumn garden --page 2
+autumn garden --project AutumnWeb
+autumn garden --project AutumnWeb --species oak
+autumn garden --at 2026-01-01
+autumn garden --all --season spring
+autumn garden --save woodland.svg
+```
+
+The default clearing shows eight projects, ordered by their latest saved visit.
+Use `--limit 12` for a larger clearing, `--page 2` to move along, or `--all` for
+the whole woodland. A project name can be a unique partial match; exact names
+take priority. A close-up includes first/last visit dates and a short excerpt
+from the latest nonempty session note. `--species` only changes that rendering.
+
+Colours follow the date's season in the northern hemisphere; use
+`--hemisphere south` or choose `--season` yourself. Layout fits the terminal,
+with `--width 100` available for a fixed size. `--ascii` substitutes ASCII art,
+`--no-color` removes colour, and `--color` forces it when piping to an ANSI-aware
+viewer. `NO_COLOR` is respected unless you explicitly pass `--color`.
+
+`--save` writes a standalone `.svg`, `.html`, or plain `.txt` keepsake. SVG and
+HTML preserve the colours and need no external fonts or network access to view.
+The file contains the displayed project names and, for a close-up, the displayed
+note. Create its parent directory first. Ordinary terminal views save no new
+history files.
+
+The garden needs only the base CLI installation: no AI, plotting extras, or
+new dependencies. It reads the saved export and project identities, never
+updates Autumn history or project metadata, and uses stable project IDs so a
+rename keeps the same plant. For offline viewing, use
+`autumn garden --from-file export.json`. Format-2 exports omit project IDs, so
+offline species are determined by names and can differ from the live view.
+
+Growth uses five stages: seed (no positive saved time), seedling (under two
+hours), sapling (two hours), established (ten hours), and mature (forty hours).
+Further hours remain visible without letting one project swallow the scene.
+Active timers, invalid timestamps, and zero/negative durations do not grow
+plants; duplicate session UUIDs count once per project. Seven distinct session
+start dates add a small woodland companion beside the roots. Unlogged time
+doesn't imply inactivity.
+
+`--at YYYY-MM-DD` rebuilds growth through the end of that **local** day, clipping
+sessions that cross midnight and withholding their notes until their saved end.
+It uses the history available now: later edits/deletions cannot be undone,
+names and note text are current, and past completion status is unknown, so
+historical views omit completion keepsakes. Future dates are rejected. In a
+current view, even a mistakenly saved future session cannot grow beyond now.
 
 ## Subproject splits
 

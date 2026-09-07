@@ -47,6 +47,7 @@ from .commands.import_cmd import import_cmd
 from .commands.meta import meta_audit
 from .commands.alias_cmd import alias
 from .commands.note import note
+from .commands.garden import garden
 
 
 class AutumnGroup(click.Group):
@@ -77,7 +78,7 @@ class AutumnGroup(click.Group):
             ),
         ),
         ("Reminders", ("remind", "reminders", "notify")),
-        ("Data and reports", ("chart", "export", "import", "audit")),
+        ("Data and reports", ("garden", "chart", "export", "import", "audit")),
         ("Metadata", ("context", "tag", "alias", "meta")),
         ("Setup", ("auth", "config", "open")),
         (
@@ -513,6 +514,7 @@ cli.add_command(commitments, name="commitments")
 
 # Chart command
 cli.add_command(chart, name="chart")
+cli.add_command(garden, name="garden")
 
 # Metadata discovery
 cli.add_command(context, name="context")

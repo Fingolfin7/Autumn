@@ -119,6 +119,7 @@ autumn
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
 | **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
+| **Garden** | `autumn garden` | Draw a seasonal woodland from saved project history | `--project`, `--at`, `--page`, `--all`, `--save` |
 | **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
 | **Auth** | `autumn auth accounts` | List saved accounts | — |
 | | `autumn auth switch <account>` | Switch active account | — |
