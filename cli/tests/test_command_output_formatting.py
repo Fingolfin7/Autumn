@@ -189,7 +189,8 @@ def test_track_output_uses_status_style(monkeypatch):
         ],
     )
     assert result.exit_code == 0
-    assert any("Tracked [autumn.project]First Ascent[/] [[autumn.subproject]meals[/]], [autumn.duration]39 minutes[/]" in line for line in printed)
+    assert any("Tracked [autumn.project]First Ascent[/] [[autumn.subproject]meals[/]], [autumn.duration]39m 00s[/]" in line for line in printed)
+    assert any("2026-02-06 15:00" in line and "15:39" in line for line in printed)
     assert any("Session ID: #[autumn.id]202[/]" in line for line in printed)
 
 

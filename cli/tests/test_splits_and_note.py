@@ -162,7 +162,7 @@ def test_update_timer_note_patches_active_timer_with_if_match(monkeypatch):
     result = client.update_timer_note(21, "updated", 4)
     request.assert_called_once_with(
         "PATCH",
-        "/api/v2/timers/21/",
+        "/api/v2/timers/21",
         json={"note": "updated"},
         headers={"If-Match": "4"},
     )

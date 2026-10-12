@@ -24,11 +24,12 @@ install.
 
 ```console
 autumn auth login
-autumn start AutumnWeb
-autumn status
+autumn start web                 # any unique part of a project name works
 autumn note "Working on timer cleanup"
 autumn stop
-autumn log
+autumn track web 45m -n "Review" # log time you forgot to time
+autumn log today
+autumn log -q "login bug"        # search every session ever
 ```
 
 Use `autumn projects` to find project names and `autumn resume` to restart the
@@ -48,34 +49,103 @@ Short aliases remain available for frequent commands: `p` for `projects`, `ls`
 for `log`, `n` for `note`, `subs` for `subprojects`, and `cmt` for
 `commitments`.
 
+## Names, dates and periods
+
+Wherever a command takes a project, you can type its exact name in any case,
+an alias (`autumn alias add project web AutumnWeb`), or any unique part of it.
+`autumn start web` starts "AutumnWeb" when no other project contains "web";
+`stop`, `status`, `note` and `discard` first match against the timers that
+are running. An ambiguous or unknown name is not guessed: the CLI lists the
+closest names instead. Renames only accept exact names.
+
+Periods (`-P`, or a bare word after `autumn log`) are `today`, `yesterday`,
+`week`, `fortnight`, `month`, `quarter`, `year` and `all`, with the shorthands
+`d`, `w`, `2w`, `m`, `q`, `y`. Week, fortnight and month are rolling windows
+(the last 7, 14 or 30 days).
+
+`--since` and `--until` (also spelled `--start-date` and `--end-date`) accept
+`2026-01-05`, `yesterday`, a weekday (the most recent one, including today),
+`3d ago` or `-2w`.
+
+## Search
+
+`-q/--search` matches project names, subproject names and session notes on
+the server, the same search the web Sessions page uses. Add `--related` to
+also include sessions whose notes match by meaning. Related matches need AI
+features and an OpenAI key on your AutumnWeb account; otherwise the CLI says
+they were unavailable and shows direct matches only.
+
+```console
+autumn log -q "auth"                 # all time unless you give a period
+autumn log -q "auth" --related       # related matches listed after, best first
+autumn log search -q deploy --limit 20 --newest
+autumn projects -q garden --related  # searches every status
+autumn chart pie -q "client" -P month
+autumn export -q "thesis" --stdout
+```
+
+## Logging time after the fact
+
+`autumn track` takes any two of a start, an end and a duration. A duration on
+its own ends now. Time-only values fall on today unless `--on` names another
+day; if both are time-only and the end is earlier, the session crosses
+midnight.
+
+```console
+autumn track AutumnWeb 45m -n "Code review"
+autumn track AutumnWeb 2h --start 14:00
+autumn track AutumnWeb --start 9:00 --end 11:30
+autumn track AutumnWeb --on yesterday --start 9am --end 5pm
+```
+
+`autumn edit` and `autumn delete-session` take a session ID, `last`, or
+nothing to choose from your recent sessions. `autumn log --ids` shows IDs.
+Time-only edits keep the session's own day, and `--for` sets its length.
+
+```console
+autumn edit last -a "Also fixed the tests"
+autumn edit 123 --start 9:30 --for 1h
+autumn delete-session last
+```
+
 ## Command reference
 
 | Area | Command | What it does | Common options |
 |---|---|---|---|
 | Timers | `autumn start <project>` | Start a timer | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
-| | `autumn status` | Show active timers | `-p`, `-i` |
-| | `autumn stop` | Stop an active timer | `-p`, `-i`, `-n`, `--split` |
-| | `autumn restart` | Reset an active timer's start time | `-p`, `-i` |
-| | `autumn note <text...>` (`autumn n`) | Update an active timer's note | `-p`, `-s`, `--replace`, `--stamp`, `--no-stamp` |
-| Sessions | `autumn log` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-x`, `-t`, `-c`, `--show-ids` |
-| | `autumn log search` | Search sessions | `--note-snippet`, `--start-date`, `--end-date` |
-| | `autumn track <project>` | Manually log a session | `--start`, `--end`, `-s`, `-n`, `--split` |
-| | `autumn edit <session-id>` | Edit a saved session in place | `-p`, `-s`, `--start`, `--end`, `-n`, `-a`/`--append-note`, `--split` |
-| | `autumn delete-session <session-id>` | Delete a saved session | `-y` |
-| Projects | `autumn projects` (`autumn p`) | List projects | `--status`, `--search`, `-x` |
-| | `autumn project <name>` | Show or edit project metadata | `edit` |
-| | `autumn subprojects <project>` (`autumn subs`) | List subprojects | `--search` |
-| | `autumn new` | Create a project or subproject | `-s`, `-d`, `--context`, `--tags` |
+| | `autumn status [project]` | Show running timers | `-p`, `-i` |
+| | `autumn stop [project]` | Stop a running timer | `-p`, `-i`, `-n`, `--split` |
+| | `autumn note <text...>` (`autumn n`) | Update a running timer's note | `-p`, `-i`, `--replace`, `--stamp`, `--no-stamp` |
+| | `autumn restart [project]` | Restart a running timer from now | `-p`, `-i` |
+| | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
+| Sessions | `autumn log [period] [project]` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids` |
+| | `autumn log search` | Search with paging | `-q`, `--related`, `-n`, `--newest`, `--limit`, `--offset` |
+| | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-s`, `-n`, `--split` |
+| | `autumn edit [session]` | Edit a saved session in place | `-p`, `-s`, `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |
+| | `autumn delete-session [session]` | Delete a saved session | `-y` |
+| Projects | `autumn projects` (`autumn p`) | List projects | `-S`, `-q`, `--related`, `-c`, `-t`, `-x` |
+| | `autumn project <name>` | Show a project, or `edit` its metadata | `show`, `edit -d -c -t -T` |
+| | `autumn subprojects [project]` (`autumn subs`) | List subprojects | `--search` |
+| | `autumn new` | Create a project or subproject | `-s`, `-d`, `-c`, `-t` |
 | | `autumn mark` | Change project status | `<project> <status>` |
+| | `autumn totals [project]` | Project and subproject totals | `-P`, `--since`, `-c`, `-t` |
 | Metadata | `autumn context` | Manage contexts | `list`, `new`, `rename`, `edit`, `delete` |
 | | `autumn tag` | Manage tags | `list`, `new`, `rename`, `edit`, `delete` |
-| Reminders | `autumn remind` / `autumn reminders` | Schedule and manage desktop reminders | See `--help` |
-| Data and reports | `autumn chart` | Render activity charts | `--type`, `-P` |
+| Reminders | `autumn remind in 25m stretch` / `autumn reminders` | Schedule and manage desktop reminders | `in`, `at`, `every`, `session` |
+| Data and reports | `autumn chart [type]` | Render activity charts | `-P`, `-p`, `-q`, `--related`, `--save` |
 | | `autumn garden` | Visit a seasonal woodland grown from saved history | `--project`, `--at`, `--page`, `--all`, `--save` |
 | | `autumn export` / `autumn import` | Move Autumn data | See `--help` |
 | Setup | `autumn config` | Manage CLI settings | `show`, `get`, `set`, `open` |
 | | `autumn auth` | Manage API accounts | `login`, `logout`, `status`, `accounts`, `switch` |
 | Other | `autumn commitments` (`autumn cmt`) | Manage recurring commitments | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
+
+Commitments are addressed by ID or target name: `autumn cmt new Autumn 5h`
+(5 hours a week), `autumn cmt new Autumn 3 --sessions -P day`,
+`autumn cmt adjust Autumn 1h -r "offline work"`, `autumn cmt show Autumn`.
+
+`autumn chart heatmap` uses the server's weekday/hour aggregation, the same
+numbers as the web chart: sessions are split across each clock hour they span,
+and each cell is the average share of that hour spent working.
 
 Run `autumn <command> --help` for the complete option list.
 
@@ -144,7 +214,7 @@ is unallocated time.
 
 ```console
 autumn stop --split "api=60,frontend=40"
-autumn track AutumnWeb --start 09:00 --end 10:00 --split "api=75,docs=25"
+autumn track AutumnWeb 1h --start 09:00 --split "api=75,docs=25"
 autumn edit 123 --split "api=50,frontend=50"
 ```
 
@@ -179,7 +249,7 @@ Append text to the newest active timer without stopping it:
 ```console
 autumn note Implemented the timer endpoint
 autumn n -p AutumnWeb "Reviewing tests"
-autumn note -s 123 "Found the race condition"
+autumn note -i 123 "Found the race condition"
 ```
 
 Appends are separated from the existing note by a blank line and stamped with

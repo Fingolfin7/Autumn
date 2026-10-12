@@ -69,6 +69,9 @@ class APIClient:
         self._subproject_id_cache: Dict[
             int, Tuple[float, List[Dict[str, Any]]]
         ] = {}
+        # Headers of the most recent successful JSON request; searches read
+        # X-Autumn-Related from here to learn whether related matches ran.
+        self.last_response_headers: Dict[str, str] = {}
 
         # Only support a simple TLS verify toggle.
         # Safe-by-default: verify=True unless explicitly configured insecure.
@@ -344,6 +347,7 @@ class APIClient:
                 verify=self._verify,
             )
             response.raise_for_status()
+            self.last_response_headers = dict(getattr(response, "headers", None) or {})
             if endpoint.startswith("/api/v2/") and (
                 response.status_code == 204 or not response.content
             ):
@@ -386,7 +390,10 @@ class APIClient:
                             "This field requires restarting the commitment. Use "
                             "'autumn commitments restart'."
                         )
-                    raise APIError(message)
+                    details = error_envelope.get("details")
+                    if isinstance(details, dict) and details:
+                        message = f"{message} {self._format_error_details(details)}"
+                    raise APIError(message, code=code, details=details)
 
             if response is not None and response.status_code == 401:
                 raise APIError("Authentication failed. Check your API key.")
@@ -400,6 +407,18 @@ class APIClient:
                 raise APIError(f"API error: {e}")
         except requests.exceptions.RequestException as e:
             raise self._network_error(e, url) from None
+
+    @staticmethod
+    def _format_error_details(details: Dict[str, Any]) -> str:
+        """``{"end": ["In the future."]}`` -> ``(end: In the future.)``."""
+        parts = []
+        for field, problems in details.items():
+            if isinstance(problems, (list, tuple)):
+                text = " ".join(str(problem) for problem in problems)
+            else:
+                text = str(problems)
+            parts.append(text if field == "non_field_errors" else f"{field}: {text}")
+        return f"({'; '.join(parts)})"
 
     def _delete_no_content(self, endpoint: str, *, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Delete an endpoint which normally returns HTTP 204 No Content."""
@@ -696,6 +715,7 @@ class APIClient:
             "end_time": resource.get("end"),
             "duration_minutes": duration,
             "note": resource.get("note"),
+            **({"match": resource["match"]} if resource.get("match") else {}),
         }
 
     def _v2_read_filter_params(
@@ -708,11 +728,23 @@ class APIClient:
         tags: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
         note_snippet: Optional[str] = None,
+        search: Optional[str] = None,
+        related: bool = False,
+        subprojects: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Translate the shared v1 read filters to v2 ID/date parameters."""
         params: Dict[str, Any] = {}
         if project:
-            params["project_ids"] = str(self._resolve_project_id(project))
+            project_id = self._resolve_project_id(project)
+            params["project_ids"] = str(project_id)
+            if subprojects:
+                params["subproject_ids"] = ",".join(
+                    str(subproject_id)
+                    for subproject_id in self._resolve_subproject_ids(
+                        project, project_id, list(subprojects)
+                    )
+                    or []
+                )
         if start_date:
             params["start_date"] = start_date
         if end_date:
@@ -729,7 +761,18 @@ class APIClient:
             )
         if note_snippet:
             params["note_snippet"] = note_snippet
+        if search:
+            params["search"] = search
+            if related:
+                params["related"] = "true"
         return params
+
+    def related_search_status(self) -> Optional[str]:
+        """Return ``included``/``unavailable`` after a related search, else None."""
+        for key, value in self.last_response_headers.items():
+            if key.lower() == "x-autumn-related":
+                return str(value).strip().lower() or None
+        return None
 
     def _all_v2_session_resources(
         self,
@@ -1016,7 +1059,7 @@ class APIClient:
         """Replace the note of an active timer using optimistic concurrency."""
         resource = self._request(
             "PATCH",
-            f"/api/v2/timers/{session_id}/",
+            f"/api/v2/timers/{session_id}",
             json={"note": note},
             headers={"If-Match": str(version)},
         )
@@ -1073,8 +1116,16 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
+        subprojects: Optional[List[str]] = None,
     ) -> Dict:
-        """Get activity logs."""
+        """Get activity logs.
+
+        With ``search`` the server orders rows by relevance (direct matches
+        newest first, then related matches best first) and labels each row's
+        ``match``; ``related_status`` reports whether related matching ran.
+        """
         if period and not start_date and not end_date:
             from .utils.periods import period_to_dates
 
@@ -1086,10 +1137,16 @@ class APIClient:
             context=context,
             tags=tags,
             exclude=exclude,
+            search=search,
+            related=related,
+            subprojects=subprojects,
         )
         resources = self._all_v2_session_resources(params)
         logs = [self._session_v2_to_legacy(resource) for resource in resources]
-        return {"count": len(logs), "logs": logs}
+        result: Dict[str, Any] = {"count": len(logs), "logs": logs}
+        if search and related:
+            result["related_status"] = self.related_search_status()
+        return result
 
     def search_sessions(
         self,
@@ -1103,8 +1160,17 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
+        ordering: Optional[str] = None,
+        subprojects: Optional[List[str]] = None,
     ) -> Dict:
-        """Search sessions."""
+        """Search sessions.
+
+        ``search`` matches project names, subproject names and notes on the
+        server; ``related`` adds meaning-based matches. ``ordering`` is
+        ``relevance`` (the server default) or ``newest``.
+        """
         params = self._v2_read_filter_params(
             project=project,
             start_date=start_date,
@@ -1113,7 +1179,12 @@ class APIClient:
             tags=tags,
             exclude=exclude,
             note_snippet=note_snippet,
+            search=search,
+            related=related,
+            subprojects=subprojects,
         )
+        if ordering:
+            params["ordering"] = ordering
 
         if active:
             result = self._request("GET", "/api/v2/timers/")
@@ -1153,6 +1224,26 @@ class APIClient:
                     for resource in resources
                     if folded_note in str(resource.get("note") or "").casefold()
                 ]
+            if search:
+                # The timers endpoint has no search; mirror the server's
+                # direct-match fields (project, subprojects, note) locally.
+                folded_search = search.casefold()
+                resources = [
+                    resource
+                    for resource in resources
+                    if any(
+                        folded_search in str(text or "").casefold()
+                        for text in (
+                            (resource.get("project") or {}).get("name"),
+                            resource.get("note"),
+                            *(
+                                allocation.get("name")
+                                for allocation in resource.get("subproject_allocations") or []
+                                if isinstance(allocation, dict)
+                            ),
+                        )
+                    )
+                ]
             if offset:
                 resources = resources[offset:]
             if limit:
@@ -1171,7 +1262,10 @@ class APIClient:
             ]
 
         sessions = [self._session_v2_to_legacy(resource) for resource in resources]
-        return {"count": len(sessions), "sessions": sessions}
+        result: Dict[str, Any] = {"count": len(sessions), "sessions": sessions}
+        if search and related and not active:
+            result["related_status"] = self.related_search_status()
+        return result
 
     def track_session(
         self,
@@ -1317,7 +1411,11 @@ class APIClient:
                     None,
                 )
                 if not match or match.get("id") is None:
-                    raise APIError(f"Unknown context: {context}")
+                    raise APIError(
+                        f"Unknown context: {context}. Create it with "
+                        f"`autumn context new \"{context}\"` or list them with "
+                        "`autumn context list`."
+                    )
                 context_id = int(match["id"])
 
         if tags is not None:
@@ -1508,6 +1606,8 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> List[Dict]:
         """Get project totals (for charts)."""
         params = self._v2_read_filter_params(
@@ -1516,6 +1616,8 @@ class APIClient:
             end_date=end_date,
             context=context,
             tags=tags,
+            search=search,
+            related=related,
         )
         result = self._request(
             "GET", "/api/v2/reports/tallies/", params={"by": "project", **params}
@@ -1533,6 +1635,8 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> List[Dict]:
         """Get subproject totals (for charts)."""
         params = self._v2_read_filter_params(
@@ -1541,6 +1645,8 @@ class APIClient:
             end_date=end_date,
             context=context,
             tags=tags,
+            search=search,
+            related=related,
         )
         result = self._request(
             "GET", "/api/v2/reports/tallies/", params={"by": "subproject", **params}
@@ -1571,6 +1677,8 @@ class APIClient:
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
         exclude: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> List[Dict]:
         """List sessions (for charts)."""
         params = self._v2_read_filter_params(
@@ -1580,6 +1688,8 @@ class APIClient:
             context=context,
             tags=tags,
             exclude=exclude,
+            search=search,
+            related=related,
         )
         return [
             self._session_v2_to_legacy(resource)
@@ -2211,16 +2321,17 @@ class APIClient:
         project: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        context: Optional[int] = None,
-        tags: Optional[List[int]] = None,
+        context: Optional[Any] = None,
+        tags: Optional[List[Any]] = None,
         compress: bool = False,
         autumn_compatible: bool = True,
         legacy: bool = False,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> Dict:
         """Export data as JSON (format 2 by default; legacy=True for format 1).
 
-        Note: context must be an integer ID, not a name.
-        Tags should be a list of tag IDs.
+        ``context`` and ``tags`` accept names or IDs.
         """
         params: Dict[str, Any] = {}
         if legacy:
@@ -2234,10 +2345,17 @@ class APIClient:
             params["start_date"] = start_date
         if end_date:
             params["end_date"] = end_date
-        if context is not None:
-            params["context_ids"] = str(context)
-        if tags:
-            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tags)
+        context_id, tag_ids = self._metadata_ids(
+            context=context, tags=list(tags) if tags else None
+        )
+        if context_id is not None:
+            params["context_ids"] = str(context_id)
+        if tag_ids:
+            params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
+        if search:
+            params["search"] = search
+            if related:
+                params["related"] = "true"
         if compress:
             params["compress"] = "true"
         return self._request("GET", "/api/v2/export/", params=params)
@@ -2312,16 +2430,25 @@ class APIClient:
         return self._project_detail_v2_to_legacy(resource)
 
     def search_projects(
-        self, search_term: str, status: Optional[str] = None
+        self, search_term: str, status: Optional[str] = None, related: bool = False
     ) -> Dict:
-        """Search projects by name with optional status filter."""
+        """Search projects by name, subprojects, description and notes.
+
+        With ``related`` the server also returns projects that match by
+        meaning; ``related_status`` reports whether that ran.
+        """
         params = {"search": search_term}
         if status:
             params["status"] = status
+        if related:
+            params["related"] = "true"
         resources = self._v2_projects(params)
-        return {
+        result: Dict[str, Any] = {
             "projects": [self._project_v2_to_legacy(resource) for resource in resources]
         }
+        if related:
+            result["related_status"] = self.related_search_status()
+        return result
 
     def get_project_totals(
         self,
@@ -2330,6 +2457,8 @@ class APIClient:
         end_date: Optional[str] = None,
         context: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> Dict:
         """Get a project total in the legacy compact totals shape."""
         params = self._v2_read_filter_params(
@@ -2338,6 +2467,8 @@ class APIClient:
             end_date=end_date,
             context=context,
             tags=tags,
+            search=search,
+            related=related,
         )
         result = self._request("GET", "/api/v2/reports/totals/", params=params)
 
@@ -2450,6 +2581,7 @@ class APIClient:
         search: Optional[str] = None,
         exclude: Optional[List[str]] = None,
         compact: bool = True,
+        related: bool = False,
     ) -> Dict:
         """List projects as a flat (ungrouped) list with optional filters."""
         context_id, tag_ids = self._metadata_ids(context=context, tags=tags)
@@ -2462,6 +2594,8 @@ class APIClient:
             params["tag_ids"] = ",".join(str(tag_id) for tag_id in tag_ids)
         if search:
             params["search"] = search
+            if related:
+                params["related"] = "true"
         if exclude:
             excluded_ids = [self._resolve_project_id(name) for name in exclude]
             params["exclude_project_ids"] = ",".join(
@@ -2538,11 +2672,15 @@ class APIClient:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> List[Dict]:
         """Get time totals aggregated by context."""
         params = self._v2_read_filter_params(
             start_date=start_date,
             end_date=end_date,
+            search=search,
+            related=related,
         )
         result = self._request(
             "GET", "/api/v2/reports/tallies/", params={"by": "context", **params}
@@ -2556,9 +2694,13 @@ class APIClient:
     def tally_by_status(
         self,
         context: Optional[str] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> List[Dict]:
         """Get project count and time totals by status."""
-        params = self._v2_read_filter_params(context=context)
+        params = self._v2_read_filter_params(
+            context=context, search=search, related=related
+        )
         result = self._request(
             "GET", "/api/v2/reports/tallies/", params={"by": "status", **params}
         )
@@ -2568,10 +2710,13 @@ class APIClient:
             if isinstance(entry, dict)
         ]
 
-    def tally_by_tags(self) -> List[Dict]:
+    def tally_by_tags(
+        self, search: Optional[str] = None, related: bool = False
+    ) -> List[Dict]:
         """Get time and project count aggregated by tag."""
+        params = self._v2_read_filter_params(search=search, related=related)
         result = self._request(
-            "GET", "/api/v2/reports/tallies/", params={"by": "tag"}
+            "GET", "/api/v2/reports/tallies/", params={"by": "tag", **params}
         )
         return [
             {"name": entry.get("name"), "total_time": entry.get("total_minutes")}
@@ -2583,11 +2728,15 @@ class APIClient:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        search: Optional[str] = None,
+        related: bool = False,
     ) -> Dict:
         """Get nested Context → Project → Subproject hierarchy with time totals."""
         params = self._v2_read_filter_params(
             start_date=start_date,
             end_date=end_date,
+            search=search,
+            related=related,
         )
         result = self._request("GET", "/api/v2/reports/hierarchy/", params=params)
         projects = []
@@ -2615,6 +2764,38 @@ class APIClient:
             "name": "All",
             "children": [{"name": "All", "context_id": None, "children": projects}],
         }
+
+    def get_heatmap_cells(
+        self,
+        project: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        context: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        related: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Weekday/hour heatmap cells aggregated by the server.
+
+        Each cell is ``{"weekday", "hour", "average_hours"}`` with Sunday as
+        weekday 0 and hours in the account's timezone, the same numbers the
+        web chart shows. Sessions are split across every clock hour they span.
+        """
+        params = self._v2_read_filter_params(
+            project=project,
+            start_date=start_date,
+            end_date=end_date,
+            context=context,
+            tags=tags,
+            search=search,
+            related=related,
+        )
+        # The charts view also honours a legacy session-stored context; "all"
+        # keeps it from narrowing results beyond the explicit filters.
+        params.update(chart_type="heatmap", aggregate="true", context="all")
+        result = self._request("GET", "/api/v2/reports/charts/", params=params)
+        rows = result if isinstance(result, list) else []
+        return [row for row in rows if isinstance(row, dict)]
 
     def get_projects_with_stats(
         self,

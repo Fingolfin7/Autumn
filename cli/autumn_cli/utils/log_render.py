@@ -316,6 +316,41 @@ def render_sessions_list(
     return items if markdown_notes else "\n".join([x for x in items if isinstance(x, str)])
 
 
+def render_ranked_sessions(
+    sessions: Iterable[Dict[str, Any]],
+    *,
+    show_ids: bool = False,
+) -> List[str]:
+    """Render sessions one per line in the given (relevance) order.
+
+    Used for meaning-based search matches, whose ranking would be lost if
+    they were regrouped by date like the regular log.
+    """
+    lines: List[str] = []
+    for s in sessions:
+        start_local = _parse_iso(_session_start_iso(s))
+        when = start_local.strftime("%a %d %b %Y %H:%M") if start_local else "-"
+        session_id = s.get("id")
+        id_prefix = (
+            f"[autumn.id]#{session_id}[/]  "
+            if show_ids and session_id is not None
+            else ""
+        )
+        line = (
+            f"{id_prefix}[autumn.time]{when}[/]  "
+            f"{format_duration_minutes(_duration_minutes(s))}  "
+            f"[autumn.project]{rich_escape(_session_project(s))}[/] "
+            f"{format_subprojects_bracketed(s)}"
+        )
+        note = _normalize_ws(s.get("note") or "")
+        if note:
+            if len(note) > 120:
+                note = note[:117].rstrip() + "..."
+            line += f" -> [autumn.note]{rich_escape(note)}[/][autumn.label][/]"
+        lines.append(line)
+    return lines
+
+
 def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:
     """Render active timer status in the old CLI style."""
     sessions_list = list(sessions)

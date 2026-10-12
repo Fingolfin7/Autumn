@@ -21,6 +21,7 @@ Alias configuration is stored in ~/.autumn/config.yaml under the `aliases` key:
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple, List
 
@@ -100,6 +101,8 @@ def _get_subproject_alias(name: str, project: Optional[str] = None) -> Optional[
 class ResolveResult:
     value: Optional[str]
     warning: Optional[str] = None
+    # Informational: set when a partial name was expanded to a full one.
+    note: Optional[str] = None
 
 
 def resolve_context_param(
@@ -197,17 +200,20 @@ def resolve_project_param(
     *,
     project: str,
     projects: Iterable[dict],
+    partial: bool = False,
 ) -> ResolveResult:
     """Resolve a project argument to canonical project name.
 
     Steps:
     1. Check aliases first
     2. Case-insensitive match against projects list
-    3. Pass through with warning if unknown
+    3. With ``partial``, a unique prefix (then unique substring) match
+    4. Pass through with warning if unknown, suggesting close names
 
     Args:
         project: User-provided project name/alias
         projects: Iterable of project dicts with 'name' key
+        partial: Accept an unambiguous partial name such as ``autu``
 
     Returns:
         ResolveResult with canonical name or original value with warning
@@ -232,11 +238,53 @@ def resolve_project_param(
             name_lookup[_norm_key(name)] = name
 
     # Try to match
-    hit = name_lookup.get(_norm_key(raw))
+    folded = _norm_key(raw)
+    hit = name_lookup.get(folded)
     if hit:
         return ResolveResult(hit)
 
-    return ResolveResult(raw, warning=f"Unknown project '{project}'. Passing through as provided.")
+    candidates: List[str] = []
+    if partial and folded:
+        for matches in (
+            lambda key: key.startswith(folded),
+            lambda key: folded in key,
+        ):
+            candidates = sorted(
+                name for key, name in name_lookup.items() if matches(key)
+            )
+            if len(candidates) == 1:
+                return ResolveResult(
+                    candidates[0],
+                    note=f"Using project '{candidates[0]}' for '{project}'.",
+                )
+            if candidates:
+                break
+
+    if not candidates:
+        close = difflib.get_close_matches(folded, list(name_lookup), n=3, cutoff=0.6)
+        candidates = [name_lookup[key] for key in close]
+    hint = f" Did you mean: {', '.join(candidates[:5])}?" if candidates else ""
+    return ResolveResult(
+        raw,
+        warning=f"Unknown project '{project}'. Passing through as provided.{hint}",
+    )
+
+
+def resolve_project_name(client, project: str, *, partial: bool = True) -> str:
+    """Resolve a project name against the cached project list.
+
+    Prints any warning or partial-match note to stderr and returns the
+    canonical name (or the input unchanged when it matches nothing).
+    """
+    from .console import err_console
+
+    projects = client.get_discovery_projects().get("projects", [])
+    result = resolve_project_param(project=project, projects=projects, partial=partial)
+    if result.warning:
+        err_console.print(f"[autumn.warn]Warning:[/] {result.warning}")
+    if result.note:
+        err_console.print(f"[autumn.muted]{result.note}[/]")
+    return result.value or project
 
 
 def resolve_subproject_params(

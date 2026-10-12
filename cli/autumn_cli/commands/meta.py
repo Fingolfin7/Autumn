@@ -104,7 +104,7 @@ def context_list(json_out: bool, compact: bool, desc: bool) -> None:
 
 @context.command("new")
 @click.argument("name")
-@click.option("--description", "description", help="Optional context description")
+@click.option("--description", "-d", "description", help="Optional context description")
 def context_new(name: str, description: Optional[str]) -> None:
     """Create a context."""
     try:
@@ -135,7 +135,7 @@ def context_rename(old: str, new: str) -> None:
 
 @context.command("edit")
 @click.argument("name")
-@click.option("--description", "description", help="New description (pass an empty string to clear)")
+@click.option("--description", "-d", "description", help="New description (pass an empty string to clear)")
 def context_edit(name: str, description: Optional[str]) -> None:
     """Update a context's description."""
     if description is None:
@@ -153,7 +153,7 @@ def context_edit(name: str, description: Optional[str]) -> None:
 
 @context.command("delete")
 @click.argument("name")
-@click.option("--yes", "yes", is_flag=True, help="Skip confirmation prompt")
+@click.option("--yes", "-y", "yes", is_flag=True, help="Skip confirmation prompt")
 def context_delete(name: str, yes: bool) -> None:
     """Delete a context; its projects retain their other data."""
     try:
@@ -256,7 +256,7 @@ def tag_edit(name: str, color: Optional[str]) -> None:
 
 @tag.command("delete")
 @click.argument("name")
-@click.option("--yes", "yes", is_flag=True, help="Skip confirmation prompt")
+@click.option("--yes", "-y", "yes", is_flag=True, help="Skip confirmation prompt")
 def tag_delete(name: str, yes: bool) -> None:
     """Delete a tag."""
     try:
@@ -287,7 +287,7 @@ def meta_refresh() -> None:
     console.print("[autumn.ok]Metadata cache cleared.[/] Next command will re-fetch contexts/tags, projects, and recent activity.")
 
 
-@meta.command("audit")
+@meta.command("audit", hidden=True)
 @click.option("--dry-run", is_flag=True, help="Preview changes without saving totals")
 def meta_audit(dry_run: bool) -> None:
     """Recompute and persist totals for all projects and subprojects.

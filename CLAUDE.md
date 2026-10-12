@@ -67,7 +67,7 @@ cli/
 │       ├── reminder_daemon.py # Background reminder processes
 │       └── charts.py         # Matplotlib/Seaborn visualization
 ├── tests/               # pytest test suite (67 tests)
-├── AutumnWeb API Docs.md  # Comprehensive API reference
+├── AutumnWeb API Docs.md  # Summary of the v2 API the CLI uses
 └── STYLE_GUIDE.md       # CLI output style consistency guide
 ```
 
@@ -75,7 +75,9 @@ cli/
 
 **Configuration:** YAML at `~/.autumn/config.yaml` with dotted-path access. Environment variables (`AUTUMN_API_KEY`, `AUTUMN_API_BASE`, `AUTUMN_INSECURE`, `AUTUMN_WAKE_RETRY`, `AUTUMN_WAKE_TIMEOUT_SECONDS`) take precedence. `wake_retry` defaults to `true`; `wake_timeout_seconds` defaults to `120`.
 
-**API Client:** RESTful client with TTL-based caching for metadata (projects, contexts, tags, user info). On wake-trigger responses, it can poll `/healthz/` with backoff and retry the original request.
+**API Client:** Talks only to AutumnWeb's `/api/v2/` (contract: `openapi-v2.yaml` in the AutumnWeb repo) and translates resources to the older dict shapes commands consume. TTL-based caching for metadata (projects, contexts, tags, user info). On wake-trigger responses, it can poll `/healthz/` with backoff and retry the original request. Searches pass `search`/`related`; `related_search_status()` reads the `X-Autumn-Related` header.
+
+**Shared options and resolution:** `utils/cli_options.py` provides the period (`-P`, with aliases like `w`/`2w`), `--since/--until` (natural dates via `utils/periods.parse_date_arg`) and `-q/--search` + `--related` options; reuse them rather than redefining filters. Resolve user-typed project names with `resolvers.resolve_project_name(client, name)` (alias, any case, or unique partial name; notes go to stderr); use `partial=False` where a guess would be risky (renames).
 
 **Command modules:** `commitments.py` owns recurring-goal commands; `import_cmd.py` imports export JSON or compressed exports; `meta.py` manages contexts and tags; and `projects.py` includes project metadata editing.
 
@@ -94,7 +96,7 @@ cli/
 | Note | -n | --note | |
 | Period | -P | --period | Uppercase to avoid conflict with -p |
 | Status | -S | --status | |
-| ID | -i | --id | Session ID |
+| ID | -i | --session-id | Session ID (positional `SESSION` also accepts `last`) |
 
 ## Style Guide (Rich Color Tags)
 
@@ -118,4 +120,4 @@ cli/
 
 - `cli/README.md` - Usage guide
 - `cli/STYLE_GUIDE.md` - Output formatting consistency
-- `cli/AutumnWeb API Docs.md` - Backend API reference
+- `cli/AutumnWeb API Docs.md` - Summary of the v2 API (authoritative: `AutumnWeb/openapi-v2.yaml`)

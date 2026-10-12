@@ -9,8 +9,12 @@ from typing import Optional
 
 from ..api_client import APIClient, APIError
 from ..config import get_config_value
-from ..utils.console import console
-from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+from ..utils.cli_options import date_range_options, search_options
+from ..utils.console import err_console
+from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_name
+
+# Status lines go to stderr so `--stdout` output stays pure JSON.
+console = err_console
 
 
 def _format_file_size(size_bytes: int) -> str:
@@ -97,10 +101,10 @@ def _generate_export_filename(project: Optional[str] = None) -> str:
 
 @click.command()
 @click.option("--project", "-p", help="Filter by project name")
-@click.option("--start-date", help="Start date (YYYY-MM-DD)")
-@click.option("--end-date", help="End date (YYYY-MM-DD)")
-@click.option("--context", "-c", help="Filter by context (ID only for export)")
-@click.option("--tag", "-t", multiple=True, help="Filter by tag ID (repeatable)")
+@date_range_options
+@click.option("--context", "-c", help="Filter by context (name or ID)")
+@click.option("--tag", "-t", multiple=True, help="Filter by tag (name or ID, repeatable)")
+@search_options("sessions")
 @click.option("--output", "-o", help="Output file path (overrides default directory)")
 @click.option("--dir", "-d", "export_dir", help="Output directory (default: ~/Downloads or config)")
 @click.option("--stdout", is_flag=True, help="Output to stdout instead of file")
@@ -117,6 +121,8 @@ def export(
     end_date: Optional[str],
     context: Optional[str],
     tag: tuple,
+    search: Optional[str],
+    related: bool,
     output: Optional[str],
     export_dir: Optional[str],
     stdout: bool,
@@ -129,17 +135,16 @@ def export(
     By default, exports to ~/Downloads with a timestamped filename.
     Use --stdout to print to terminal instead.
 
+    \b
     Examples:
-        autumn export                           # Export to Downloads folder
-        autumn export -p "My Project"           # Export filtered by project
-        autumn export -o backup.json            # Export to specific file
-        autumn export -d ~/backups              # Export to custom directory
-        autumn export --stdout                  # Print to terminal
-        autumn export --stdout | jq .sessions   # Pipe to jq
+      autumn export                           # Export to Downloads folder
+      autumn export -p "My Project"           # Export filtered by project
+      autumn export -c Work --since 2026-01-01
+      autumn export -o backup.json            # Export to specific file
+      autumn export -d ~/backups              # Export to custom directory
+      autumn export --stdout | jq .sessions   # Pipe to jq
 
     Configure default directory: autumn config set export.default_dir "~/backups"
-
-    Note: Context and tags must be specified by ID (not name) for export filtering.
     """
     try:
         client = APIClient()
@@ -152,30 +157,22 @@ def export(
                 resolved_project = picked
 
         if project and not resolved_project:
-            # Resolve project name
-            projects_meta = client.get_discovery_projects()
-            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-            if proj_res.warning:
-                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-            resolved_project = proj_res.value or project
+            resolved_project = resolve_project_name(client, project)
 
-        # Parse context as integer if provided
-        context_id = None
-        if context:
-            try:
-                context_id = int(context)
-            except ValueError:
-                console.print(f"[autumn.warn]Warning:[/] Context must be an integer ID for export. Got '{context}'")
-
-        # Parse tags as integers if provided
-        tag_ids = None
-        if tag:
-            tag_ids = []
-            for t in tag:
-                try:
-                    tag_ids.append(int(t))
-                except ValueError:
-                    console.print(f"[autumn.warn]Warning:[/] Tag must be an integer ID for export. Skipping '{t}'")
+        # Contexts and tags may be names, aliases or IDs.
+        context_value = None
+        tag_values = None
+        if context or tag:
+            meta = client.get_discovery_meta(ttl_seconds=300, refresh=False)
+            if context:
+                ctx_res = resolve_context_param(context=context, contexts=meta.get("contexts", []))
+                context_value = ctx_res.value
+            if tag:
+                tag_values, tag_warnings = resolve_tag_params(
+                    tags=list(tag), known_tags=meta.get("tags", [])
+                )
+                for warning in tag_warnings:
+                    console.print(f"[autumn.warn]Warning:[/] {warning}")
 
         if legacy and not stdout:
             console.print(
@@ -187,11 +184,12 @@ def export(
             project=resolved_project,
             start_date=start_date,
             end_date=end_date,
-            context=context_id,
-            tags=tag_ids,
+            context=context_value,
+            tags=tag_values or None,
             compress=compress,
             autumn_compatible=False,  # Standard format-1 when --legacy is used
             legacy=legacy,
+            **({"search": search, "related": related} if search else {}),
         )
 
         # Format output

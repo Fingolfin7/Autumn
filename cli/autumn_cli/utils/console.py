@@ -49,6 +49,14 @@ console = Console(
     width=200,
 )
 
+# Side notes (warnings, "using X for Y") go to stderr so they never corrupt
+# piped output such as `autumn export --stdout`.
+err_console = Console(
+    theme=THEME,
+    width=200,
+    stderr=True,
+)
+
 
 @dataclass(frozen=True)
 class StatusStyles:

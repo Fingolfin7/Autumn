@@ -10,12 +10,47 @@ from rich.table import Table
 from ..api_client import APIClient, APIError
 from ..utils.console import console
 from ..utils.duration_parse import parse_duration_to_seconds
-from ..utils.resolvers import resolve_project_param
+from ..utils.resolvers import resolve_project_name, resolve_project_param
 
 
 AGGREGATION_TYPES = ["project", "subproject", "context", "tag"]
 COMMITMENT_TYPES = ["time", "sessions"]
 PERIODS = ["daily", "weekly", "fortnightly", "monthly", "quarterly", "yearly"]
+PERIOD_ALIASES = {
+    "day": "daily",
+    "d": "daily",
+    "week": "weekly",
+    "w": "weekly",
+    "fortnight": "fortnightly",
+    "2w": "fortnightly",
+    "month": "monthly",
+    "m": "monthly",
+    "quarter": "quarterly",
+    "q": "quarterly",
+    "year": "yearly",
+    "y": "yearly",
+}
+
+
+class CommitmentPeriod(click.ParamType):
+    """A commitment period; accepts ``week`` as well as ``weekly``."""
+
+    name = "PERIOD"
+
+    def convert(self, value: Any, param: Optional[click.Parameter], ctx: Optional[click.Context]) -> str:
+        text = str(value).strip().lower()
+        text = PERIOD_ALIASES.get(text, text)
+        if text not in PERIODS:
+            self.fail(
+                f"'{value}' is not a period. Use day, week, fortnight, month, quarter or year.",
+                param,
+                ctx,
+            )
+        return text
+
+
+COMMITMENT_PERIOD = CommitmentPeriod()
+
 PERIOD_LABELS = {
     "daily": "day",
     "weekly": "week",
@@ -98,16 +133,24 @@ def _pending_note(pending_revision: Any) -> str:
 
 
 def _resolve_commitment_id(client: APIClient, target: str) -> int:
+    """Accept a commitment ID (``12`` or ``#12``) or its target's name."""
+    target = str(target).strip().lstrip("#")
     if target.isdigit():
         return int(target)
     items = client.list_commitments(active=None, compact=True).get("commitments", [])
+    # Target names resolve like project names: alias, any case, unique part.
+    names = [{"name": item.get("name")} for item in items if item.get("name")]
+    resolved = resolve_project_param(project=target, projects=names, partial=True)
+    name = resolved.value if resolved.warning is None else target
     matches = [
         item
         for item in items
-        if str(item.get("name") or "").casefold() == target.casefold()
+        if str(item.get("name") or "").casefold() == str(name).casefold()
     ]
     if not matches:
-        raise APIError(f"Commitment target not found: {target}")
+        raise APIError(
+            f"No commitment for '{target}'. See `autumn cmt list` for IDs and targets."
+        )
     if len(matches) > 1:
         raise APIError(
             f"Commitment target is ambiguous: {target}. Use the commitment ID."
@@ -116,11 +159,7 @@ def _resolve_commitment_id(client: APIClient, target: str) -> int:
 
 
 def _resolve_project(client: APIClient, name: str) -> str:
-    projects = client.get_discovery_projects().get("projects", [])
-    resolved = resolve_project_param(project=name, projects=projects)
-    if resolved.warning:
-        console.print(f"[autumn.warn]Warning:[/] {resolved.warning}")
-    return resolved.value or name
+    return resolve_project_name(client, name)
 
 
 def _new_payload(
@@ -264,12 +303,28 @@ def commitments_list(include_inactive: bool, json_out: bool, streak: bool) -> No
         raise click.Abort()
 
 
+def _commitment_type(commitment_type: Optional[str], count_sessions: bool) -> Optional[str]:
+    if count_sessions:
+        if commitment_type not in (None, "sessions"):
+            raise click.UsageError("--sessions conflicts with --commitment-type time.")
+        return "sessions"
+    return commitment_type
+
+
+def _goal(goal: Optional[str], target_value: Optional[str]) -> Optional[str]:
+    if goal is not None and target_value is not None and goal != target_value:
+        raise click.UsageError("Give the goal once: as GOAL or with --target-value.")
+    return goal if goal is not None else target_value
+
+
 @commitments.command("show")
-@click.argument("commitment_id", type=int)
-def commitments_show(commitment_id: int) -> None:
-    """Show full commitment details."""
+@click.argument("commitment")
+def commitments_show(commitment: str) -> None:
+    """Show full commitment details (by ID or target name)."""
     try:
-        result = APIClient().get_commitment(commitment_id)
+        client = APIClient()
+        commitment_id = _resolve_commitment_id(client, commitment)
+        result = client.get_commitment(commitment_id)
         item = result.get("commitment", {})
         ctype = item.get("commitment_type", "time")
         progress = item.get("progress", {})
@@ -308,19 +363,48 @@ def _commitment_options(required_target_value: bool):
         fn = click.option("--no-banking", flag_value=True, default=None, help="Disable balance banking")(fn)
         fn = click.option("--timezone", help="IANA timezone name")(fn)
         fn = click.option("--start-date", help="Start date (YYYY-MM-DD)")(fn)
-        fn = click.option("--period", type=click.Choice(PERIODS), default="weekly" if required_target_value else None, show_default=required_target_value)(fn)
-        fn = click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES), default="time" if required_target_value else None, show_default=required_target_value)(fn)
-        fn = click.option("--target-value", required=required_target_value, help="Goal duration (for time) or session count")(fn)
+        fn = click.option(
+            "--period", "-P", type=COMMITMENT_PERIOD,
+            default="weekly" if required_target_value else None,
+            show_default=required_target_value,
+            help="day, week, fortnight, month, quarter or year",
+        )(fn)
+        fn = click.option(
+            "--sessions", "count_sessions", is_flag=True,
+            help="Count sessions instead of time (same as --commitment-type sessions)",
+        )(fn)
+        fn = click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES), default=None)(fn)
+        fn = click.option("--target-value", help="Goal duration (for time) or session count; same as GOAL")(fn)
         return fn
     return decorate
 
 
 @commitments.command("new")
-@click.option("--type", "aggregation_type", type=click.Choice(AGGREGATION_TYPES), default="project", show_default=True)
+@click.option("--type", "aggregation_type", type=click.Choice(AGGREGATION_TYPES), default="project", show_default=True,
+              help="What TARGET names")
 @click.argument("target")
+@click.argument("goal", required=False)
 @_commitment_options(required_target_value=True)
-def commitments_new(aggregation_type: str, target: str, **options: Any) -> None:
-    """Create a commitment. Time values are stored as minutes."""
+def commitments_new(aggregation_type: str, target: str, goal: Optional[str], **options: Any) -> None:
+    """Create a recurring goal for TARGET of GOAL per period.
+
+    GOAL is a duration (5h, 90m) or, with --sessions, a session count.
+    Subproject targets are written "Project/Subproject".
+
+    \b
+    Examples:
+      autumn cmt new Autumn 5h                 # 5 hours a week
+      autumn cmt new Autumn 30m -P day
+      autumn cmt new Autumn 3 --sessions -P week
+      autumn cmt new Work 20h --type context
+      autumn cmt new "Autumn/Frontend" 2h --type subproject
+    """
+    options["target_value"] = _goal(goal, options.get("target_value"))
+    if options["target_value"] is None:
+        raise click.UsageError("Give a goal, e.g. `autumn cmt new Autumn 5h`.")
+    options["commitment_type"] = (
+        _commitment_type(options.get("commitment_type"), options.pop("count_sessions")) or "time"
+    )
     try:
         client = APIClient()
         data = _new_payload(client, aggregation_type=aggregation_type, target=target, editing=False, **options)
@@ -333,13 +417,20 @@ def commitments_new(aggregation_type: str, target: str, **options: Any) -> None:
 
 
 @commitments.command("edit")
-@click.argument("commitment_id", type=int)
+@click.argument("commitment")
 @_commitment_options(required_target_value=False)
-def commitments_edit(commitment_id: int, **options: Any) -> None:
-    """Patch selected commitment fields; target and aggregation cannot change."""
+def commitments_edit(commitment: str, **options: Any) -> None:
+    """Change a commitment's goal, period or balance limits.
+
+    COMMITMENT is an ID or target name. The target and aggregation cannot
+    change; use `restart` to change type mid-stream.
+    """
     try:
         client = APIClient()
-        requested_ctype = options.pop("commitment_type")
+        commitment_id = _resolve_commitment_id(client, commitment)
+        requested_ctype = _commitment_type(
+            options.pop("commitment_type"), options.pop("count_sessions")
+        )
         existing: dict[str, Any] = {}
         needs_existing = (
             requested_ctype is None
@@ -370,15 +461,17 @@ def commitments_edit(commitment_id: int, **options: Any) -> None:
 
 
 @commitments.command("delete")
-@click.argument("commitment_id", type=int)
-@click.option("--yes", "yes", is_flag=True, help="Skip confirmation prompt")
-def commitments_delete(commitment_id: int, yes: bool) -> None:
-    """Delete a commitment."""
+@click.argument("commitment")
+@click.option("--yes", "-y", "yes", is_flag=True, help="Skip confirmation prompt")
+def commitments_delete(commitment: str, yes: bool) -> None:
+    """Delete a commitment (by ID or target name)."""
     try:
+        client = APIClient()
+        commitment_id = _resolve_commitment_id(client, commitment)
         if not yes and not click.confirm(f"Delete commitment {commitment_id}?", default=False):
             console.print("[autumn.muted]Cancelled.[/]")
             return
-        APIClient().delete_commitment(commitment_id)
+        client.delete_commitment(commitment_id)
         console.print(f"[autumn.ok]Commitment deleted:[/] #[autumn.id]{commitment_id}[/]")
     except APIError as exc:
         console.print(f"[autumn.err]Error:[/] {exc}")
@@ -393,7 +486,7 @@ def commitments_delete(commitment_id: int, yes: bool) -> None:
 @click.option(
     "--reset-balance", is_flag=True, help="Reset the balance for the new generation"
 )
-@click.option("--period", type=click.Choice(PERIODS))
+@click.option("--period", "-P", type=COMMITMENT_PERIOD, help="day, week, fortnight, month, quarter or year")
 @click.option("--commitment-type", type=click.Choice(COMMITMENT_TYPES))
 @click.option(
     "--target-value",
@@ -465,12 +558,34 @@ def commitments_restart(
         raise click.Abort()
 
 
+def _adjust_amount(raw: str) -> int:
+    """Whole minutes from ``30``, ``-30``, ``1h30m`` or ``-45m``."""
+    text = str(raw).strip()
+    try:
+        return int(text)
+    except ValueError:
+        return _minutes_or_sessions(text, "time", "amount", allow_negative=True)
+
+
 @commitments.command("adjust")
 @click.argument("target")
-@click.option("--amount", type=int, required=True, help="Adjustment amount in minutes")
-@click.option("--reason", help="Reason for the adjustment")
-def commitments_adjust(target: str, amount: int, reason: Optional[str]) -> None:
-    """Apply a manual adjustment to a commitment balance."""
+@click.argument("amount_arg", metavar="[AMOUNT]", required=False)
+@click.option("--amount", help="Minutes or a duration; negative to remove (e.g. --amount -30m)")
+@click.option("--reason", "-r", help="Reason for the adjustment")
+def commitments_adjust(
+    target: str, amount_arg: Optional[str], amount: Optional[str], reason: Optional[str]
+) -> None:
+    """Add to (or with a negative amount, take from) a commitment's balance.
+
+    \b
+    Examples:
+      autumn cmt adjust Autumn 1h -r "Worked offline"
+      autumn cmt adjust 12 --amount -30m
+    """
+    raw_amount = _goal(amount_arg, amount)
+    if raw_amount is None:
+        raise click.UsageError("Give an amount, e.g. `autumn cmt adjust Autumn 1h`.")
+    amount = _adjust_amount(raw_amount)
     try:
         client = APIClient()
         commitment_id = _resolve_commitment_id(client, target)

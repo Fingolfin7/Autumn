@@ -28,7 +28,7 @@ from .config import (
 )
 from .api_client import APIClient, APIError
 from .errors import AutumnError
-from .commands.timer import start, stop, restart, delete, status as timer_status
+from .commands.timer import start, stop, restart, discard, status as timer_status
 from .commands.sessions import log, track, edit_session, delete_session
 from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
 from .commands.commitments import commitments
@@ -60,9 +60,13 @@ class AutumnGroup(click.Group):
         "p": "projects",
         "subs": "subprojects",
     }
+    # Old names kept working but not advertised.
+    legacy_aliases = {
+        "delete": "discard",
+    }
 
     command_sections = (
-        ("Timers", ("start", "stop", "status", "restart", "resume", "note")),
+        ("Timers", ("start", "stop", "status", "note", "restart", "resume", "discard")),
         ("Sessions", ("log", "track", "edit", "delete-session")),
         (
             "Projects",
@@ -78,18 +82,19 @@ class AutumnGroup(click.Group):
             ),
         ),
         ("Reminders", ("remind", "reminders", "notify")),
-        ("Data and reports", ("garden", "chart", "export", "import", "audit")),
+        ("Data and reports", ("garden", "chart", "export", "import")),
         ("Metadata", ("context", "tag", "alias", "meta")),
         ("Setup", ("auth", "config", "open")),
         (
             "Advanced operations",
-            ("merge", "merge-subs", "delete", "delete-project", "delete-sub"),
+            ("merge", "merge-subs", "delete-project", "delete-sub"),
         ),
     )
 
     def get_command(self, ctx: click.Context, cmd_name: str):
         """Resolve short aliases without advertising them as separate commands."""
-        return super().get_command(ctx, self.aliases.get(cmd_name, cmd_name))
+        cmd_name = self.aliases.get(cmd_name, cmd_name)
+        return super().get_command(ctx, self.legacy_aliases.get(cmd_name, cmd_name))
 
     def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter):
         """Show root commands in task-oriented sections instead of one long list."""
@@ -488,7 +493,7 @@ cli.add_command(start, name="start")
 cli.add_command(stop, name="stop")
 cli.add_command(timer_status, name="status")  # Timer status
 cli.add_command(restart, name="restart")
-cli.add_command(delete, name="delete")
+cli.add_command(discard, name="discard")
 cli.add_command(note, name="note")
 
 # Session commands

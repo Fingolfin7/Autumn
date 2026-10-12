@@ -224,7 +224,7 @@ def test_create_project_unknown_metadata_is_friendly(client, monkeypatch, kwargs
         lambda **unused: {"contexts": [], "tags": []},
     )
 
-    with pytest.raises(APIError, match=f"^{message}$"):
+    with pytest.raises(APIError, match=rf"^{message}\b"):
         client.create_project("New", **kwargs)
 
 

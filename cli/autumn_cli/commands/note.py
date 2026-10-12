@@ -51,7 +51,7 @@ def _compose_note(
 @click.command("note")
 @click.argument("text", nargs=-1, required=True)
 @click.option("--project", "-p", help="Update that project's newest active timer")
-@click.option("--session-id", "-s", type=int, help="Update a specific active timer")
+@click.option("--session-id", "-i", "-s", type=int, help="Update a specific active timer")
 @click.option("--replace", is_flag=True, help="Replace the note instead of appending")
 @click.option(
     "--stamp/--no-stamp",
@@ -73,6 +73,10 @@ def note(
     use_stamp = (not replace) if stamp is None else stamp
     try:
         client = APIClient()
+        if project and session_id is None:
+            from .timer import _running_project
+
+            project = _running_project(client, project)
         target = _get_target(client, session_id, project)
         target_id = int(target["id"])
         fragment = joined_text

@@ -2,6 +2,29 @@
 
 Command-line interface for AutumnWeb — time tracking and project management from your terminal.
 
+```bash
+autumn start web                  # "web" is enough to find AutumnWeb
+autumn note "Fixed the login race"
+autumn stop
+autumn track web 45m -n "Review"  # log time you forgot to time
+autumn log today
+autumn log -q "login" --related   # search notes, by text and by meaning
+```
+
+## Features
+
+- **Timers**: start, stop, restart, resume and discard, with server-side auto-stop (`--for 25m`) and desktop reminders.
+- **Forgiving input**: type any unique part of a project name, an alias, or any case; ambiguous names get "did you mean" suggestions instead of a guess.
+- **Natural dates and periods**: `autumn log yesterday`, `-P 2w`, `--since monday`, `--start 9am --on yesterday`.
+- **Logging after the fact**: `autumn track <project> 45m`, or any two of start, end and duration; `autumn edit last` fixes the latest session.
+- **Search**: one `-q` searches project names, subprojects and notes across logs, projects, charts and exports; `--related` adds matches by meaning (needs AI features on your account).
+- **Projects and metadata**: subprojects, contexts, tags, statuses, merges, aliases and per-subproject time splits.
+- **Commitments**: recurring time or session goals with streaks and balances (`autumn cmt new Autumn 5h`).
+- **Charts**: pie, bar, calendar, heatmap, wordcloud, treemap and more (`autumn chart heatmap`).
+- **Garden**: a seasonal terminal woodland grown from your project history (`autumn garden`).
+- **Data**: JSON export and import, filtered by project, context, tag, date or search.
+- **Cross-platform**: Windows, macOS and Linux, with native notifications and interactive `--pick` pickers.
+
 ## Installation
 
 ### Using pip
@@ -95,30 +118,33 @@ autumn
 | Area | Command | What it does | Common options |
 |---|---|---|---|
 | **Timers** | `autumn start <project>` | Start a timer (with optional server-side auto-stop) | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
-| | `autumn status` | Show active timers and auto-stop timing | `-p`, `-i` |
-| | `autumn stop` | Stop timer | `-p`, `-i`, `-n` |
-| | `autumn restart` | Reset start time to now | `-p`, `-i` |
+| | `autumn status [project]` | Show active timers and auto-stop timing | `-p`, `-i` |
+| | `autumn stop [project]` | Stop timer | `-p`, `-i`, `-n`, `--split` |
+| | `autumn note <text...>` (`n`) | Add to a running timer's note | `-p`, `-i`, `--replace` |
+| | `autumn restart [project]` | Reset start time to now | `-p`, `-i` |
+| | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
 | | `autumn resume` | Resume last project | `--stop-current` |
-| **Logs** | `autumn log` | List sessions (saved) | `-P month`, `-p`, `-x`, `-t`, `-c`, `--pick` |
-| | `autumn log search` | Advanced search | `--note-snippet`, `--start-date`, `-x` |
-| | `autumn track` | Manually log a session | `--start`, `--end`, `-n` |
-| **Projects** | `autumn projects` | List projects by status | `-S active`, `-c`, `-x`, `-t`, `-d`, `--search` |
+| **Logs** | `autumn log [period] [project]` (`ls`) | List sessions (saved) | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids` |
+| | `autumn log search` | Search with paging | `-q`, `--related`, `--newest`, `-n`, `--limit`, `--offset` |
+| | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-n` |
+| | `autumn edit [session]` | Edit a saved session (ID or `last`) | `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |
+| | `autumn delete-session [session]` | Delete a saved session | `-y` |
+| **Projects** | `autumn projects` (`p`) | List projects by status | `-S`, `-c`, `-x`, `-t`, `-d`, `-q`, `--related` |
 | | `autumn project` | Show or edit a project's metadata | `<name>`, `edit <name>` |
-| | `autumn subprojects` | List subprojects for a project | `<project>`, `-d`, `--search` |
-| | `autumn new` | Create project or subproject | `-s`, `-d`, `--context`, `--tags`, `--pick` |
+| | `autumn subprojects [project]` (`subs`) | List subprojects for a project | `-d`, `-q` |
+| | `autumn new` | Create project or subproject | `-s`, `-d`, `-c`, `-t`, `--pick` |
 | | `autumn mark` | Change project status | `<project> <status>`, `--pick` |
 | | `autumn rename` | Rename project or subproject | `<old> <new>`, `-p` for subprojects |
-| | `autumn totals` | Show project time breakdown | `<project>`, `--start-date`, `--end-date` |
+| | `autumn totals [project]` | Show project time breakdown | `-P`, `--since`, `--until`, `-c`, `-t` |
 | | `autumn merge` | Merge two projects | `<p1> <p2> --into <name>`, `-y` |
 | | `autumn merge-subs` | Merge two subprojects | `<project> <s1> <s2> --into`, `-y` |
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
-| **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `--stdout` |
+| **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `-c`, `-t`, `-q`, `--since`, `--stdout` |
 | | `autumn import <file>` | Import an export JSON or compressed export | `--force`, `--merge`, `--tolerance`, `-y` |
-| | `autumn audit` | Recompute project totals | `--dry-run` |
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |
-| **Charts** | `autumn chart` | Render charts | `--type`, `-P`, `--color-by-project` |
+| **Charts** | `autumn chart [type]` | Render charts | `-P`, `-p`, `-q`, `--related`, `--color-by-project`, `--save` |
 | **Garden** | `autumn garden` | Draw a seasonal woodland from saved project history | `--project`, `--at`, `--page`, `--all`, `--save` |
 | **Config** | `autumn config` | Edit settings | `show`, `set`, `open` |
 | **Auth** | `autumn auth accounts` | List saved accounts | — |
@@ -126,7 +152,7 @@ autumn
 | | `autumn alias` | Manage aliases | `add`, `list`, `remove` |
 | **Metadata** | `autumn context` | List and manage contexts | `list`, `new`, `rename`, `edit`, `delete` |
 | | `autumn tag` | List and manage tags | `list`, `new`, `rename`, `edit`, `delete` |
-| **Commitments** | `autumn commitments` (`cmt`) | Track recurring goals | `list`, `show`, `new`, `edit`, `delete` |
+| **Commitments** | `autumn commitments` (`cmt`) | Track recurring goals | `list`, `show`, `new`, `edit`, `restart`, `adjust`, `delete` |
 | **Meta** | `autumn meta refresh` | Clear cached metadata | — |
 
 ## Usage
@@ -156,13 +182,13 @@ autumn start "Coding" --remind-every 1h --remind-message "Stand up and stretch!"
 Set reminders independent of timers:
 ```bash
 # Relative time
-autumn remind in 15m --message "Check the oven"
+autumn remind in 15m Check the oven
 
 # Absolute time
-autumn remind at 5pm --message "Team Meeting"
+autumn remind at 5pm Team meeting
 
 # Periodic
-autumn remind every 30m --message "Drink water"
+autumn remind every 30m Drink water
 
 # Attach to an existing session
 autumn remind session 123 --every 20m --message "Review progress"
@@ -182,18 +208,44 @@ View activity for the current week (default):
 autumn log
 ```
 
-Filter by period, project, or tags:
+Give a period and project as bare words, or use flags:
 ```bash
-autumn log -P month -p "AutumnWeb" -t "Feature"
+autumn log today
+autumn log AutumnWeb month
+autumn log -P 2w -p web -t Feature
+autumn log --since monday --until yesterday
 ```
+
+Periods are `today`, `yesterday`, `week`, `fortnight`, `month`, `quarter`, `year` and `all` (shorthands `d`, `w`, `2w`, `m`, `q`, `y`). `--since`/`--until` accept `2026-01-05`, `yesterday`, a weekday, `3d ago` or `-2w`.
 
 Exclude one or more projects from logs:
 ```bash
 autumn log -P month -x "Admin" -x "Meta"
-autumn log search --start-date 2026-01-01 --exclude "Admin"
+autumn log search --since 2026-01-01 --exclude "Admin"
 ```
 
 *Note: Short flag `-P` is for **Period**, and `-p` is for **Project**.*
+
+**Search** project names, subproject names and session notes (all time unless you give a period). `--related` also lists sessions that match by meaning; it needs AI features and an OpenAI key on your AutumnWeb account.
+```bash
+autumn log -q "auth"
+autumn log -q "auth" --related
+autumn log search -q deploy --newest --limit 20
+```
+
+**Log time after the fact** with any two of a start, an end and a duration (a duration alone ends now):
+```bash
+autumn track AutumnWeb 45m -n "Code review"
+autumn track AutumnWeb 2h --start 14:00
+autumn track AutumnWeb --on yesterday --start 9am --end 5pm
+```
+
+**Fix or remove saved sessions** by ID, `last`, or from a picker of recent sessions (`autumn log --ids` shows IDs):
+```bash
+autumn edit last -a "Also fixed the tests"
+autumn edit 123 --start 9:30 --for 1h
+autumn delete-session last
+```
 
 ### Projects & Subprojects
 
@@ -214,7 +266,7 @@ autumn subs "AutumnWeb"        # Alias
 Create a new project or subproject:
 ```bash
 autumn new "My Project" -d "Project description"
-autumn new "My Project" --context Work --tags "Important,Client"
+autumn new "My Project" -c Work -t Important -t Client
 autumn new "My Project" -s "Backend" -d "Backend services"  # Create subproject
 autumn new --pick -s "New Feature"  # Interactive project selection
 ```
@@ -239,7 +291,8 @@ autumn rename "OldSub" "NewSub" -p "Parent Project"  # Rename subproject
 **View project time totals:**
 ```bash
 autumn totals "My Project"
-autumn totals "My Project" --start-date 2026-01-01
+autumn totals "My Project" -P month
+autumn totals "My Project" --since 2026-01-01
 ```
 
 **View single project details:**
@@ -262,10 +315,11 @@ Use either `--tags` to replace the complete tag list, or `--add-tag` / `--remove
 
 **Search projects and subprojects:**
 ```bash
-autumn projects --search "web"              # Search by name
-autumn projects --search "api" -S all       # Search across all statuses
-autumn projects --search "api" -x "Admin"   # Search while excluding projects
-autumn subprojects "My Project" --search "frontend"
+autumn projects -q "web"                    # Searches every status
+autumn projects -q "api" -S active          # Only active projects
+autumn projects -q "garden" --related       # Also projects related by meaning
+autumn projects -q "api" -x "Admin"         # Search while excluding projects
+autumn subprojects "My Project" -q "frontend"
 ```
 
 **Merge projects:**
@@ -298,6 +352,8 @@ By default, exports save to `~/Downloads` with a timestamped filename.
 ```bash
 autumn export                              # Export to ~/Downloads/autumn_export_20260129_143052.json
 autumn export -p "My Project"              # Filter by project
+autumn export -c Work -t Client --since 2026-01-01  # Context, tag and date
+autumn export -q "thesis"                  # Only sessions matching a search
 autumn export -o backup.json               # Export to specific file
 autumn export -d ~/backups                 # Export to custom directory
 autumn export --stdout                     # Print to terminal (for piping)
@@ -321,16 +377,6 @@ Configure a custom default directory:
 autumn config set export.default_dir "~/backups"
 ```
 
-**Audit/recompute totals:**
-```bash
-autumn audit
-autumn audit --dry-run
-```
-
-This recalculates all project and subproject totals from session data. Useful after imports or if totals seem incorrect.
-
-`--dry-run` previews what would change without saving anything. When the backend reports changed rows, the CLI prints the affected projects and subprojects with `before -> after` totals and the delta.
-
 ### Interactive Selection
 
 Many commands support `--pick` for interactive fuzzy-search selection:
@@ -345,15 +391,20 @@ The picker shows recent projects first and supports typing to filter the list.
 
 ### Charts & Visualization
 
-Autumn supports various chart types: `pie`, `bar`, `scatter`, `calendar`, `wordcloud`, `heatmap`.
+Chart types include `pie`, `bar`, `scatter`, `line`, `area`, `cumulative`, `calendar`, `heatmap`, `wordcloud`, `treemap`, `sunburst`, `histogram`, `radar` and `bubble`. Charts need the plotting extra: `pip install -e "./cli[charts]"`.
 
 ```bash
-# Calendar heatmap colored by project
-autumn chart --type calendar --color-by-project
+# Calendar colored by project
+autumn chart calendar --color-by-project
 
 # Weekly bar chart for a specific context
-autumn chart --type bar -P week --context Work
+autumn chart bar -P week -c Work
+
+# Only sessions matching a search
+autumn chart pie -q "client" -P month
 ```
+
+`autumn chart heatmap` shows the same numbers as the web chart: sessions are split across each clock hour they span, and each cell is the average share of that hour spent working.
 
 ### Contexts & Tags
 
@@ -381,15 +432,17 @@ Commitments track recurring time or session goals for a project, subproject, con
 
 ```bash
 autumn commitments --all --streak
-autumn commitments show 12
-autumn commitments new "AutumnWeb" --target-value 5h --period weekly
-autumn cmt new "AutumnWeb/Backend" --type subproject --target-value 10 --commitment-type sessions --period monthly
-autumn commitments new Work --type context --target-value 8h --include "Client Project"
-autumn commitments edit 12 --target-value 6h --no-banking --max-balance 2h
-autumn commitments delete 12
+autumn cmt new AutumnWeb 5h                       # 5 hours a week
+autumn cmt new AutumnWeb 3 --sessions -P day      # 3 sessions a day
+autumn cmt new "AutumnWeb/Backend" 10h --type subproject -P month
+autumn cmt new Work 8h --type context --include "Client Project"
+autumn cmt show AutumnWeb                         # by target name or ID
+autumn cmt edit AutumnWeb --target-value 6h --no-banking --max-balance 2h
+autumn cmt adjust AutumnWeb 1h -r "offline work"
+autumn cmt delete AutumnWeb
 ```
 
-Time commitments accept duration values such as `5h` for `--target-value`, `--min-balance`, and `--max-balance`; session commitments use whole session counts. `--include` and `--exclude` apply only to context or tag commitments. Use `--json` for raw list output, and `--start-date` to set a commitment's `YYYY-MM-DD` start date.
+Commitments are addressed by ID or target name (a unique partial name works). Time commitments accept duration values such as `5h` for the goal, `--min-balance`, and `--max-balance`; session commitments use whole session counts. `--include` and `--exclude` apply only to context or tag commitments. Use `--json` for raw list output, and `--start-date` to set a commitment's `YYYY-MM-DD` start date.
 
 ## Configuration
 
@@ -446,25 +499,8 @@ autumn start cli -s fe     # Subproject alias resolves within project scope
 
 Subproject aliases are **project-scoped** — the alias `fe` can map to different subprojects in different projects.
 
-## Features
-
-- ✅ **Full Timer Lifecycle**: Start, stop, restart, resume, and delete.
-- ✅ **Pomodoro Support**: Auto-stop timers and timed reminders.
-- ✅ **Project Management**: Create, rename, mark status, merge, and delete projects/subprojects.
-- ✅ **Search & Discovery**: Search projects and subprojects by name, view detailed project info.
-- ✅ **Interactive Pickers**: Fuzzy-search selection with `--pick` flag.
-- ✅ **Data Export**: Export sessions and projects to JSON with filtering.
-- ✅ **Background Reminders**: NLP-powered reminders (`at`, `every`, `in`).
-- ✅ **Rich Visualization**: Beautiful Matplotlib/Seaborn charts.
-- ✅ **Metadata Aware**: Context and Tag filtering across all commands.
-- ✅ **Cross-Platform Notifications**: Native toasts on Windows, macOS, and Linux.
-- ✅ **Smart Greetings**: Dynamic, personalized messages based on time and activity.
-- ✅ **Case-Insensitive Input**: Project/subproject names resolve regardless of case.
-- ✅ **Powerful Aliases**: Dedicated alias commands with project-scoped subproject aliases.
-
 ## Troubleshooting
 
 - **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, Autumn uses `terminal-notifier`; if it is missing, the CLI will explicitly try `brew install terminal-notifier` on first use.
 - **SSL Errors?** If using a self-signed cert, set `autumn config set tls.insecure true`.
 - **Outdated Data?** Run `autumn meta refresh` to sync projects, tags, and contexts.
-- **Incorrect Totals?** Run `autumn audit` to recompute all project/subproject totals from session data.

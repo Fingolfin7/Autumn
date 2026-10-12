@@ -12,12 +12,26 @@ from ..utils.notify import send_notification
 
 
 @click.command("notify")
+@click.argument("message_words", metavar="[MESSAGE]...", nargs=-1)
 @click.option("--title", default="Autumn", show_default=True, help="Notification title")
-@click.option("--message", required=True, help="Notification message")
+@click.option("--message", help="Notification message (or give it as words)")
 @click.option("--subtitle", help="Notification subtitle (macOS only)")
 @click.option("--quiet", is_flag=True, help="Don't print anything; just exit 0/1")
-def notify_cmd(title: str, message: str, subtitle: str | None, quiet: bool) -> None:
-    """Send a desktop notification (best-effort, cross-platform)."""
+def notify_cmd(
+    message_words: tuple, title: str, message: str | None, subtitle: str | None, quiet: bool
+) -> None:
+    """Send a desktop notification (best-effort, cross-platform).
+
+    \b
+    Example:
+      autumn notify "Build finished"
+    """
+    joined = " ".join(message_words).strip()
+    if joined and message and joined != message:
+        raise click.UsageError("Give the message once: as words or with --message.")
+    message = joined or message
+    if not message:
+        raise click.UsageError("Give a message, e.g. `autumn notify \"Build finished\"`.")
 
     res = send_notification(title=title, message=message, subtitle=subtitle)
 

@@ -138,10 +138,12 @@ def _parse_base(base_str: str, *, now: datetime) -> datetime:
             hour=0, minute=0, second=0, microsecond=0
         )
 
-    # tomorrow <time>
-    if lower.startswith("tomorrow "):
-        time_part = lower[9:].strip()
-        dt = now + timedelta(days=1)
+    # today/yesterday/tomorrow <time>
+    day_offsets = {"today": 0, "yesterday": -1, "tomorrow": 1}
+    day_word, _, time_part = lower.partition(" ")
+    if day_word in day_offsets and time_part.strip():
+        time_part = time_part.replace(" ", "")
+        dt = now + timedelta(days=day_offsets[day_word])
         # Use same time-only formats
         time_only_formats = ["%H:%M:%S", "%H:%M", "%I:%M%p", "%I%p"]
         parsed_time = None

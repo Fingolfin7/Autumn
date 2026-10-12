@@ -803,57 +803,33 @@ def render_calendar_chart(
 
 
 def render_heatmap(
-    sessions: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
+    cells: List[Dict], title: Optional[str] = None, save_path: Optional[str] = None
 ):
-    """Render a calendar heatmap showing activity by day of week and hour."""
-    if not sessions:
+    """Render activity by day of week and hour from server-aggregated cells.
+
+    Each cell is ``{"weekday", "hour", "average_hours"}`` with Sunday as
+    weekday 0, as returned by ``/api/v2/reports/charts/?aggregate=true``.
+    Sessions are split across every clock hour they span, so the colour is
+    the average share of that hour spent working.
+    """
+    if not cells:
         print("No data to display.")
         return
 
-    # Parse session data and aggregate by day of week and hour
-    activity_data = {}
-
-    for s in sessions:
-        # Handle both compact and full formats
-        start_time_str = s.get("start_time") or s.get("start", "")
-        if not start_time_str:
-            continue
-
-        try:
-            # Convert UTC time to local timezone
-            start_time = parse_utc_to_local(start_time_str)
-            if not start_time:
-                continue
-
-            day_of_week = start_time.weekday()  # 0 = Monday, 6 = Sunday
-            hour = start_time.hour
-
-            # Get duration in minutes
-            duration_minutes = (
-                s.get("duration_minutes") or s.get("duration") or s.get("dur", 0)
-            )
-            if duration_minutes is None:
-                duration_minutes = 0
-
-            key = (day_of_week, hour)
-            activity_data[key] = activity_data.get(key, 0) + duration_minutes
-        except (ValueError, AttributeError):
-            # Skip invalid sessions
-            continue
-
-    # Create matrix for heatmap
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     hours = list(range(24))
+    matrix = [[0.0] * 24 for _ in range(7)]
+    for cell in cells:
+        try:
+            weekday = int(cell["weekday"])
+            hour = int(cell["hour"])
+            value = float(cell.get("average_hours") or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0 <= weekday <= 6 and 0 <= hour <= 23:
+            # Server weekdays are Sunday-first; rows here are Monday-first.
+            matrix[(weekday - 1) % 7][hour] = value
 
-    matrix = []
-    for day in range(7):
-        row = []
-        for hour in hours:
-            minutes = activity_data.get((day, hour), 0)
-            row.append(minutes / 60.0)  # Convert to hours
-        matrix.append(row)
-
-    # Create heatmap
     fig, ax = plt.subplots(figsize=(14, 6))
 
     sns.heatmap(
@@ -862,8 +838,8 @@ def render_heatmap(
         yticklabels=days,
         cmap="YlOrRd",
         annot=False,
-        fmt=".1f",
-        cbar_kws={"label": "Hours"},
+        fmt=".2f",
+        cbar_kws={"label": "Average hours per active hour"},
         ax=ax,
     )
 

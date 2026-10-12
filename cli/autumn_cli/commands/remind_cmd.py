@@ -1,7 +1,7 @@
 """Timed reminders via desktop notifications.
 
 This command is intentionally straightforward:
-- `autumn remind in 25m --message "..."`
+- `autumn remind in 25m stretch your legs`
 
 It runs in-process (sleep) so it's cross-platform.
 """
@@ -20,27 +20,52 @@ from ..utils.reminder_spawner import spawn_reminder
 from ..api_client import APIClient
 
 
+DEFAULT_MESSAGE = "Time's up."
+
+
+def _message(words: tuple, message: str | None) -> str:
+    """MESSAGE words and --message are interchangeable; words win if both."""
+    joined = " ".join(words).strip()
+    if joined and message and joined != message:
+        raise click.UsageError("Give the message once: as words or with --message.")
+    return joined or message or DEFAULT_MESSAGE
+
+
+def _message_argument(fn):
+    return click.argument("message_words", metavar="[MESSAGE]...", nargs=-1)(fn)
+
+
 @click.group("remind")
 def remind() -> None:
-    """Timed reminders (desktop notifications)."""
+    """Timed reminders (desktop notifications).
+
+    \b
+    Examples:
+      autumn remind in 25m stretch your legs
+      autumn remind at 5pm "Wrap up for the day"
+      autumn remind every 45m drink water
+    """
 
 
 @remind.command("in")
 @click.argument("duration")
+@_message_argument
 @click.option("--title", default="Autumn", show_default=True, help="Notification title")
-@click.option("--message", required=True, help="Notification message")
+@click.option("--message", help="Notification message (or give it as words)")
 @click.option("--subtitle", help="Notification subtitle (macOS only)")
 @click.option("--quiet", is_flag=True, help="Don't print anything; just exit 0/1")
 @click.option("--background", is_flag=True, help="Run in background (non-blocking)")
 def remind_in(
     duration: str,
+    message_words: tuple,
     title: str,
-    message: str,
+    message: str | None,
     subtitle: str | None,
     quiet: bool,
     background: bool,
 ) -> None:
     """Send a notification after a duration (e.g. 25m, 1h30m)."""
+    message = _message(message_words, message)
 
     if background:
         spawn_reminder(
@@ -88,13 +113,15 @@ def remind_in(
 
 @remind.command("every")
 @click.argument("duration")
+@_message_argument
 @click.option("--title", default="Autumn", show_default=True, help="Notification title")
-@click.option("--message", required=True, help="Notification message")
-def remind_every(duration: str, title: str, message: str) -> None:
+@click.option("--message", help="Notification message (or give it as words)")
+def remind_every(duration: str, message_words: tuple, title: str, message: str | None) -> None:
     """Send periodic notifications every duration (e.g. 20m).
 
-    This always runs in the background.
+    This always runs in the background; stop it with `autumn reminders stop`.
     """
+    message = _message(message_words, message)
     spawn_reminder(
         project=f"Recurring: {message}",
         remind_every=duration,
@@ -105,8 +132,9 @@ def remind_every(duration: str, title: str, message: str) -> None:
 
 @remind.command("at")
 @click.argument("time")
+@_message_argument
 @click.option("--title", default="Autumn", show_default=True, help="Notification title")
-@click.option("--message", required=True, help="Notification message")
+@click.option("--message", help="Notification message (or give it as words)")
 @click.option(
     "--background",
     is_flag=True,
@@ -114,9 +142,13 @@ def remind_every(duration: str, title: str, message: str) -> None:
     show_default=True,
     help="Run in background",
 )
-def remind_at(time: str, title: str, message: str, background: bool) -> None:
+def remind_at(
+    time: str, message_words: tuple, title: str, message: str | None, background: bool
+) -> None:
     """Send a notification at a specific time (e.g. 14:30, 5pm)."""
     from datetime import datetime
+
+    message = _message(message_words, message)
 
     try:
         now = datetime.now()

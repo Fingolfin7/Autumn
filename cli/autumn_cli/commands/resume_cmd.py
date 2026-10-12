@@ -16,6 +16,7 @@ from ..utils.console import console
 )
 @click.option(
     "--with-subprojects/--no-with-subprojects",
+    "-s",
     default=False,
     help="Also resume the last session's subprojects (if any).",
 )
@@ -33,11 +34,11 @@ def resume(stop_current: bool, with_subprojects: bool) -> None:
                 )
             client.stop_timer()
 
-        # Find the most recent completed session in a one-week window.
-        result = client.log_activity(period="week")
-        logs = result.get("logs", [])
+        # The most recent completed session, however long ago it was.
+        result = client.search_sessions(limit=1, ordering="newest")
+        logs = result.get("sessions", [])
         if not logs:
-            raise APIError("No recent sessions found to resume.")
+            raise APIError("No saved sessions found to resume.")
 
         s0 = logs[0]
         project = s0.get("p") or s0.get("project")

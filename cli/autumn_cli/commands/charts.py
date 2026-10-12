@@ -4,7 +4,8 @@ import click
 from typing import Optional
 from pathlib import Path
 from ..api_client import APIClient, APIError
-from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+from ..utils.cli_options import date_range_options, period_option, search_options
+from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_name
 
 
 # All available chart types
@@ -39,30 +40,27 @@ CHART_DEPENDENCY_MODULES = {
 
 
 @click.command()
+@click.argument(
+    "chart_type",
+    metavar="[TYPE]",
+    required=False,
+    type=click.Choice(CHART_TYPES, case_sensitive=False),
+)
 @click.option(
     "--type",
     "-T",
     type=click.Choice(CHART_TYPES, case_sensitive=False),
-    default="pie",
-    help="Chart type (default: pie)",
+    default=None,
+    help="Chart type, same as TYPE (default: pie)",
 )
 @click.option(
     "--project", "-p", help="Project name (shows subprojects if specified for pie/bar)"
 )
 @click.option("--context", "-c", help="Filter by context (name or id)")
 @click.option("--tag", "-t", multiple=True, help="Filter by tag (repeatable)")
-@click.option(
-    "--period",
-    "-P",
-    type=click.Choice(
-        ["day", "week", "fortnight", "month", "lunar cycle", "quarter", "year", "all"],
-        case_sensitive=False,
-    ),
-    default=None,
-    help="Time period (same options as 'log')",
-)
-@click.option("--start-date", help="Start date (YYYY-MM-DD)")
-@click.option("--end-date", help="End date (YYYY-MM-DD)")
+@period_option(help_suffix=" (default: all time)")
+@date_range_options
+@search_options("sessions")
 @click.option(
     "--save", type=click.Path(), help="Save chart to file instead of displaying"
 )
@@ -77,18 +75,29 @@ CHART_DEPENDENCY_MODULES = {
     help="Interactively pick project/context/tags if not provided",
 )
 def chart(
-    type: str,
+    chart_type: Optional[str],
+    type: Optional[str],
     project: Optional[str],
     context: Optional[str],
     tag: tuple,
     period: Optional[str],
     start_date: Optional[str],
     end_date: Optional[str],
+    search: Optional[str],
+    related: bool,
     save: Optional[str],
     color_by_project: bool,
     pick: bool,
 ):
     """Render charts visualizing your tracked time.
+
+    \b
+    Examples:
+      autumn chart                       # pie of all projects
+      autumn chart bar -P month
+      autumn chart heatmap --since 2026-01-01
+      autumn chart pie -p Autumn         # subprojects of one project
+      autumn chart wordcloud -q "garden" --related
 
     \b
     Chart types:
@@ -109,6 +118,9 @@ def chart(
       radar      - Spider chart comparing top projects
       bubble     - Tag bubble chart (projects vs hours vs avg time)
     """
+    if chart_type and type and chart_type.lower() != type.lower():
+        raise click.UsageError("Give the chart type once: as TYPE or with -T.")
+
     # The plotting stack is intentionally imported only when this command runs.
     # Importing it at module load time made every Autumn command pay the startup
     # cost of matplotlib, seaborn, pandas, numpy, Pillow, and wordcloud.
@@ -140,7 +152,8 @@ def chart(
             'directory, run: python -m pip install -e ".[charts]"'
         ) from None
 
-    type = type.lower()  # Normalize case
+    type = (chart_type or type or "pie").lower()  # Normalize case
+    search_kwargs = {"search": search, "related": related} if search else {}
 
     # Derive start/end from period if not explicitly supplied
     if (not start_date or not end_date) and period and period.lower() != "all":
@@ -191,14 +204,8 @@ def chart(
         resolved_context = ctx_res.value
         resolved_tags = tag_resolved or None
 
-        # Resolve project name (case-insensitive + alias support)
-        resolved_project = project
-        if project:
-            projects_meta = client.get_discovery_projects()
-            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-            if proj_res.warning:
-                click.echo(f"Warning: {proj_res.warning}", err=True)
-            resolved_project = proj_res.value or project
+        # Resolve project name (case-insensitive, alias or unique partial name)
+        resolved_project = resolve_project_name(client, project) if project else None
 
         # ===== PIE / BAR charts =====
         if type in ("pie", "bar"):
@@ -209,6 +216,7 @@ def chart(
                     end_date,
                     context=resolved_context,
                     tags=resolved_tags,
+                    **search_kwargs,
                 )
                 title = (
                     f"Time Distribution: {resolved_project} (Subprojects)"
@@ -222,6 +230,7 @@ def chart(
                     end_date=end_date,
                     context=resolved_context,
                     tags=resolved_tags,
+                    **search_kwargs,
                 )
                 title = (
                     "Time Distribution: All Projects"
@@ -234,14 +243,30 @@ def chart(
             else:
                 render_bar_chart(data, title=title, save_path=save_path)
 
+        # ===== Heatmap (aggregated by the server) =====
+        elif type == "heatmap":
+            cells = client.get_heatmap_cells(
+                project=resolved_project,
+                start_date=start_date,
+                end_date=end_date,
+                context=resolved_context,
+                tags=resolved_tags,
+                **search_kwargs,
+            )
+            title = "Activity Heatmap"
+            if resolved_project:
+                title += f" - {resolved_project}"
+            render_heatmap(cells, title=title, save_path=save_path)
+
         # ===== Session-based charts =====
-        elif type in ("scatter", "line", "area", "cumulative", "calendar", "heatmap", "wordcloud", "histogram"):
+        elif type in ("scatter", "line", "area", "cumulative", "calendar", "wordcloud", "histogram"):
             sessions = client.list_sessions(
                 project_name=resolved_project,
                 start_date=start_date,
                 end_date=end_date,
                 context=resolved_context,
                 tags=resolved_tags,
+                **search_kwargs,
             )
 
             if type == "scatter":
@@ -281,12 +306,6 @@ def chart(
                     color_by_project=color_by_project,
                 )
 
-            elif type == "heatmap":
-                title = "Activity Heatmap"
-                if resolved_project:
-                    title += f" - {resolved_project}"
-                render_heatmap(sessions, title=title, save_path=save_path)
-
             elif type == "wordcloud":
                 title = "Session Notes Wordcloud"
                 if resolved_project:
@@ -304,6 +323,7 @@ def chart(
             hierarchy_data = client.get_hierarchy(
                 start_date=start_date,
                 end_date=end_date,
+                **search_kwargs,
             )
 
             if type == "treemap":
@@ -316,7 +336,7 @@ def chart(
 
         # ===== Status chart =====
         elif type == "status":
-            status_data = client.tally_by_status(context=resolved_context)
+            status_data = client.tally_by_status(context=resolved_context, **search_kwargs)
             title = "Time by Project Status"
             render_status_chart(status_data, title=title, save_path=save_path)
 
@@ -325,6 +345,7 @@ def chart(
             context_data = client.tally_by_context(
                 start_date=start_date,
                 end_date=end_date,
+                **search_kwargs,
             )
             title = "Time by Context"
             render_context_chart(context_data, title=title, save_path=save_path)
@@ -340,9 +361,16 @@ def chart(
 
         # ===== Tag bubble chart =====
         elif type == "bubble":
-            tag_data = client.tally_by_tags()
+            tag_data = client.tally_by_tags(**search_kwargs)
             title = "Tags Overview"
             render_tag_bubble_chart(tag_data, title=title, save_path=save_path)
+
+        if search and related and client.related_search_status() == "unavailable":
+            click.echo(
+                "Note: related matches were unavailable (they need AI features "
+                "and an OpenAI key on your account).",
+                err=True,
+            )
 
     except APIError as e:
         click.echo(f"Error: {e}", err=True)

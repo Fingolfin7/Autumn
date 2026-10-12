@@ -8,22 +8,27 @@ from ..utils.console import console
 from ..utils.projects_cache import clear_cached_projects
 from ..utils.meta_cache import clear_cached_snapshot
 
-from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_param
+from ..utils.cli_options import date_range_options, period_option
+from ..utils.resolvers import (
+    resolve_context_param,
+    resolve_project_name,
+    resolve_project_param,
+    resolve_tag_params,
+)
 
 
 def _resolve_excluded_projects(client: APIClient, exclude: tuple) -> Optional[list[str]]:
     if not exclude:
         return None
+    return [resolve_project_name(client, project) for project in exclude]
 
-    projects_meta = client.get_discovery_projects()
-    known_projects = projects_meta.get("projects", [])
-    resolved = []
-    for project in exclude:
-        proj_res = resolve_project_param(project=project, projects=known_projects)
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved.append(proj_res.value or project)
-    return resolved
+
+def _split_tags(values) -> list[str]:
+    """Accept repeated and comma-separated tags: -t a -t b or -t a,b."""
+    tags: list[str] = []
+    for value in values or ():
+        tags.extend(tag.strip() for tag in str(value).split(",") if tag.strip())
+    return tags
 
 
 @click.command()
@@ -31,22 +36,29 @@ def _resolve_excluded_projects(client: APIClient, exclude: tuple) -> Optional[li
     "--status",
     "-S",
     type=click.Choice(["all", "active", "paused", "complete", "archived"]),
-    default="active",
-    show_default=True,
-    help="Filter by status (use `all` to show every type)",
+    default=None,
+    help="Filter by status (default: active, or all when searching)",
 )
 @click.option("--context", "-c", help="Filter by context name")
 @click.option("--exclude", "-x", multiple=True, help="Exclude project by name (repeatable)")
 @click.option(
     "--tag", "-t", multiple=True, help="Filter by tag (can be used multiple times)"
 )
-@click.option("--start-date", help="Start date (YYYY-MM-DD)")
-@click.option("--end-date", help="End date (YYYY-MM-DD)")
+@date_range_options
 @click.option(
     "--pick", is_flag=True, help="Interactively pick context/tags if not provided"
 )
 @click.option("--desc", "-d", is_flag=True, help="Show project descriptions")
-@click.option("--search", "-q", help="Search projects by name")
+@click.option(
+    "--search",
+    "-q",
+    help="Search project names, subprojects, descriptions and session notes",
+)
+@click.option(
+    "--related",
+    is_flag=True,
+    help="With --search, also include projects that match by meaning",
+)
 def projects_list(
     status: Optional[str],
     context: Optional[str],
@@ -57,9 +69,18 @@ def projects_list(
     pick: bool,
     desc: bool,
     search: Optional[str],
+    related: bool,
 ):
-    """List projects grouped by status."""
+    """List projects grouped by status (default: active).
 
+    \b
+    Examples:
+      autumn projects -S all
+      autumn projects -c Work -t client
+      autumn projects -q "garden" --related
+    """
+
+    status = status or ("all" if search else "active")
     try:
         client = APIClient()
         excluded_projects = _resolve_excluded_projects(client, exclude)
@@ -68,20 +89,29 @@ def projects_list(
         if search:
             # When searching, status filter is optional (pass None for "all")
             search_status = None if status == "all" else status
+            related_kwargs = {"related": True} if related else {}
             if excluded_projects:
                 result = client.list_projects_flat(
                     status=search_status,
                     search=search,
                     exclude=excluded_projects,
                     compact=False,
+                    **related_kwargs,
                 )
             else:
-                result = client.search_projects(search, status=search_status)
+                result = client.search_projects(
+                    search, status=search_status, **related_kwargs
+                )
             if isinstance(result, list):
                 projects = result
             else:
                 projects = result.get("projects", [])
 
+            if related and client.related_search_status() == "unavailable":
+                console.print(
+                    "[autumn.muted]Related matches were unavailable (they need AI "
+                    "features and an OpenAI key on your account).[/]"
+                )
             if not projects:
                 console.print(f"[dim]No projects found matching '{search}'.[/]")
                 return
@@ -165,21 +195,23 @@ def projects_list(
 
 
 @click.command()
-@click.argument("project")
+@click.argument("project", required=False)
 @click.option("--desc", "-d", is_flag=True, help="Show subproject descriptions")
 @click.option("--search", "-q", help="Search subprojects by name")
-def subprojects(project: str, desc: bool, search: Optional[str]):
-    """List subprojects for a given project."""
+def subprojects(project: Optional[str], desc: bool, search: Optional[str]):
+    """List a project's subprojects (pick the project if omitted)."""
 
     try:
         client = APIClient()
+        if not project:
+            from ..utils.pickers import pick_project
 
-        # Resolve project name (case-insensitive + alias support)
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+            project = pick_project(client)
+            if not project:
+                console.print("[autumn.warn]No project selected.[/]")
+                raise click.Abort()
+
+        resolved_project = resolve_project_name(client, project)
 
         # If search is provided, use the search endpoint
         if search:
@@ -239,14 +271,19 @@ def subprojects(project: str, desc: bool, search: Optional[str]):
 @click.argument("project")
 @click.option("--subproject", "-s", help="Create a subproject instead (requires existing project)")
 @click.option("--description", "-d", help="Project/subproject description")
-@click.option("--context", "context", help="Existing context name for a new project")
-@click.option("--tags", "tags", help="Comma-separated tags for a new project")
+@click.option("--context", "-c", "context", help="Existing context name for a new project")
+@click.option(
+    "--tag", "--tags", "-t", "tags", multiple=True,
+    help="Tag for a new project (repeatable or comma-separated)",
+)
 @click.option("--pick", is_flag=True, help="Interactively pick parent project for subproject")
-def new_project(project: str, subproject: Optional[str], description: Optional[str], context: Optional[str], tags: Optional[str], pick: bool):
+def new_project(project: str, subproject: Optional[str], description: Optional[str], context: Optional[str], tags: tuple, pick: bool):
     """Create a new project or subproject.
 
-    To create a project: autumn new "My Project"
-    To create a subproject: autumn new "My Project" -s "Subproject Name"
+    \b
+    Examples:
+      autumn new "My Project" -c Work -t client -t urgent
+      autumn new "My Project" -s "Subproject Name"
     """
     try:
         client = APIClient()
@@ -264,12 +301,7 @@ def new_project(project: str, subproject: Optional[str], description: Optional[s
                     console.print("[autumn.warn]No parent project selected.[/]")
                     raise click.Abort()
 
-            # Resolve parent project name
-            projects_meta = client.get_discovery_projects()
-            proj_res = resolve_project_param(project=parent_project, projects=projects_meta.get("projects", []))
-            if proj_res.warning:
-                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-            resolved_parent = proj_res.value or parent_project
+            resolved_parent = resolve_project_name(client, parent_project)
 
             if not subproject:
                 subproject = click.prompt("Subproject name")
@@ -286,7 +318,7 @@ def new_project(project: str, subproject: Optional[str], description: Optional[s
                 console.print(f"[autumn.label]Description:[/] {description}")
         else:
             # Creating a project
-            tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()] if tags is not None else None
+            tag_list = _split_tags(tags) or None
             result = client.create_project(project, description, context=context, tags=tag_list)
 
             console.print(f"[autumn.ok]Project created:[/] [autumn.project]{project}[/]")
@@ -311,10 +343,11 @@ VALID_STATUSES = ["active", "paused", "complete", "archived"]
 def mark(project: Optional[str], status: Optional[str], pick: bool):
     """Mark a project's status (active, paused, complete, archived).
 
+    \b
     Examples:
-        autumn mark "Old Project" complete
-        autumn mark "Side Project" paused
-        autumn mark --pick  # interactive selection
+      autumn mark "Old Project" complete
+      autumn mark "Side Project" paused
+      autumn mark --pick  # interactive selection
     """
     try:
         client = APIClient()
@@ -329,12 +362,7 @@ def mark(project: Optional[str], status: Optional[str], pick: bool):
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        resolved_project = resolve_project_name(client, project)
 
         # Prompt for status if not provided
         if not status:
@@ -368,8 +396,10 @@ def mark(project: Optional[str], status: Optional[str], pick: bool):
 def rename(old_name: Optional[str], new_name: Optional[str], project: Optional[str], pick: bool):
     """Rename a project or subproject.
 
-    Rename project: autumn rename "Old Name" "New Name"
-    Rename subproject: autumn rename "OldSub" "NewSub" -p "Parent Project"
+    \b
+    Examples:
+      autumn rename "Old Name" "New Name"
+      autumn rename "OldSub" "NewSub" -p "Parent Project"
     """
     try:
         client = APIClient()
@@ -384,12 +414,7 @@ def rename(old_name: Optional[str], new_name: Optional[str], project: Optional[s
                         console.print("[autumn.warn]No project selected.[/]")
                         raise click.Abort()
 
-            # Resolve parent project
-            projects_meta = client.get_discovery_projects()
-            proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-            if proj_res.warning:
-                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-            resolved_project = proj_res.value or project
+            resolved_project = resolve_project_name(client, project)
 
             if pick and not old_name:
                 from ..utils.pickers import pick_subproject
@@ -425,12 +450,7 @@ def rename(old_name: Optional[str], new_name: Optional[str], project: Optional[s
             if not new_name:
                 new_name = click.prompt("New project name")
 
-            # Resolve old project name
-            projects_meta = client.get_discovery_projects()
-            proj_res = resolve_project_param(project=old_name, projects=projects_meta.get("projects", []))
-            if proj_res.warning:
-                console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-            resolved_old = proj_res.value or old_name
+            resolved_old = resolve_project_name(client, old_name, partial=False)
 
             result = client.rename_project(resolved_old, new_name)
 
@@ -465,12 +485,7 @@ def delete_project(project: Optional[str], yes: bool, pick: bool):
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        resolved_project = resolve_project_name(client, project)
 
         if not yes:
             console.print(f"[autumn.warn]WARNING:[/] This will permanently delete project [autumn.project]{resolved_project}[/] and all its sessions!")
@@ -513,12 +528,7 @@ def delete_sub(project: Optional[str], subproject: Optional[str], yes: bool, pic
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        resolved_project = resolve_project_name(client, project)
 
         if pick or not subproject:
             from ..utils.pickers import pick_subproject
@@ -550,17 +560,33 @@ def delete_sub(project: Optional[str], subproject: Optional[str], yes: bool, pic
 
 @click.command()
 @click.argument("project", required=False)
-@click.option("--start-date", help="Start date filter (YYYY-MM-DD)")
-@click.option("--end-date", help="End date filter (YYYY-MM-DD)")
+@period_option(help_suffix=" (default: all time)")
+@date_range_options
+@click.option("--context", "-c", help="Only sessions in this context")
+@click.option("--tag", "-t", multiple=True, help="Only projects with this tag (repeatable)")
 @click.option("--pick", is_flag=True, help="Interactively pick project")
-def totals(project: Optional[str], start_date: Optional[str], end_date: Optional[str], pick: bool):
+def totals(
+    project: Optional[str],
+    period: Optional[str],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    context: Optional[str],
+    tag: tuple,
+    pick: bool,
+):
     """Show time totals for a project and its subprojects.
 
+    \b
     Examples:
-        autumn totals "My Project"
-        autumn totals "My Project" --start-date 2026-01-01
-        autumn totals --pick
+      autumn totals "My Project"
+      autumn totals "My Project" -P month
+      autumn totals "My Project" --since 2026-01-01
+      autumn totals --pick
     """
+    if period and not start_date and not end_date:
+        from ..utils.periods import period_to_dates
+
+        start_date, end_date = period_to_dates(period)
     try:
         client = APIClient()
 
@@ -573,14 +599,16 @@ def totals(project: Optional[str], start_date: Optional[str], end_date: Optional
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        resolved_project = resolve_project_name(client, project)
 
-        result = client.get_project_totals(resolved_project, start_date=start_date, end_date=end_date)
+        filter_kwargs = {}
+        if context:
+            filter_kwargs["context"] = context
+        if tag:
+            filter_kwargs["tags"] = list(tag)
+        result = client.get_project_totals(
+            resolved_project, start_date=start_date, end_date=end_date, **filter_kwargs
+        )
 
         project_name = result.get("project", resolved_project)
         total_minutes = result.get("total", 0)
@@ -628,7 +656,13 @@ class _ProjectGroup(click.Group):
 
 @click.group("project", cls=_ProjectGroup)
 def project_details() -> None:
-    """Show project details or edit project metadata."""
+    """Show one project's details, or edit its metadata.
+
+    \b
+    Examples:
+      autumn project Autumn          # same as: autumn project show Autumn
+      autumn project edit Autumn -c Work -t client
+    """
 
 
 def _show_project_details(name: Optional[str], pick: bool) -> None:
@@ -650,12 +684,7 @@ def _show_project_details(name: Optional[str], pick: bool) -> None:
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=name, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_name = proj_res.value or name
+        resolved_name = resolve_project_name(client, name)
 
         result = client.get_project(resolved_name)
 
@@ -724,7 +753,7 @@ def _show_project_details(name: Optional[str], pick: bool) -> None:
         raise click.Abort()
 
 
-@project_details.command("show", hidden=True)
+@project_details.command("show")
 @click.argument("name", required=False)
 @click.option("--pick", is_flag=True, help="Interactively pick project")
 def project_show(name: Optional[str], pick: bool) -> None:
@@ -747,12 +776,12 @@ def _grouped_project_items(result: dict) -> list[dict]:
 
 @project_details.command("edit")
 @click.argument("name")
-@click.option("--description", "description", help="New description (pass an empty string to clear)")
-@click.option("--context", "context", help="Set context by name")
+@click.option("--description", "-d", "description", help="New description (pass an empty string to clear)")
+@click.option("--context", "-c", "context", help="Set context by name")
 @click.option("--clear-context", is_flag=True, help="Remove the current context")
 @click.option("--tags", "tags", help="Comma-separated complete replacement tag list")
-@click.option("--add-tag", "add_tags", multiple=True, help="Add a tag (repeatable)")
-@click.option("--remove-tag", "remove_tags", multiple=True, help="Remove a tag (repeatable)")
+@click.option("--add-tag", "-t", "add_tags", multiple=True, help="Add a tag (repeatable)")
+@click.option("--remove-tag", "-T", "remove_tags", multiple=True, help="Remove a tag (repeatable)")
 def project_edit(
     name: str,
     description: Optional[str],
@@ -781,9 +810,11 @@ def project_edit(
         client = APIClient()
         grouped = client.list_projects_grouped()
         known_projects = _grouped_project_items(grouped)
-        resolved = resolve_project_param(project=name, projects=known_projects)
+        resolved = resolve_project_param(project=name, projects=known_projects, partial=True)
         if resolved.warning:
             console.print(f"[autumn.warn]Warning:[/] {resolved.warning}")
+        if resolved.note:
+            console.print(f"[autumn.muted]{resolved.note}[/]")
         project_name = resolved.value or name
         current = next(
             (item for item in known_projects if item.get("name") == project_name), {}
@@ -843,14 +874,13 @@ def merge(project1: Optional[str], project2: Optional[str], into: Optional[str],
     All sessions and subprojects from both projects will be moved to the new project.
     The original projects will be deleted.
 
+    \b
     Examples:
-        autumn merge "Project A" "Project B" --into "Combined Project"
-        autumn merge --pick --into "Merged"
+      autumn merge "Project A" "Project B" --into "Combined Project"
+      autumn merge --pick --into "Merged"
     """
     try:
         client = APIClient()
-        projects_meta = client.get_discovery_projects()
-        all_projects = projects_meta.get("projects", [])
 
         if pick or not project1:
             from ..utils.pickers import pick_project
@@ -870,16 +900,8 @@ def merge(project1: Optional[str], project2: Optional[str], into: Optional[str],
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project names
-        proj1_res = resolve_project_param(project=project1, projects=all_projects)
-        if proj1_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj1_res.warning}")
-        resolved_p1 = proj1_res.value or project1
-
-        proj2_res = resolve_project_param(project=project2, projects=all_projects)
-        if proj2_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj2_res.warning}")
-        resolved_p2 = proj2_res.value or project2
+        resolved_p1 = resolve_project_name(client, project1)
+        resolved_p2 = resolve_project_name(client, project2)
 
         if not into:
             into = click.prompt("Name for the merged project")
@@ -919,14 +941,13 @@ def merge_subs(project: Optional[str], subproject1: Optional[str], subproject2: 
     All sessions from both subprojects will be moved to the new subproject.
     The original subprojects will be deleted.
 
+    \b
     Examples:
-        autumn merge-subs "My Project" "Frontend" "UI" --into "Frontend UI"
-        autumn merge-subs --pick --into "Merged"
+      autumn merge-subs "My Project" "Frontend" "UI" --into "Frontend UI"
+      autumn merge-subs --pick --into "Merged"
     """
     try:
         client = APIClient()
-        projects_meta = client.get_discovery_projects()
-        all_projects = projects_meta.get("projects", [])
 
         if pick or not project:
             from ..utils.pickers import pick_project
@@ -937,11 +958,7 @@ def merge_subs(project: Optional[str], subproject1: Optional[str], subproject2: 
                 console.print("[autumn.warn]No project selected.[/]")
                 raise click.Abort()
 
-        # Resolve project name
-        proj_res = resolve_project_param(project=project, projects=all_projects)
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        resolved_project = resolve_project_name(client, project)
 
         # Get project ID - we need to fetch the project details
         proj_details = client.get_project(resolved_project)

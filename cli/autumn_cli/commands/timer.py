@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from ..api_client import APIClient, APIError
-from ..utils.console import console
+from ..utils.console import console, err_console
 from ..utils.formatters import format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import render_active_timers_list, format_subprojects_bracketed
 from ..utils.duration_parse import parse_duration_to_seconds
@@ -15,7 +15,11 @@ from ..utils.scheduler import schedule_in, schedule_every, sleep_seconds
 from ..utils.reminder_spawner import spawn_reminder
 from ..utils.auto_stop import session_still_active_after_auto_stop
 from ..utils.reminders_registry import add_entry
-from ..utils.resolvers import resolve_project_param, resolve_subproject_params
+from ..utils.resolvers import (
+    resolve_project_name,
+    resolve_project_param,
+    resolve_subproject_params,
+)
 from ..utils.splits import even_basis_points, parse_split, resolve_split_selection
 
 
@@ -34,6 +38,42 @@ def _format_session_id_line(session_id: Optional[int]) -> str:
     if session_id is None:
         return "Session ID: [autumn.muted]unknown[/]"
     return f"Session ID: #[autumn.id]{session_id}[/]"
+
+
+def _running_project(client: APIClient, project: Optional[str]) -> Optional[str]:
+    """Resolve PROJECT against running timers first, then all projects.
+
+    Lets `autumn stop web` pick the running "AutumnWeb" timer even when
+    other projects also contain "web".
+    """
+    if not project:
+        return None
+    try:
+        running = client.get_timer_status().get("sessions") or []
+    except APIError:
+        running = []
+    names = [
+        {"name": session.get("p") or session.get("project")}
+        for session in running
+        if session.get("p") or session.get("project")
+    ]
+    result = resolve_project_param(project=project, projects=names, partial=True)
+    if result.warning is None:
+        if result.note:
+            err_console.print(f"[autumn.muted]{result.note}[/]")
+        return result.value
+    return resolve_project_name(client, project)
+
+
+def _project_argument(fn):
+    """Optional positional PROJECT, the same as -p/--project."""
+    return click.argument("project_arg", metavar="[PROJECT]", required=False)(fn)
+
+
+def _merge_project(project_arg: Optional[str], project: Optional[str]) -> Optional[str]:
+    if project_arg and project and project_arg != project:
+        raise click.UsageError("Give the project once: as PROJECT or with -p.")
+    return project_arg or project
 
 
 def _print_auto_stop_line(session: dict) -> None:
@@ -183,12 +223,8 @@ def start(
                 if picked_sub:
                     subprojects = (picked_sub,)
 
-        # Resolve project name (case-insensitive + alias support)
-        projects_meta = client.get_discovery_projects()
-        proj_res = resolve_project_param(project=project, projects=projects_meta.get("projects", []))
-        if proj_res.warning:
-            console.print(f"[autumn.warn]Warning:[/] {proj_res.warning}")
-        resolved_project = proj_res.value or project
+        # Resolve project name (case-insensitive, alias or unique partial name)
+        resolved_project = resolve_project_name(client, project)
 
         # Resolve subprojects (case-insensitive + alias support)
         subprojects_list = None
@@ -431,20 +467,29 @@ def start(
 
 
 @click.command()
+@_project_argument
 @click.option("--session-id", "-i", type=int, help="Specific session ID to stop")
 @click.option("--project", "-p", help="Project name to stop timer for")
-@click.option("--note", "-n", help="Note to add when stopping")
+@click.option("--note", "-n", help="Note to add when stopping (replaces the timer's note)")
 @click.option(
     "--split",
     help='Set the final subproject split (for example "api=60,frontend=40" or "even")',
 )
 def stop(
+    project_arg: Optional[str],
     session_id: Optional[int],
     project: Optional[str],
     note: Optional[str],
     split: Optional[str],
 ):
-    """Stop the current timer (or a specific one)."""
+    """Stop the newest running timer, or the one for PROJECT.
+
+    \b
+    Examples:
+      autumn stop
+      autumn stop web -n "Shipped the fix"
+    """
+    project = _merge_project(project_arg, project)
     try:
         split_spec = parse_split(split)
     except ValueError as error:
@@ -452,6 +497,8 @@ def stop(
 
     try:
         client = APIClient()
+        if session_id is None:
+            project = _running_project(client, project)
         allocations = None
         if split_spec is not None:
             status_result = client.get_timer_status(session_id, project)
@@ -509,12 +556,16 @@ def stop(
 
 
 @click.command()
+@_project_argument
 @click.option("--session-id", "-i", type=int, help="Specific session ID to check")
 @click.option("--project", "-p", help="Project name to check timer for")
-def status(session_id: Optional[int], project: Optional[str]):
-    """Show status of current timer(s)."""
+def status(project_arg: Optional[str], session_id: Optional[int], project: Optional[str]):
+    """Show running timers (all, or just PROJECT's)."""
+    project = _merge_project(project_arg, project)
     try:
         client = APIClient()
+        if project and session_id is None:
+            project = _running_project(client, project)
         result = client.get_timer_status(session_id, project)
 
         if result.get("ok"):
@@ -535,15 +586,19 @@ def status(session_id: Optional[int], project: Optional[str]):
 
 
 @click.command()
+@_project_argument
 @click.option("--session-id", "-i", type=int, help="Specific session ID to restart")
 @click.option("--project", "-p", help="Project name to restart timer for")
-def restart(session_id: Optional[int], project: Optional[str]):
-    """Restart a timer (reset start time to now).
+def restart(project_arg: Optional[str], session_id: Optional[int], project: Optional[str]):
+    """Restart a running timer from now (its elapsed time is dropped).
 
-    If you have multiple active timers, target one with --session-id or --project.
+    Targets the newest timer, or PROJECT's / --session-id's.
     """
+    project = _merge_project(project_arg, project)
     try:
         client = APIClient()
+        if session_id is None:
+            project = _running_project(client, project)
         result = client.restart_timer(session_id, project)
 
         if result.get("ok"):
@@ -562,17 +617,49 @@ def restart(session_id: Optional[int], project: Optional[str]):
         raise click.Abort()
 
 
-@click.command()
-@click.option("--session-id", "-i", type=int, help="Specific session ID to delete")
-def delete(session_id: Optional[int]):
-    """Delete a timer without saving a session."""
+@click.command("discard")
+@_project_argument
+@click.option("--session-id", "-i", type=int, help="Specific session ID to discard")
+@click.option("--project", "-p", help="Project whose running timer to discard")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def discard(
+    project_arg: Optional[str],
+    session_id: Optional[int],
+    project: Optional[str],
+    yes: bool,
+):
+    """Throw away a running timer without saving it.
+
+    Targets the newest timer, or PROJECT's / --session-id's. (Formerly
+    `autumn delete`, which still works.) To delete a saved session, use
+    `autumn delete-session`.
+    """
+    project = _merge_project(project_arg, project)
     try:
         client = APIClient()
-        result = client.delete_timer(session_id)
+        if session_id is None:
+            project = _running_project(client, project)
+        running = client.get_timer_status(session_id, project).get("sessions") or []
+        if not running:
+            raise APIError("No active timer found.")
+        target = max(
+            running,
+            key=lambda session: (str(session.get("start") or ""), int(session.get("id") or 0)),
+        )
+        if not yes:
+            console.print(
+                f"Discard the running timer for [autumn.project]{target.get('p') or ''}[/] "
+                f"([autumn.duration]{format_duration_minutes(target.get('elapsed') or 0)}[/], "
+                f"#[autumn.id]{target.get('id')}[/])? It will not be saved."
+            )
+            if not click.confirm("Discard?", default=False):
+                console.print("[autumn.muted]Cancelled.[/]")
+                return
+        result = client.delete_timer(int(target["id"]))
 
         if result.get("ok"):
             deleted_id = result.get("deleted")
-            console.print(f"[autumn.warn]Timer deleted[/] (Session ID: {deleted_id})", highlight=True)
+            console.print(f"[autumn.warn]Timer discarded[/] (Session ID: {deleted_id})", highlight=True)
         else:
             raise click.ClickException(result.get("error", "Unknown error"))
     except APIError as e:
