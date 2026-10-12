@@ -47,11 +47,9 @@ charts = [
     "wordcloud>=1.9.0",
     "squarify>=0.4.3",
 ]
-mcp = ["mcp"]
 
 [project.scripts]
 autumn = "autumn_cli.cli:main"
-autumn-mcp = "autumn_cli.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/Fingolfin7/Autumn"
