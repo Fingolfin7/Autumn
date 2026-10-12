@@ -248,8 +248,85 @@ def test_log_search_defaults_to_all_time_and_separates_related(log_client):
     assert call["search"] == "bulbs" and call["related"] is True
     assert call["start_date"] is None and call["end_date"] is None
     assert "Related by meaning" in result.output
-    # The related row is listed after the direct one, in its own section.
+    # The related row is listed after the direct one, in its own section,
+    # using the same date-grouped layout as the rest of the log.
     assert result.output.index("planted bulbs") < result.output.index("tulips")
+    related_part = result.output[result.output.index("Related by meaning"):]
+    assert "September 2026" in related_part and " to " in related_part
+
+
+_LONG_NOTE = "word " * 100  # 500 characters
+
+
+@pytest.fixture
+def long_note_client(monkeypatch):
+    class _LongNoteClient(_LogClient):
+        def log_activity(self, **kwargs):
+            result = super().log_activity(**kwargs)
+            result["logs"] = [dict(result["logs"][0], note=_LONG_NOTE.strip())]
+            result["count"] = 1
+            return result
+
+    _LogClient.calls = []
+    monkeypatch.setattr(sessions_cmd, "APIClient", _LongNoteClient)
+    return _LongNoteClient
+
+
+def _config(monkeypatch, values):
+    import autumn_cli.config as config_module
+
+    monkeypatch.setattr(
+        config_module, "get_config_value", lambda key, default=None: values.get(key, default)
+    )
+
+
+def test_log_notes_are_full_by_default(long_note_client, monkeypatch):
+    _config(monkeypatch, {})
+    result = CliRunner().invoke(cli, ["log", "--raw"])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("word") == 100
+    assert "…" not in result.output
+
+
+def test_log_max_note_length_truncates_at_a_word(long_note_client, monkeypatch):
+    _config(monkeypatch, {})
+    result = CliRunner().invoke(cli, ["log", "--raw", "-m", "22"])
+    assert result.exit_code == 0, result.output
+    assert "word word word word …" in result.output
+    assert result.output.count("word") == 4
+
+
+def test_log_truncate_uses_the_configured_length(long_note_client, monkeypatch):
+    _config(monkeypatch, {"log.max_note_length": "12"})
+    result = CliRunner().invoke(cli, ["log", "--raw", "--truncate"])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("word") == 2
+
+
+def test_log_config_can_turn_truncation_on_and_flag_turns_it_off(long_note_client, monkeypatch):
+    _config(monkeypatch, {"log.truncate_notes": "true"})
+    truncated = CliRunner().invoke(cli, ["log", "--raw"])
+    assert truncated.exit_code == 0, truncated.output
+    assert "…" in truncated.output and truncated.output.count("word") < 100
+
+    full = CliRunner().invoke(cli, ["log", "--raw", "--no-truncate"])
+    assert full.exit_code == 0, full.output
+    assert full.output.count("word") == 100
+
+
+def test_log_markdown_notes_truncate_too(long_note_client, monkeypatch):
+    _config(monkeypatch, {})
+    result = CliRunner().invoke(cli, ["log", "-m", "22"])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("word") == 4
+
+
+def test_log_rejects_zero_note_length(long_note_client, monkeypatch):
+    _config(monkeypatch, {})
+    result = CliRunner().invoke(cli, ["log", "-m", "0"])
+    assert result.exit_code != 0
+    assert "must be at least 1" in result.output
+    assert long_note_client.calls == []
 
 
 def test_log_rejects_subproject_without_project(log_client):

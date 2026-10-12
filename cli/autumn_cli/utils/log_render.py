@@ -112,6 +112,20 @@ def _wrap_note(note: str, *, width: int = 90) -> List[str]:
     return wrap(note, width=width, break_long_words=False, break_on_hyphens=False)
 
 
+def _truncate_note(note: str, limit: Optional[int]) -> tuple[str, bool]:
+    """Cut a note to about ``limit`` characters at a word break.
+
+    Returns the (possibly shortened) note and whether it was cut.
+    """
+    if not limit or limit <= 0 or len(note) <= limit:
+        return note, False
+    cut = note[:limit]
+    space = max(cut.rfind(" "), cut.rfind("\n"))
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(), True
+
+
 def format_subprojects_bracketed(session: Dict[str, Any]) -> str:
     """Format a session's subprojects, showing percentages only when non-even."""
     subs = _session_subs(session)
@@ -212,12 +226,15 @@ def render_sessions_list(
     *,
     markdown_notes: bool = False,
     show_ids: bool = False,
+    max_note_length: Optional[int] = None,
 ) -> Union[str, List[object]]:
     """Render logs grouped by date header in the old CLI style.
 
     Args:
         sessions: Session dicts from the API.
         markdown_notes: If True, notes are rendered as Rich Markdown blocks.
+        max_note_length: If set, notes longer than this many characters are
+            cut at a word break and marked with an ellipsis.
 
     Returns:
         Either a single markup string (default) or a list of Rich renderables
@@ -301,54 +318,21 @@ def render_sessions_list(
 
             if not markdown_notes:
                 # Notes are sanitized to single-line text; keep them on one line for stable output.
-                note = _normalize_ws(note_raw)
+                note, cut = _truncate_note(_normalize_ws(note_raw), max_note_length)
                 items.append(
                     base
                     + f" -> [autumn.note]{rich_escape(note)}[/]"  # extra escape to avoid breaking formatting due to urls/links
+                    + (" [autumn.muted]…[/]" if cut else "")
                     + f"[autumn.label][/]"  # hard reset to avoid note colour bleeding
                 )
                 continue
 
             # Markdown mode: keep user's original whitespace/newlines for Markdown parsing.
+            note, cut = _truncate_note(note_raw.strip(), max_note_length)
             items.append(base + " ->")
-            items.append(_markdown_note_renderable(note_raw))
+            items.append(_markdown_note_renderable(note + (" …" if cut else "")))
 
     return items if markdown_notes else "\n".join([x for x in items if isinstance(x, str)])
-
-
-def render_ranked_sessions(
-    sessions: Iterable[Dict[str, Any]],
-    *,
-    show_ids: bool = False,
-) -> List[str]:
-    """Render sessions one per line in the given (relevance) order.
-
-    Used for meaning-based search matches, whose ranking would be lost if
-    they were regrouped by date like the regular log.
-    """
-    lines: List[str] = []
-    for s in sessions:
-        start_local = _parse_iso(_session_start_iso(s))
-        when = start_local.strftime("%a %d %b %Y %H:%M") if start_local else "-"
-        session_id = s.get("id")
-        id_prefix = (
-            f"[autumn.id]#{session_id}[/]  "
-            if show_ids and session_id is not None
-            else ""
-        )
-        line = (
-            f"{id_prefix}[autumn.time]{when}[/]  "
-            f"{format_duration_minutes(_duration_minutes(s))}  "
-            f"[autumn.project]{rich_escape(_session_project(s))}[/] "
-            f"{format_subprojects_bracketed(s)}"
-        )
-        note = _normalize_ws(s.get("note") or "")
-        if note:
-            if len(note) > 120:
-                note = note[:117].rstrip() + "..."
-            line += f" -> [autumn.note]{rich_escape(note)}[/][autumn.label][/]"
-        lines.append(line)
-    return lines
 
 
 def render_active_timers_list(sessions: Iterable[Dict[str, Any]]) -> str:

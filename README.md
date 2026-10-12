@@ -2,6 +2,8 @@
 
 Command-line interface for AutumnWeb — time tracking and project management from your terminal.
 
+![Elrond's records of Imladris in Autumn: a running timer, a note, a tracked session, the log, a search, commitments and the garden](docs/demo.gif)
+
 ```bash
 autumn start web                  # "web" is enough to find AutumnWeb
 autumn note "Fixed the login race"
@@ -124,8 +126,8 @@ autumn
 | | `autumn restart [project]` | Reset start time to now | `-p`, `-i` |
 | | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
 | | `autumn resume` | Resume last project | `--stop-current` |
-| **Logs** | `autumn log [period] [project]` (`ls`) | List sessions (saved) | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids` |
-| | `autumn log search` | Search with paging | `-q`, `--related`, `--newest`, `-n`, `--limit`, `--offset` |
+| **Logs** | `autumn log [period] [project]` (`ls`) | List sessions (saved) | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids`, `-m`, `--raw` |
+| | `autumn log search` | Search with paging | `-q`, `--related`, `--newest`, `-n`, `--limit`, `--offset`, `-m` |
 | | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-n` |
 | | `autumn edit [session]` | Edit a saved session (ID or `last`) | `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |
 | | `autumn delete-session [session]` | Delete a saved session | `-y` |
@@ -225,6 +227,15 @@ autumn log search --since 2026-01-01 --exclude "Admin"
 ```
 
 *Note: Short flag `-P` is for **Period**, and `-p` is for **Project**.*
+
+Notes are shown in full by default. Shorten long ones with `--truncate` (300 characters) or `-m N`; `--raw` keeps each note on one line instead of rendering Markdown:
+```bash
+autumn log -m 120
+autumn log --raw --truncate
+autumn config set log.truncate_notes true --type bool   # truncate by default
+autumn config set log.max_note_length 200 --type int    # default length
+```
+`--no-truncate` shows full notes for one run when truncation is on by default. The same options work on `autumn log search`.
 
 **Search** project names, subproject names and session notes (all time unless you give a period). `--related` also lists sessions that match by meaning; it needs AI features and an OpenAI key on your AutumnWeb account.
 ```bash
@@ -431,7 +442,7 @@ Pass an empty string to `context edit --description` or `tag edit --color` to cl
 Commitments track recurring time or session goals for a project, subproject, context, or tag. `autumn commitments` (or `autumn cmt`) lists active commitments with progress, status, and balance.
 
 ```bash
-autumn commitments --all --streak
+autumn cmt list --all --streak
 autumn cmt new AutumnWeb 5h                       # 5 hours a week
 autumn cmt new AutumnWeb 3 --sessions -P day      # 3 sessions a day
 autumn cmt new "AutumnWeb/Backend" 10h --type subproject -P month
@@ -457,6 +468,8 @@ autumn config open    # Open config file in default editor
 - `tls.insecure: true` - Disable TLS verification (for local dev)
 - `greeting_activity_weight: 0.5` - How often to show activity in greetings (0-1)
 - `notify.log_file: "~/.autumn/notify.log"` - Enable notification debug logging
+- `log.truncate_notes: true` - Shorten long notes in `autumn log` by default
+- `log.max_note_length: 300` - Note length used when truncating
 - `wake_retry: true` - Automatically wake and retry a sleeping hosted server
 - `wake_timeout_seconds: 120` - Maximum seconds to wait for the server to become healthy
 
@@ -504,3 +517,21 @@ Subproject aliases are **project-scoped** — the alias `fe` can map to differen
 - **No notifications?** Check `autumn reminders list` to see if the daemon is running. On macOS, Autumn uses `terminal-notifier`; if it is missing, the CLI will explicitly try `brew install terminal-notifier` on first use.
 - **SSL Errors?** If using a self-signed cert, set `autumn config set tls.insecure true`.
 - **Outdated Data?** Run `autumn meta refresh` to sync projects, tags, and contexts.
+## Re-recording the demo
+
+The GIF above is drawn from real `autumn` output against a throwaway AutumnWeb
+account (Elrond's, seeded with five weeks of Rivendell's records). With a local
+AutumnWeb running on an empty database and that account's token:
+
+```bash
+export HOME=/tmp/autumn-demo USERPROFILE=/tmp/autumn-demo  # keep your own config untouched
+export AUTUMN_API_BASE=http://127.0.0.1:8799 AUTUMN_API_KEY=<demo token>
+python scripts/demo/seed_demo.py
+# then, from the AutumnWeb checkout, so commitments count the seeded history:
+#   python manage.py shell < ../Autumn/scripts/demo/backdate_demo.py
+python scripts/demo/render_demo.py /tmp/autumn-demo/demo.gif
+cp /tmp/autumn-demo/demo.gif docs/demo.gif
+```
+
+The recording adds a note, stops the timer and tracks a session, so reseed a
+fresh database before recording again.

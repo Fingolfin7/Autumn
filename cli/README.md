@@ -71,13 +71,19 @@ Periods (`-P`, or a bare word after `autumn log`) are `today`, `yesterday`,
 
 `-q/--search` matches project names, subproject names and session notes on
 the server, the same search the web Sessions page uses. Add `--related` to
-also include sessions whose notes match by meaning. Related matches need AI
-features and an OpenAI key on your AutumnWeb account; otherwise the CLI says
-they were unavailable and shows direct matches only.
+also include sessions whose notes match by meaning; they are listed after the
+direct matches under "Related by meaning", in the usual log layout. Related
+matches need AI features and an OpenAI key on your AutumnWeb account; otherwise
+the CLI says they were unavailable and shows direct matches only.
+
+Notes print in full unless you ask for them shortened: `--truncate` cuts them
+at 300 characters, `-m 120` at 120, and `--no-truncate` overrides
+`autumn config set log.truncate_notes true --type bool` for one run
+(`log.max_note_length` sets the default length).
 
 ```console
 autumn log -q "auth"                 # all time unless you give a period
-autumn log -q "auth" --related       # related matches listed after, best first
+autumn log -q "auth" --related       # related matches listed after the rest
 autumn log search -q deploy --limit 20 --newest
 autumn projects -q garden --related  # searches every status
 autumn chart pie -q "client" -P month
@@ -118,8 +124,8 @@ autumn delete-session last
 | | `autumn note <text...>` (`autumn n`) | Update a running timer's note | `-p`, `-i`, `--replace`, `--stamp`, `--no-stamp` |
 | | `autumn restart [project]` | Restart a running timer from now | `-p`, `-i` |
 | | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
-| Sessions | `autumn log [period] [project]` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids` |
-| | `autumn log search` | Search with paging | `-q`, `--related`, `-n`, `--newest`, `--limit`, `--offset` |
+| Sessions | `autumn log [period] [project]` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids`, `-m`, `--raw` |
+| | `autumn log search` | Search with paging | `-q`, `--related`, `-n`, `--newest`, `--limit`, `--offset`, `-m` |
 | | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-s`, `-n`, `--split` |
 | | `autumn edit [session]` | Edit a saved session in place | `-p`, `-s`, `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |
 | | `autumn delete-session [session]` | Delete a saved session | `-y` |

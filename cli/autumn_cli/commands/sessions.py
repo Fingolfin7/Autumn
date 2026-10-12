@@ -11,7 +11,6 @@ from ..utils.console import console
 from ..utils.formatters import format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import (
     format_subprojects_bracketed,
-    render_ranked_sessions,
     render_sessions_list,
 )
 from ..utils.resolvers import (
@@ -163,27 +162,33 @@ def _print_sessions(
     count: int,
     raw: bool,
     show_ids: bool,
+    max_note_length: Optional[int],
     search: Optional[str],
     related: bool,
     related_status: Optional[str],
 ) -> None:
-    """Print a log, keeping meaning-based matches in their own ranked section."""
+    """Print a log; meaning-based matches follow under their own heading."""
     direct = [row for row in rows if row.get("match") != "related"]
     related_rows = [row for row in rows if row.get("match") == "related"]
 
-    console.print(f"[autumn.label]Sessions:[/] {count}")
-    if direct or not related_rows:
-        rendered = render_sessions_list(direct, markdown_notes=not raw, show_ids=show_ids)
+    def _print(group: List[Dict[str, Any]]) -> None:
+        rendered = render_sessions_list(
+            group,
+            markdown_notes=not raw,
+            show_ids=show_ids,
+            max_note_length=max_note_length,
+        )
         for item in rendered if isinstance(rendered, list) else [rendered]:
             console.print(item)
 
+    console.print(f"[autumn.label]Sessions:[/] {count}")
+    if direct or not related_rows:
+        _print(direct)
+
     if related_rows:
         console.print("")
-        console.print(
-            f"[underline]Related by meaning[/] [autumn.muted]({len(related_rows)}, best first)[/]"
-        )
-        for line in render_ranked_sessions(related_rows, show_ids=show_ids):
-            console.print(line)
+        console.print(f"[autumn.label]Related by meaning:[/] {len(related_rows)}")
+        _print(related_rows)
 
     if search and related and related_status == "unavailable":
         console.print(
@@ -244,6 +249,48 @@ _raw_option = click.option(
     help="Show raw (single-line) notes instead of Markdown",
 )
 
+DEFAULT_MAX_NOTE_LENGTH = 300
+
+
+def _note_options(fn):
+    fn = click.option(
+        "--max-note-length", "-m", type=int, default=None, metavar="N",
+        help=f"Truncate notes after this many characters (implies --truncate; "
+        f"default {DEFAULT_MAX_NOTE_LENGTH}, or config log.max_note_length)",
+    )(fn)
+    fn = click.option(
+        "--truncate/--no-truncate", default=None,
+        help="Shorten long notes (default off; set config log.truncate_notes to change)",
+    )(fn)
+    return fn
+
+
+def _config_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y", "on")
+    return bool(value)
+
+
+def _note_limit(truncate: Optional[bool], max_note_length: Optional[int]) -> Optional[int]:
+    """Resolve --truncate/--no-truncate and -m against the log.* config keys."""
+    from ..config import get_config_value
+
+    if truncate is None:
+        truncate = max_note_length is not None or _config_bool(
+            get_config_value("log.truncate_notes", False)
+        )
+    if not truncate:
+        return None
+    if max_note_length is not None:
+        if max_note_length < 1:
+            raise click.BadParameter("must be at least 1", param_hint="'-m' / '--max-note-length'")
+        return max_note_length
+    try:
+        configured = int(get_config_value("log.max_note_length", DEFAULT_MAX_NOTE_LENGTH))
+    except (TypeError, ValueError):
+        configured = DEFAULT_MAX_NOTE_LENGTH
+    return configured if configured > 0 else DEFAULT_MAX_NOTE_LENGTH
+
 
 def _filter_options(fn):
     fn = click.option("--pick", is_flag=True, help="Interactively pick project/context/tags if not provided")(fn)
@@ -265,6 +312,7 @@ def _filter_options(fn):
 @date_range_options
 @search_options("sessions")
 @_raw_option
+@_note_options
 @_show_ids_option
 def log(
     ctx: click.Context,
@@ -280,6 +328,8 @@ def log(
     search: Optional[str],
     related: bool,
     raw: bool,
+    truncate: Optional[bool],
+    max_note_length: Optional[int],
     show_ids: bool,
 ):
     """Show saved sessions (default: the last 7 days).
@@ -290,11 +340,13 @@ def log(
       autumn log today
       autumn log Autumn month        # bare words: period and/or project
       autumn log --since monday --ids
+      autumn log -m 120              # shorten notes over 120 characters
       autumn log -q "login bug"      # search all time
       autumn log -q "auth" --related # also match by meaning
     """
     if ctx.invoked_subcommand is not None:
         return
+    note_limit = _note_limit(truncate, max_note_length)
     try:
         client = APIClient()
         filters = _resolve_read_filters(
@@ -335,6 +387,7 @@ def log(
             count=result.get("count", len(logs)),
             raw=raw,
             show_ids=show_ids,
+            max_note_length=note_limit,
             search=search,
             related=related,
             related_status=result.get("related_status"),
@@ -354,6 +407,7 @@ def log(
 @click.option("--limit", type=int, help="Limit number of results")
 @click.option("--offset", type=int, help="Offset for pagination")
 @_raw_option
+@_note_options
 @_show_ids_option
 def log_search(
     project: Optional[str],
@@ -372,6 +426,8 @@ def log_search(
     limit: Optional[int],
     offset: Optional[int],
     raw: bool,
+    truncate: Optional[bool],
+    max_note_length: Optional[int],
     show_ids: bool,
 ):
     """Search sessions across all time, with paging.
@@ -382,6 +438,7 @@ def log_search(
       autumn log search -q "deploy" --related --limit 20
       autumn log search -p Autumn -n "TODO"
     """
+    note_limit = _note_limit(truncate, max_note_length)
     try:
         client = APIClient()
         filters = _resolve_read_filters(
@@ -421,6 +478,7 @@ def log_search(
             count=result.get("count", len(sessions_list)),
             raw=raw,
             show_ids=show_ids,
+            max_note_length=note_limit,
             search=search,
             related=related,
             related_status=result.get("related_status"),
