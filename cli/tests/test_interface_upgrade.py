@@ -255,6 +255,45 @@ def test_log_search_defaults_to_all_time_and_separates_related(log_client):
     assert "September 2026" in related_part and " to " in related_part
 
 
+def test_related_rows_keep_the_server_ranking(monkeypatch):
+    # Best match first, whatever the dates: grouping by day and printing
+    # oldest-first would put the best match last.
+    ranked = [
+        ("2026-08-14", "best match"),
+        ("2023-01-19", "second match"),
+        ("2026-07-10", "third match"),
+        ("2026-08-14", "fourth match"),
+    ]
+
+    class _RankedClient(_LogClient):
+        def log_activity(self, **kwargs):
+            type(self).calls.append(kwargs)
+            return {
+                "count": len(ranked),
+                "logs": [
+                    {
+                        "id": index, "project": "Gym", "subprojects": [],
+                        "start_time": f"{day}T08:00:00+00:00",
+                        "end_time": f"{day}T09:00:00+00:00",
+                        "duration_minutes": 60, "note": note, "match": "related",
+                    }
+                    for index, (day, note) in enumerate(ranked)
+                ],
+                "related_status": "included",
+            }
+
+    _LogClient.calls = []
+    monkeypatch.setattr(sessions_cmd, "APIClient", _RankedClient)
+    for args in (["--raw"], []):
+        result = CliRunner().invoke(cli, ["log", "-q", "leg curls", "--related", *args])
+        assert result.exit_code == 0, result.output
+        positions = [result.output.index(note) for _, note in ranked]
+        assert positions == sorted(positions), result.output
+        # Each related session has its own date line, even on a shared day.
+        related_part = result.output[result.output.index("Related by meaning"):]
+        assert related_part.count("August 2026") == 2
+
+
 _LONG_NOTE = "word " * 100  # 500 characters
 
 

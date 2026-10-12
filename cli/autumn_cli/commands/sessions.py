@@ -11,6 +11,7 @@ from ..utils.console import console
 from ..utils.formatters import format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import (
     format_subprojects_bracketed,
+    render_ranked_sessions_list,
     render_sessions_list,
 )
 from ..utils.resolvers import (
@@ -171,8 +172,9 @@ def _print_sessions(
     direct = [row for row in rows if row.get("match") != "related"]
     related_rows = [row for row in rows if row.get("match") == "related"]
 
-    def _print(group: List[Dict[str, Any]]) -> None:
-        rendered = render_sessions_list(
+    def _print(group: List[Dict[str, Any]], *, ranked: bool = False) -> None:
+        render = render_ranked_sessions_list if ranked else render_sessions_list
+        rendered = render(
             group,
             markdown_notes=not raw,
             show_ids=show_ids,
@@ -188,7 +190,8 @@ def _print_sessions(
     if related_rows:
         console.print("")
         console.print(f"[autumn.label]Related by meaning:[/] {len(related_rows)}")
-        _print(related_rows)
+        # Best match first, as the server ranks them (and the web page shows).
+        _print(related_rows, ranked=True)
 
     if search and related and related_status == "unavailable":
         console.print(

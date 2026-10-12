@@ -221,6 +221,72 @@ def render_active_timer_block(session: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _markdown_note_renderable(note: str) -> object:
+    """Render note Markdown using autumn.note as the base style.
+
+    We intentionally return Rich's Markdown renderable directly.
+    This preserves hyperlink metadata (OSC 8) so terminals that support it
+    can show clickable links.
+    """
+
+    # Rich/CommonMark supports strikethrough with double tildes (~~text~~).
+    # For convenience and backward compatibility with older note habits,
+    # normalize single-tilde markers (~text~) into CommonMark form.
+    note = _SINGLE_TILDE_STRIKE.sub(r"\1~~\2~~", note)
+    return Markdown(note, style="autumn.note")
+
+
+def _append_session(
+    items: List[object],
+    s: Dict[str, Any],
+    *,
+    markdown_notes: bool,
+    show_ids: bool,
+    max_note_length: Optional[int],
+) -> None:
+    """Append one session's line (and Markdown note, if any) to ``items``."""
+    start = format_time_hms(_session_start_iso(s))
+    end = format_time_hms(_session_end_iso(s))
+    dur_str = format_duration_minutes(_duration_minutes(s))
+    project = _session_project(s)
+    subs = _session_subs(s)
+    note_raw = s.get("note") or ""
+
+    subs_bracket = format_subprojects_bracketed(s)
+
+    session_id = s.get("id")
+    id_prefix = (
+        f"[autumn.id]#{session_id}[/]  "
+        if show_ids and session_id is not None
+        else ""
+    )
+    base = (
+        f"{id_prefix}[autumn.time]{start}[/] to [autumn.time]{end}[/]\t"
+        f"{dur_str}  [autumn.project]{project}[/] "
+        f"{subs_bracket}"
+    )
+
+    if not note_raw:
+        items.append(base)
+        return
+
+    if not markdown_notes:
+        # Notes are sanitized to single-line text; keep them on one line for stable output.
+        note, cut = _truncate_note(_normalize_ws(note_raw), max_note_length)
+        items.append(
+            base
+            + f" -> [autumn.note]{rich_escape(note)}[/]"  # extra escape to avoid breaking formatting due to urls/links
+            + (" [autumn.muted]…[/]" if cut else "")
+            + f"[autumn.label][/]"  # hard reset to avoid note colour bleeding
+        )
+        return
+
+    # Markdown mode: keep user's original whitespace/newlines for Markdown parsing.
+    note, cut = _truncate_note(note_raw.strip(), max_note_length)
+    items.append(base + " ->")
+    items.append(_markdown_note_renderable(note + (" …" if cut else "")))
+
+
 def render_sessions_list(
     sessions: Iterable[Dict[str, Any]],
     *,
@@ -240,20 +306,6 @@ def render_sessions_list(
         Either a single markup string (default) or a list of Rich renderables
         (strings + Markdown objects) when markdown_notes is enabled.
     """
-
-    def _markdown_note_renderable(note: str) -> object:
-        """Render note Markdown using autumn.note as the base style.
-
-        We intentionally return Rich's Markdown renderable directly.
-        This preserves hyperlink metadata (OSC 8) so terminals that support it
-        can show clickable links.
-        """
-
-        # Rich/CommonMark supports strikethrough with double tildes (~~text~~).
-        # For convenience and backward compatibility with older note habits,
-        # normalize single-tilde markers (~text~) into CommonMark form.
-        note = _SINGLE_TILDE_STRIKE.sub(r"\1~~\2~~", note)
-        return Markdown(note, style="autumn.note")
 
     sessions_list = list(sessions)
     if not sessions_list:
@@ -291,47 +343,46 @@ def render_sessions_list(
             return end_iso or start_iso
 
         for s in sorted(day_sessions, key=_sort_key):
-            start = format_time_hms(_session_start_iso(s))
-            end = format_time_hms(_session_end_iso(s))
-            dur_str = format_duration_minutes(_duration_minutes(s))
-            project = _session_project(s)
-            subs = _session_subs(s)
-            note_raw = s.get("note") or ""
-
-            subs_bracket = format_subprojects_bracketed(s)
-
-            session_id = s.get("id")
-            id_prefix = (
-                f"[autumn.id]#{session_id}[/]  "
-                if show_ids and session_id is not None
-                else ""
-            )
-            base = (
-                f"{id_prefix}[autumn.time]{start}[/] to [autumn.time]{end}[/]\t"
-                f"{dur_str}  [autumn.project]{project}[/] "
-                f"{subs_bracket}"
+            _append_session(
+                items,
+                s,
+                markdown_notes=markdown_notes,
+                show_ids=show_ids,
+                max_note_length=max_note_length,
             )
 
-            if not note_raw:
-                items.append(base)
-                continue
+    return items if markdown_notes else "\n".join([x for x in items if isinstance(x, str)])
 
-            if not markdown_notes:
-                # Notes are sanitized to single-line text; keep them on one line for stable output.
-                note, cut = _truncate_note(_normalize_ws(note_raw), max_note_length)
-                items.append(
-                    base
-                    + f" -> [autumn.note]{rich_escape(note)}[/]"  # extra escape to avoid breaking formatting due to urls/links
-                    + (" [autumn.muted]…[/]" if cut else "")
-                    + f"[autumn.label][/]"  # hard reset to avoid note colour bleeding
-                )
-                continue
 
-            # Markdown mode: keep user's original whitespace/newlines for Markdown parsing.
-            note, cut = _truncate_note(note_raw.strip(), max_note_length)
-            items.append(base + " ->")
-            items.append(_markdown_note_renderable(note + (" …" if cut else "")))
+def render_ranked_sessions_list(
+    sessions: Iterable[Dict[str, Any]],
+    *,
+    markdown_notes: bool = False,
+    show_ids: bool = False,
+    max_note_length: Optional[int] = None,
+) -> Union[str, List[object]]:
+    """Render sessions in the order given, each under its own date line.
 
+    For ranked results (search relevance, best first): grouping by day and
+    reordering by date would turn the ranking upside down.
+    """
+    sessions_list = list(sessions)
+    if not sessions_list:
+        empty = "[autumn.muted]No sessions found.[/]"
+        return [empty] if markdown_notes else empty
+
+    items: List[object] = []
+    for index, s in enumerate(sessions_list):
+        if index:
+            items.append("")
+        items.append(f"[underline]{format_log_date_header(_session_date_key(s))}[/]")
+        _append_session(
+            items,
+            s,
+            markdown_notes=markdown_notes,
+            show_ids=show_ids,
+            max_note_length=max_note_length,
+        )
     return items if markdown_notes else "\n".join([x for x in items if isinstance(x, str)])
 
 
