@@ -49,6 +49,22 @@ Short aliases remain available for frequent commands: `p` for `projects`, `ls`
 for `log`, `n` for `note`, `subs` for `subprojects`, and `cmt` for
 `commitments`.
 
+## Read from another account
+
+Use `autumn auth accounts` to find the saved name. Put `--account NAME` before
+`log` (including `log search` and `ls`), `status`, or `export`:
+
+```console
+autumn --account work log today
+autumn --account personal status
+autumn --account work export --since 2026-01-01 --stdout
+```
+
+Each command uses the selected account's token and aliases and the configured
+AutumnWeb URL, ignoring `AUTUMN_API_KEY` and `AUTUMN_API_BASE` for that run.
+You can run these reads concurrently. The active account and config file stay
+in place. Exports to a default filename include the selected account's name.
+
 ## Names, dates and periods
 
 Wherever a command takes a project, you can type its exact name in any case,

@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..config import load_account_cache, save_account_cache, clear_account_cache
+from ..config import (
+    clear_account_cache,
+    load_account_cache,
+    save_account_cache,
+    using_saved_account,
+)
 
 
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
@@ -47,7 +52,12 @@ def load_cached_snapshot(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Met
     """Load a snapshot from in-memory first, then from persisted config."""
     global _mem_snapshot
 
-    if _mem_snapshot is not None and _is_fresh(_mem_snapshot.fetched_at, ttl_seconds):
+    use_process_cache = not using_saved_account()
+    if (
+        use_process_cache
+        and _mem_snapshot is not None
+        and _is_fresh(_mem_snapshot.fetched_at, ttl_seconds)
+    ):
         return _mem_snapshot
 
     meta = load_account_cache("meta_cache") or {}
@@ -70,7 +80,8 @@ def load_cached_snapshot(ttl_seconds: int = DEFAULT_TTL_SECONDS) -> Optional[Met
             tags=list(meta.get("tags") or []),
             fetched_at=fetched_at,
         )
-        _mem_snapshot = snap
+        if use_process_cache:
+            _mem_snapshot = snap
         return snap
     except (ValueError, TypeError, KeyError):
         return None
@@ -81,7 +92,8 @@ def save_cached_snapshot(contexts: List[Dict[str, Any]], tags: List[Dict[str, An
     global _mem_snapshot
 
     snap = MetaSnapshot(contexts=contexts, tags=tags, fetched_at=_now())
-    _mem_snapshot = snap
+    if not using_saved_account():
+        _mem_snapshot = snap
 
     save_account_cache("meta_cache", {
         "schema_version": CACHE_SCHEMA_VERSION,

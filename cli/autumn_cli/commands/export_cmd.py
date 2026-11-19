@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..api_client import APIClient, APIError
-from ..config import get_config_value
+from ..config import get_active_account_name, get_config_value, using_saved_account
 from ..utils.cli_options import date_range_options, search_options
 from ..utils.console import err_console
 from ..utils.resolvers import resolve_context_param, resolve_tag_params, resolve_project_name
@@ -89,14 +89,18 @@ def _get_default_export_dir() -> Path:
     return Path.home()
 
 
-def _generate_export_filename(project: Optional[str] = None) -> str:
+def _generate_export_filename(
+    project: Optional[str] = None, *, account: Optional[str] = None
+) -> str:
     """Generate a timestamped export filename."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if project:
-        # Sanitize project name for filename
-        safe_project = "".join(c if c.isalnum() or c in "._-" else "_" for c in project)
-        return f"autumn_export_{safe_project}_{timestamp}.json"
-    return f"autumn_export_{timestamp}.json"
+    timestamp_format = "%Y%m%d_%H%M%S_%f" if account else "%Y%m%d_%H%M%S"
+    timestamp = datetime.now().strftime(timestamp_format)
+    labels = [
+        "".join(c if c.isalnum() or c in "._-" else "_" for c in label)
+        for label in (account, project)
+        if label
+    ]
+    return "_".join(["autumn_export", *labels, timestamp]) + ".json"
 
 
 @click.command()
@@ -203,9 +207,12 @@ def export(
             sys.stdout.buffer.flush()
         else:
             # Determine output path
+            default_account = None
             if output:
                 output_path = Path(output).expanduser()
             else:
+                if using_saved_account():
+                    default_account = get_active_account_name()
                 # Use specified directory or default
                 if export_dir:
                     directory = Path(export_dir).expanduser()
@@ -216,11 +223,11 @@ def export(
                 directory.mkdir(parents=True, exist_ok=True)
 
                 # Generate filename
-                filename = _generate_export_filename(resolved_project)
+                filename = _generate_export_filename(resolved_project, account=default_account)
                 output_path = directory / filename
 
             # Write file
-            with open(output_path, "wb") as f:
+            with open(output_path, "xb" if default_account else "wb") as f:
                 f.write(json_bytes)
 
             # Get file size

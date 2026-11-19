@@ -1,5 +1,7 @@
 """Configuration management for Autumn CLI."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 import os
 import tempfile
@@ -25,6 +27,9 @@ _YAML_DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 _CONFIG_CACHE_PATH: Path | None = None
 _CONFIG_CACHE_SIGNATURE: tuple[int, int] | None = None
 _CONFIG_CACHE_DATA: dict | None = None
+_INVOCATION_CONFIG: ContextVar[dict | None] = ContextVar(
+    "invocation_config", default=None
+)
 
 
 DEFAULT_GREETING_GENERAL_WEIGHT = 0.4
@@ -121,10 +126,15 @@ def _write_config_file(config: dict) -> None:
         ) from None
 
 
-def load_config() -> dict:
-    """Load configuration from file."""
+def load_config(*, persist_migration: bool = True) -> dict:
+    """Load configuration for the current invocation."""
+    invocation = _INVOCATION_CONFIG.get()
+    if invocation is not None:
+        return deepcopy(invocation)
+
     try:
-        ensure_config_dir()
+        if persist_migration:
+            ensure_config_dir()
         path = Path(CONFIG_FILE)
         signature = _config_signature(path)
         if signature is None:
@@ -142,8 +152,9 @@ def load_config() -> dict:
                 return {}
             data, changed = _migrate_legacy_config(data)
         if changed:
-            _write_config_file(data)
-            _cache_config(path, _config_signature(path), data)
+            if persist_migration:
+                _write_config_file(data)
+                _cache_config(path, _config_signature(path), data)
         else:
             _cache_config(path, signature, data)
         return data
@@ -160,7 +171,10 @@ def load_config() -> dict:
 
 
 def save_config(config: dict):
-    """Save configuration to file."""
+    """Save configuration, keeping scoped read-command caches in memory."""
+    if using_saved_account():
+        _INVOCATION_CONFIG.set(deepcopy(config))
+        return
     _write_config_file(config)
 
 
@@ -337,6 +351,37 @@ def derive_account_name(*, username: Optional[str], email: Optional[str], base_u
 def get_accounts() -> dict[str, dict[str, Any]]:
     """Return saved accounts keyed by account name."""
     return dict(_accounts_block())
+
+
+@contextmanager
+def use_saved_account(account_name: str):
+    """Use a named account for one read command without changing the saved default."""
+    try:
+        name = _sanitize_account_name(account_name)
+    except ValueError as error:
+        raise ConfigError(str(error)) from None
+    config = load_config(persist_migration=False)
+    account = _accounts_block(config).get(name)
+    if not isinstance(account, dict):
+        raise ConfigError(
+            f"Unknown account '{name}'. Run 'autumn auth accounts' to list saved accounts."
+        )
+    if not str(account.get("api_key") or "").strip():
+        raise ConfigError(
+            f"Account '{name}' has no API key. Run 'autumn auth login' to sign in again."
+        )
+
+    config[ACTIVE_ACCOUNT_KEY] = name
+    token = _INVOCATION_CONFIG.set(_sync_active_account_fields(config))
+    try:
+        yield
+    finally:
+        _INVOCATION_CONFIG.reset(token)
+
+
+def using_saved_account() -> bool:
+    """Whether the command has an explicit account selection."""
+    return _INVOCATION_CONFIG.get() is not None
 
 
 def get_active_account_name() -> Optional[str]:
@@ -553,7 +598,7 @@ def list_accounts() -> list[dict[str, Any]]:
 def get_api_key() -> Optional[str]:
     """Get API key from config or environment variable."""
     # Environment variable takes precedence
-    env_key = os.getenv("AUTUMN_API_KEY")
+    env_key = None if using_saved_account() else os.getenv("AUTUMN_API_KEY")
     if env_key:
         return env_key
     
@@ -568,7 +613,7 @@ def get_api_key() -> Optional[str]:
 def get_base_url() -> str:
     """Get base URL from config or environment variable, with default."""
     # Environment variable takes precedence
-    env_url = os.getenv("AUTUMN_API_BASE")
+    env_url = None if using_saved_account() else os.getenv("AUTUMN_API_BASE")
     if env_url:
         return env_url.rstrip("/")
     

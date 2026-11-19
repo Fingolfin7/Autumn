@@ -107,6 +107,10 @@ If you log into multiple accounts against the same AutumnWeb instance, you can s
 autumn auth switch alice
 ```
 
+For one read, put `--account NAME` before `log`, `status`, or `export`.
+The command uses the named account and configured server URL while keeping the
+saved active account in place. See [examples](cli/README.md#read-from-another-account).
+
 ### 3) Say hi
 
 Running `autumn` with no subcommands prints a short, dynamic greeting (time-of-day / moon phase / seasonal vibes).

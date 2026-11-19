@@ -20,6 +20,7 @@ from .config import (
     switch_account as switch_saved_account,
     remove_account,
     get_active_account_name,
+    use_saved_account,
     derive_account_name,
     get_greeting_general_weight,
     get_greeting_activity_weight,
@@ -142,9 +143,22 @@ class AutumnGroup(click.Group):
 
 @click.group(cls=AutumnGroup, invoke_without_command=True)
 @click.version_option(version="1.0.0")
+@click.option(
+    "--account", metavar="NAME", help="Use a saved account for log, status, or export."
+)
 @click.pass_context
-def cli(ctx: click.Context):
+def cli(ctx: click.Context, account: str | None):
     """Autumn CLI - Command-line interface for AutumnWeb."""
+    if account is not None:
+        command = ctx.invoked_subcommand or ""
+        command = AutumnGroup.aliases.get(command, command)
+        if command not in {"log", "status", "export"}:
+            raise click.UsageError("--account applies to log, status, and export.")
+        # Reminders belong to the terminal's usual account. A scoped read
+        # should neither check them against this account nor prune them.
+        ctx.with_resource(use_saved_account(account))
+        return
+
     # Health check for reminders (orphaned/missed)
     if ctx.invoked_subcommand != "reminder-daemon":
         try:
