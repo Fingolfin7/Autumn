@@ -16,6 +16,7 @@ autumn log -q "login" --related   # search notes, by text and by meaning
 ## Features
 
 - **Timers**: start, stop, restart, resume and discard, with server-side auto-stop (`--for 25m`) and desktop reminders.
+- **Checkout shortcuts**: link a Git checkout with `autumn here PROJECT`, then use `autumn start` anywhere inside it. Use `autumn last PROJECT` to read the latest completed session's note.
 - **Forgiving input**: type any unique part of a project name, an alias, or any case; ambiguous names get "did you mean" suggestions instead of a guess.
 - **Natural dates and periods**: `autumn log yesterday`, `-P 2w`, `--since monday`, `--start 9am --on yesterday`.
 - **Logging after the fact**: `autumn track <project> 45m`, or any two of start, end and duration; `autumn edit last` fixes the latest session.
@@ -123,7 +124,8 @@ autumn
 
 | Area | Command | What it does | Common options |
 |---|---|---|---|
-| **Timers** | `autumn start <project>` | Start a timer (with optional server-side auto-stop) | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
+| **Timers** | `autumn start [project]` | Start a timer (with optional server-side auto-stop) | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
+| | `autumn here <project>` | Link this Git checkout to a project | |
 | | `autumn status [project]` | Show active timers and auto-stop timing | `-p`, `-i` |
 | | `autumn stop [project]` | Stop timer | `-p`, `-i`, `-n`, `--split` |
 | | `autumn note <text...>` (`n`) | Add to a running timer's note | `-p`, `-i`, `--replace` |
@@ -131,6 +133,7 @@ autumn
 | | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
 | | `autumn resume` | Resume last project | `--stop-current` |
 | **Logs** | `autumn log [period] [project]` (`ls`) | List sessions (saved) | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids`, `-m`, `--raw` |
+| | `autumn last [project]` | Show the latest completed session and note | |
 | | `autumn log search` | Search with paging | `-q`, `--related`, `--newest`, `-n`, `--limit`, `--offset`, `-m` |
 | | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-n` |
 | | `autumn edit [session]` | Edit a saved session (ID or `last`) | `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |
