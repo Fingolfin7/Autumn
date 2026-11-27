@@ -29,8 +29,8 @@ from .config import (
 )
 from .api_client import APIClient, APIError
 from .errors import AutumnError
-from .commands.timer import start, stop, restart, discard, status as timer_status
-from .commands.sessions import log, track, edit_session, delete_session
+from .commands.timer import here, start, stop, restart, discard, status as timer_status
+from .commands.sessions import last, log, track, edit_session, delete_session
 from .commands.projects import projects_list, new_project, subprojects, mark, rename, delete_project, delete_sub, totals, project_details, merge, merge_subs
 from .commands.commitments import commitments
 from .commands.charts import chart
@@ -67,8 +67,8 @@ class AutumnGroup(click.Group):
     }
 
     command_sections = (
-        ("Timers", ("start", "stop", "status", "note", "restart", "resume", "discard")),
-        ("Sessions", ("log", "track", "edit", "delete-session")),
+        ("Timers", ("start", "stop", "status", "note", "restart", "resume", "discard", "here")),
+        ("Sessions", ("log", "last", "track", "edit", "delete-session")),
         (
             "Projects",
             (
@@ -504,6 +504,7 @@ def auth_switch(account_name: str):
 # Register commands directly (flat structure)
 # Timer commands
 cli.add_command(start, name="start")
+cli.add_command(here, name="here")
 cli.add_command(stop, name="stop")
 cli.add_command(timer_status, name="status")  # Timer status
 cli.add_command(restart, name="restart")
@@ -512,6 +513,7 @@ cli.add_command(note, name="note")
 
 # Session commands
 cli.add_command(log, name="log")
+cli.add_command(last, name="last")
 cli.add_command(track, name="track")
 cli.add_command(edit_session, name="edit")
 cli.add_command(delete_session, name="delete-session")

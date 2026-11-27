@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from rich.markup import escape
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console
@@ -22,20 +23,29 @@ from ..utils.console import console
 )
 def resume(stop_current: bool, with_subprojects: bool) -> None:
     """Start a new timer for the most recently worked-on project."""
+    stopped_timer_id = None
     try:
         client = APIClient()
 
-        # If we already have an active timer, either stop it or refuse.
         status = client.get_timer_status()
-        if status.get("ok") and status.get("active", 0):
+        if not status.get("ok"):
+            raise APIError(status.get("error") or "Could not check for running timers.")
+
+        timer_id = None
+        if status.get("active", 0):
             if not stop_current:
                 raise APIError(
                     "An active timer is running. Use --stop-current to stop it before resuming."
                 )
-            client.stop_timer()
+            # Remember the same timer a bare stop would select.
+            timer_id = client.newest_timer(status.get("sessions") or []).get("id")
+            if timer_id is None:
+                raise APIError("Could not identify the current timer.")
 
-        # The most recent completed session, however long ago it was.
+        # Select the completed session before the running one can enter history.
         result = client.search_sessions(limit=1, ordering="newest")
+        if result.get("ok") is False:
+            raise APIError(result.get("error") or "Could not read saved sessions.")
         logs = result.get("sessions", [])
         if not logs:
             raise APIError("No saved sessions found to resume.")
@@ -48,17 +58,22 @@ def resume(stop_current: bool, with_subprojects: bool) -> None:
         subprojects = None
         if with_subprojects:
             subprojects = s0.get("subs") or s0.get("subprojects") or None
-            # normalize empty list
-            if subprojects == []:
-                subprojects = None
+
+        if timer_id is not None:
+            stopped = client.stop_timer(session_id=timer_id)
+            if not stopped.get("ok"):
+                raise APIError(stopped.get("error") or "Failed to stop the current timer.")
+            stopped_timer_id = timer_id
 
         started = client.start_timer(project, subprojects=subprojects)
         if started.get("ok"):
             sess = started.get("session", {})
-            console.print(f"[autumn.ok]Resumed[/] [autumn.project]{project}[/] (Session ID: {sess.get('id')})")
+            console.print(f"[autumn.ok]Resumed[/] [autumn.project]{escape(project)}[/] (Session ID: {sess.get('id')})")
         else:
             raise APIError(started.get("error", "Failed to resume"))
 
     except APIError as e:
-        console.print(f"[autumn.err]Error:[/] {e}")
+        if stopped_timer_id is not None:
+            console.print(f"Stopped timer #{stopped_timer_id} before the resume failed.")
+        console.print(f"[autumn.err]Error:[/] {escape(str(e))}")
         raise click.Abort()

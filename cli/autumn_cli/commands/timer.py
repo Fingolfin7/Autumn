@@ -1,10 +1,13 @@
 """Timer commands for Autumn CLI."""
 
-import click
 from datetime import datetime
 from typing import Optional
 
+import click
+from rich.markup import escape
+
 from ..api_client import APIClient, APIError
+from ..utils.checkout import checkout_root, get_checkout_project, set_checkout_project
 from ..utils.console import console, err_console
 from ..utils.formatters import format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import render_active_timers_list, format_subprojects_bracketed
@@ -92,6 +95,34 @@ def _print_auto_stop_line(session: dict) -> None:
     )
 
 
+@click.command()
+@click.argument("project")
+def here(project: str) -> None:
+    """Use PROJECT for bare starts anywhere in this Git checkout."""
+    root = checkout_root()
+    if root is None:
+        raise click.ClickException("Run 'autumn here PROJECT' inside a Git checkout.")
+
+    client = APIClient()
+    projects = client.list_projects_flat(compact=False).get("projects", [])
+    result = resolve_project_param(project=project, projects=projects, partial=True)
+    if result.warning or not result.value:
+        raise click.ClickException(
+            f"Could not find a unique project for '{project}'. See 'autumn projects'."
+        )
+
+    matches = [
+        item for item in projects
+        if (item.get("name") or "").casefold() == result.value.casefold()
+    ]
+    if len(matches) != 1:
+        raise click.ClickException(f"Project name is ambiguous: {result.value}")
+    set_checkout_project(client, root, matches[0]["id"])
+    console.print(
+        f"[autumn.ok]Linked[/] [autumn.project]{escape(result.value)}[/] "
+        f"to {escape(str(root))}."
+    )
+
 
 @click.command()
 @click.argument("project", required=False)
@@ -141,6 +172,9 @@ def start(
     pick: bool,
 ):
     """Start a new timer for a project.
+
+    Without PROJECT, use the checkout's project if set by `autumn here`,
+    or open the project picker.
 
     Optional timing features (cross-platform, in-process):
       - Auto-stop after a duration: `--for 25m`
@@ -205,9 +239,9 @@ def start(
 
     try:
         client = APIClient()
+        bound_project = get_checkout_project(client) if not project and not pick else None
 
-        # Interactive picker for project if --pick or no project provided
-        if pick or not project:
+        if pick or not (project or bound_project):
             from ..utils.pickers import pick_project, pick_subproject
 
             # Only show active/paused projects for starting timers
@@ -224,7 +258,7 @@ def start(
                     subprojects = (picked_sub,)
 
         # Resolve project name (case-insensitive, alias or unique partial name)
-        resolved_project = resolve_project_name(client, project)
+        resolved_project = bound_project or resolve_project_name(client, project)
 
         # Resolve subprojects (case-insensitive + alias support)
         subprojects_list = None

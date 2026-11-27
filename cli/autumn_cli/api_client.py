@@ -947,7 +947,7 @@ class APIClient:
         return list(result.get("timers") or [])
 
     @staticmethod
-    def _newest_timer(resources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def newest_timer(resources: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not resources:
             raise APIError("No active timer found.")
 
@@ -982,7 +982,7 @@ class APIClient:
             ]
         else:
             matches = resources
-        return self._newest_timer(matches)
+        return self.newest_timer(matches)
 
     def start_timer(
         self,
@@ -1086,7 +1086,7 @@ class APIClient:
             resource for resource in resources if resource.get("id") == session_id
         ]
         if session_id is None:
-            target = self._newest_timer(resources)
+            target = self.newest_timer(resources)
             target_id = target["id"]
         else:
             target = matches[0] if matches else None
@@ -2426,7 +2426,13 @@ class APIClient:
     def get_project(self, name: str) -> Dict:
         """Get detailed information about a single project."""
         project_id = self._resolve_project_id(name)
+        return self.get_project_by_id(project_id)
+
+    def get_project_by_id(self, project_id: int) -> Dict:
+        """Get a project by stable ID, including its current name."""
         resource = self._request("GET", f"/api/v2/projects/{project_id}")
+        if name := resource.get("name"):
+            self._project_id_cache[name.casefold()] = (time.monotonic(), project_id)
         return self._project_detail_v2_to_legacy(resource)
 
     def search_projects(

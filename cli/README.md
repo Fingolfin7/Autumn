@@ -37,6 +37,24 @@ most recently used project. `autumn context`, `autumn tag`, and
 `autumn commitments` list their current entries; their subcommands create or
 edit them.
 
+From a Git checkout, link it to an Autumn project once:
+
+```console
+autumn here AutumnWeb
+autumn start
+autumn last AutumnWeb
+```
+
+The link applies anywhere inside this checkout for the current AutumnWeb
+server and account. Run `autumn here PROJECT` again to change it. An explicit
+`autumn start PROJECT` uses the project you name. `autumn start --pick` opens
+the picker, which is also the default outside a linked checkout.
+
+`autumn last [PROJECT]` shows when the most recent completed session ended
+and prints its full note, if it has one. Omit the project to see the latest
+completed session across projects. `autumn resume --stop-current` finds the
+session to resume before stopping your running timer.
+
 The root help groups commands by everyday task:
 
 ```console
@@ -134,13 +152,16 @@ autumn delete-session last
 
 | Area | Command | What it does | Common options |
 |---|---|---|---|
-| Timers | `autumn start <project>` | Start a timer | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
+| Timers | `autumn start [project]` | Start a timer | `-s`, `-n`, `--for`, `--remind-in`, `--pick` |
+| | `autumn here <project>` | Link this Git checkout to a project | |
 | | `autumn status [project]` | Show running timers | `-p`, `-i` |
 | | `autumn stop [project]` | Stop a running timer | `-p`, `-i`, `-n`, `--split` |
 | | `autumn note <text...>` (`autumn n`) | Update a running timer's note | `-p`, `-i`, `--replace`, `--stamp`, `--no-stamp` |
 | | `autumn restart [project]` | Restart a running timer from now | `-p`, `-i` |
+| | `autumn resume` | Resume the last completed session's project | `--stop-current`, `--with-subprojects` |
 | | `autumn discard [project]` | Throw away a running timer (was `delete`) | `-p`, `-i`, `-y` |
 | Sessions | `autumn log [period] [project]` (`autumn ls`) | List saved sessions | `-P`, `-p`, `-s`, `-x`, `-t`, `-c`, `-q`, `--related`, `--since`, `--ids`, `-m`, `--raw` |
+| | `autumn last [project]` | Show the latest completed session and note | |
 | | `autumn log search` | Search with paging | `-q`, `--related`, `-n`, `--newest`, `--limit`, `--offset`, `-m` |
 | | `autumn track <project> [duration]` | Log a completed session | `--start`, `--end`, `--for`, `--on`, `-s`, `-n`, `--split` |
 | | `autumn edit [session]` | Edit a saved session in place | `-p`, `-s`, `--start`, `--end`, `--for`, `-n`, `-a`, `--split` |

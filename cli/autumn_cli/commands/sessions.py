@@ -1,14 +1,15 @@
 """Session commands for Autumn CLI."""
 
 import sys
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
-from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from rich.markup import escape
 
 from ..api_client import APIClient, APIError
 from ..utils.console import console
-from ..utils.formatters import format_duration_minutes, parse_utc_to_local
+from ..utils.formatters import format_datetime, format_duration_minutes, parse_utc_to_local
 from ..utils.log_render import (
     format_subprojects_bracketed,
     render_ranked_sessions_list,
@@ -72,6 +73,35 @@ def _session_summary(session: Dict[str, Any]) -> str:
 
 def _recent_sessions(client: APIClient, limit: int = 10) -> List[Dict[str, Any]]:
     return client.search_sessions(limit=limit, ordering="newest").get("sessions", [])
+
+
+@click.command()
+@click.argument("project", required=False)
+def last(project: Optional[str]) -> None:
+    """Show the latest completed session and its note."""
+    client = APIClient()
+    resolved = resolve_project_name(client, project) if project else None
+    sessions = client.search_sessions(project=resolved, limit=1, ordering="newest").get(
+        "sessions", []
+    )
+    if not sessions:
+        label = f" for [autumn.project]{escape(resolved)}[/]" if resolved else ""
+        console.print(f"[autumn.muted]No saved sessions{label}.[/]")
+        return
+
+    session = sessions[0]
+    name = escape(session.get("project") or session.get("p") or "")
+    end = session.get("end_time") or session.get("end")
+    when = format_datetime(end) if end else "Unknown"
+    console.print(
+        f"[autumn.project]{name}[/]  #[autumn.id]{session['id']}[/]  "
+        f"[autumn.label]Ended[/] [autumn.time]{when}[/]"
+    )
+    note = session.get("note")
+    if note and note.strip():
+        console.print(note, style="autumn.note", markup=False, emoji=False, highlight=False)
+    else:
+        console.print("[autumn.muted]No note.[/]")
 
 
 def _resolve_session_ref(client: APIClient, ref: Any, *, action: str) -> int:
