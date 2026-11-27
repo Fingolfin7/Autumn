@@ -108,7 +108,7 @@ If you log into multiple accounts against the same AutumnWeb instance, you can s
 autumn auth switch alice
 ```
 
-For one read, put `--account NAME` before `log`, `status`, or `export`.
+For one read, put `--account NAME` before `log`, `status`, `export`, or `backup`.
 The command uses the named account and configured server URL while keeping the
 saved active account in place. See [examples](cli/README.md#read-from-another-account).
 
@@ -150,6 +150,7 @@ autumn
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
 | **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `-c`, `-t`, `-q`, `--since`, `--stdout` |
+| | `autumn backup` | Download a portable account ZIP | `--dir`, `--attachments`, `--no-insights` |
 | | `autumn import <file>` | Import an export JSON or compressed export | `--force`, `--merge`, `--tolerance`, `-y` |
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |

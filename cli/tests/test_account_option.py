@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -6,8 +7,11 @@ from pathlib import Path
 import subprocess
 import sys
 from threading import Barrier, BrokenBarrierError, Thread
+from unittest.mock import Mock
+from zipfile import ZipFile
 
 import pytest
+import requests
 import yaml
 from click.testing import CliRunner
 
@@ -15,6 +19,57 @@ from autumn_cli import config
 from autumn_cli.api_client import APIClient
 from autumn_cli.cli import cli
 from autumn_cli.utils import meta_cache, projects_cache, reminders_registry
+
+
+def backup_zip():
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("manifest.json", json.dumps({
+            "format": "autumn-account-backup",
+            "version": 1,
+            "source": {"username": "bob"},
+        }))
+    return buffer.getvalue()
+
+
+def test_scoped_backup_streams_zip_and_prints_only_file_path(accounts, monkeypatch):
+    data = backup_zip()
+    response = Mock(status_code=200, headers={"Content-Type": "application/zip"})
+    response.iter_content.return_value = [data[:5], data[5:]]
+    request = Mock(return_value=response)
+    monkeypatch.setattr(APIClient, "_http", request)
+    before = accounts.read_bytes()
+    destination = accounts.parent / "out"
+    result = CliRunner().invoke(cli, ["--account", "bob", "backup", "--attachments", "--dir", str(destination)])
+
+    assert result.exit_code == 0, result.output
+    path = Path(result.stdout.strip())
+    assert path.name.startswith("autumn-backup-bob-")
+    assert list(destination.iterdir()) == [path]
+    assert path.read_bytes() == data
+    assert request.call_args.args == ("GET", "https://saved.example/api/v2/backup/")
+    assert request.call_args.kwargs["headers"]["Authorization"] == "Token token-b"
+    assert request.call_args.kwargs["params"] == {"include_insights": "true", "include_attachments": "true"}
+    assert request.call_args.kwargs["stream"] is True
+    response.close.assert_called_once_with()
+    assert accounts.read_bytes() == before
+
+
+def test_interrupted_backup_leaves_no_zip(accounts, monkeypatch):
+    def chunks(*args, **kwargs):
+        yield b"partial content"
+        raise requests.exceptions.ChunkedEncodingError("connection dropped")
+
+    response = Mock(status_code=200, headers={"Content-Type": "application/zip"})
+    response.iter_content.side_effect = chunks
+    monkeypatch.setattr(APIClient, "_http", Mock(return_value=response))
+    destination = accounts.parent / "out"
+    result = CliRunner().invoke(cli, ["backup", "--dir", str(destination)])
+
+    assert result.exit_code == 1
+    assert not list(destination.iterdir())
+    assert "Could not save an account backup" in result.output
+    response.close.assert_called_once_with()
 
 
 @pytest.fixture
@@ -130,7 +185,7 @@ def test_scoped_status_does_not_persist_legacy_migration(accounts, monkeypatch):
     ("account", "command", "message"),
     [
         ("missing", "log", "Unknown account 'missing'"),
-        ("bob", "start", "--account applies to log, status, and export"),
+        ("bob", "start", "--account applies to log, status, export, and backup"),
     ],
 )
 def test_scope_errors_leave_config_and_context_unchanged(accounts, account, command, message):

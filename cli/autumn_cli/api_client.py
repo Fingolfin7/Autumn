@@ -5,7 +5,7 @@ import time
 import requests
 from datetime import datetime, timedelta, timezone
 from json import JSONDecodeError
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, BinaryIO
 from urllib.parse import urlparse
 from uuid import uuid4
 from .config import get_api_key, get_base_url, get_wake_retry, get_wake_timeout_seconds
@@ -290,6 +290,9 @@ class APIClient:
             if not retry_eligible:
                 raise self._uncertain_mutation_error()
 
+            if kwargs.get("stream"):
+                response.close()
+
         if not self._wake_server():
             raise APIError(
                 "Server did not wake up in time. Try again in a minute, or check "
@@ -313,6 +316,8 @@ class APIClient:
         if self._is_wake_trigger(
             method, retry_safe=retry_safe, response=retry_response
         ):
+            if kwargs.get("stream"):
+                retry_response.close()
             raise APIError(
                 "Server did not wake up in time. Try again in a minute, or check "
                 f"{self.base_url}."
@@ -327,6 +332,7 @@ class APIClient:
         json: Optional[Dict[str, Any]] = None,
         retry_safe: bool = False,
         headers: Optional[Dict[str, str]] = None,
+        download: Optional[BinaryIO] = None,
     ) -> Dict[str, Any]:
         """Make HTTP request to API."""
         url = f"{self.base_url}{endpoint}"
@@ -343,11 +349,19 @@ class APIClient:
                 headers=request_headers,
                 params=params,
                 json=json,
-                timeout=30,
+                timeout=30 if download is None else 300,
                 verify=self._verify,
+                **({"stream": True} if download is not None else {}),
             )
             response.raise_for_status()
             self.last_response_headers = dict(getattr(response, "headers", None) or {})
+            if download is not None:
+                content_type = response.headers.get("Content-Type", "").partition(";")[0].strip().lower()
+                if content_type != "application/zip":
+                    raise APIError("AutumnWeb did not return a ZIP archive.")
+                for chunk in response.iter_content(chunk_size=128 * 1024):
+                    download.write(chunk)
+                return {}
             if endpoint.startswith("/api/v2/") and (
                 response.status_code == 204 or not response.content
             ):
@@ -407,6 +421,19 @@ class APIClient:
                 raise APIError(f"API error: {e}")
         except requests.exceptions.RequestException as e:
             raise self._network_error(e, url) from None
+        finally:
+            if download is not None and response is not None:
+                response.close()
+
+    def download_account_backup(self, output: BinaryIO, *, insights: bool, attachments: bool) -> None:
+        """Stream the portable account backup into a file opened by the caller."""
+        self._request(
+            "GET",
+            "/api/v2/backup/",
+            params={"include_insights": str(insights).lower(), "include_attachments": str(attachments).lower()},
+            headers={"Accept": "application/zip, application/json"},
+            download=output,
+        )
 
     @staticmethod
     def _format_error_details(details: Dict[str, Any]) -> str:

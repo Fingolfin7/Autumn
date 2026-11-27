@@ -70,7 +70,7 @@ for `log`, `n` for `note`, `subs` for `subprojects`, and `cmt` for
 ## Read from another account
 
 Use `autumn auth accounts` to find the saved name. Put `--account NAME` before
-`log` (including `log search` and `ls`), `status`, or `export`:
+`log` (including `log search` and `ls`), `status`, `export`, or `backup`:
 
 ```console
 autumn --account work log today
@@ -305,3 +305,15 @@ autumn note --no-stamp "Plain appended text"
 autumn note --replace "New complete note"
 autumn note --replace --stamp "Stamped replacement"
 ```
+
+## Account backups
+
+`autumn backup` downloads the same portable account ZIP as **Settings → Data → Backup & restore** in AutumnWeb. It includes completed sessions, projects, account preferences, commitments, and Insights chats. Add `--attachments` to include chat files, or use `--no-insights` to skip Insights.
+
+```powershell
+autumn --account personal backup --attachments --dir "D:\Autumn Backups"
+```
+
+Run that command from a scheduler using the OS account that has the saved Autumn login. Use an absolute destination outside the AutumnWeb deployment. Each invocation creates its own timestamped ZIP, prints the saved path to stdout, and exits nonzero on failure. The spinner appears in interactive terminals. You can schedule one invocation per Autumn account with its own destination.
+
+The ZIP can be restored into a fresh installation with [AutumnWeb's recovery command](https://github.com/Fingolfin7/AutumnWeb#recover-after-database-loss).

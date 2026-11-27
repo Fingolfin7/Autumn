@@ -44,6 +44,7 @@ from .commands.notify_cmd import notify_cmd
 from .commands.remind_cmd import remind
 from .commands.reminders_cmd import reminders
 from .commands.export_cmd import export
+from .commands.backup import backup
 from .commands.import_cmd import import_cmd
 from .commands.meta import meta_audit
 from .commands.alias_cmd import alias
@@ -83,7 +84,7 @@ class AutumnGroup(click.Group):
             ),
         ),
         ("Reminders", ("remind", "reminders", "notify")),
-        ("Data and reports", ("garden", "chart", "export", "import")),
+        ("Data and reports", ("garden", "chart", "export", "import", "backup")),
         ("Metadata", ("context", "tag", "alias", "meta")),
         ("Setup", ("auth", "config", "open")),
         (
@@ -144,7 +145,7 @@ class AutumnGroup(click.Group):
 @click.group(cls=AutumnGroup, invoke_without_command=True)
 @click.version_option(version="1.0.0")
 @click.option(
-    "--account", metavar="NAME", help="Use a saved account for log, status, or export."
+    "--account", metavar="NAME", help="Use a saved account for log, status, export, or backup."
 )
 @click.pass_context
 def cli(ctx: click.Context, account: str | None):
@@ -152,15 +153,15 @@ def cli(ctx: click.Context, account: str | None):
     if account is not None:
         command = ctx.invoked_subcommand or ""
         command = AutumnGroup.aliases.get(command, command)
-        if command not in {"log", "status", "export"}:
-            raise click.UsageError("--account applies to log, status, and export.")
+        if command not in {"log", "status", "export", "backup"}:
+            raise click.UsageError("--account applies to log, status, export, and backup.")
         # Reminders belong to the terminal's usual account. A scoped read
         # should neither check them against this account nor prune them.
         ctx.with_resource(use_saved_account(account))
         return
 
     # Health check for reminders (orphaned/missed)
-    if ctx.invoked_subcommand != "reminder-daemon":
+    if ctx.invoked_subcommand not in {"reminder-daemon", "backup"}:
         try:
             from .utils.reminders_registry import check_reminders_health
 
@@ -554,6 +555,7 @@ cli.add_command(reminders, name="reminders")
 
 # Data commands
 cli.add_command(export, name="export")
+cli.add_command(backup, name="backup")
 cli.add_command(import_cmd, name="import")
 cli.add_command(meta_audit, name="audit")
 
