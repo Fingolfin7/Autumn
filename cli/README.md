@@ -308,12 +308,22 @@ autumn note --replace --stamp "Stamped replacement"
 
 ## Account backups
 
-`autumn backup` downloads the same portable account ZIP as **Settings → Data → Backup & restore** in AutumnWeb. It includes completed sessions, projects, account preferences, commitments, and Insights chats. Add `--attachments` to include chat files, or use `--no-insights` to skip Insights.
+`autumn backup` downloads the same portable account ZIP as **Settings → Data → Backup & restore** in AutumnWeb. It includes completed sessions, projects, account preferences, and commitments. Add `--insights` to include chats and `--attachments` alongside it to include their files. Both are off by default. Use `--no-insights` for an explicit exclusion.
 
 ```powershell
-autumn --account personal backup --attachments --dir "D:\Autumn Backups"
+autumn --account personal backup --insights --attachments --dir "D:\Autumn Backups"
 ```
 
-Run that command from a scheduler using the OS account that has the saved Autumn login. Use an absolute destination outside the AutumnWeb deployment. Each invocation creates its own timestamped ZIP, prints the saved path to stdout, and exits nonzero on failure. The spinner appears in interactive terminals. You can schedule one invocation per Autumn account with its own destination.
+On Windows and macOS, manage one schedule per saved account directly from the CLI:
+
+```powershell
+autumn --account personal backup schedule set --at 02:00 --on sunday --dir "D:\Autumn Backups"
+autumn --account personal backup schedule show
+autumn --account personal backup schedule remove
+```
+
+Omit `--on` for a daily backup. Times use the computer's local clock. Run `set` again to change the schedule or its contents. The schedule runs while you are signed in to the computer, including when the terminal is closed. Choose a destination outside the AutumnWeb deployment.
+
+Each run saves a separate timestamped ZIP. A one-shot backup prints the saved path and exits nonzero on failure. The spinner appears in interactive terminals.
 
 The ZIP can be restored into a fresh installation with [AutumnWeb's recovery command](https://github.com/Fingolfin7/AutumnWeb#recover-after-database-loss).

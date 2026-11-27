@@ -150,7 +150,8 @@ autumn
 | | `autumn delete-project` | Delete a project | `<project>`, `-y`, `--pick` |
 | | `autumn delete-sub` | Delete a subproject | `<project> <sub>`, `-y`, `--pick` |
 | **Data** | `autumn export` | Export sessions/projects JSON | `-o`, `-d`, `-p`, `-c`, `-t`, `-q`, `--since`, `--stdout` |
-| | `autumn backup` | Download a portable account ZIP | `--dir`, `--attachments`, `--no-insights` |
+| | `autumn backup` | Download a portable account ZIP | `--dir`, `--insights`, `--attachments` |
+| | `autumn backup schedule` | Schedule a backup on this computer | `set`, `show`, `remove` |
 | | `autumn import <file>` | Import an export JSON or compressed export | `--force`, `--merge`, `--tolerance`, `-y` |
 | **Reminders** | `autumn remind` | Set ad-hoc reminders | `at`, `every`, `in`, `session` |
 | | `autumn reminders` | Manage background workers | `list`, `stop` |

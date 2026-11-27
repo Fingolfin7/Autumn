@@ -13,6 +13,8 @@ from zipfile import BadZipFile, ZipFile
 import click
 
 from ..api_client import APIClient, APIError
+from ..config import get_active_account_name, get_active_account
+from ..utils.backup_schedule import BackupSchedule, WEEKDAYS, install_schedule, remove_schedule, show_schedule
 from ..utils.console import err_console
 
 
@@ -32,21 +34,38 @@ def _verified_account(path: Path) -> str:
     return source["username"]
 
 
-@click.command()
-@click.option(
-    "--dir", "directory", type=click.Path(path_type=Path, file_okay=False),
-    help="Write the ZIP here. Defaults to Downloads, or your home directory.",
-)
-@click.option("--insights/--no-insights", default=True, help="Include Insights chats.", show_default=True)
-@click.option("--attachments", is_flag=True, help="Include the files attached to Insights chats.")
-def backup(directory: Path | None, insights: bool, attachments: bool) -> None:
-    """Save a portable account backup ZIP, suitable for a scheduled job."""
+def backup_options(command):
+    command = click.option(
+        "--attachments", is_flag=True, help="Include chat files. Requires --insights.",
+    )(command)
+    command = click.option(
+        "--insights/--no-insights", default=False, help="Include Insights chats.", show_default=True,
+    )(command)
+    return click.option(
+        "--dir", "directory", type=click.Path(path_type=Path, file_okay=False),
+        help="Write the ZIP here. Defaults to Downloads, or your home directory.",
+    )(command)
+
+
+def output_directory(directory: Path | None, insights: bool, attachments: bool) -> Path:
     if attachments and not insights:
-        raise click.UsageError("--attachments requires Insights chats.")
+        raise click.UsageError("--attachments requires --insights.")
     if directory is None:
         downloads = Path.home() / "Downloads"
         directory = downloads if downloads.is_dir() else Path.home()
-    directory = directory.expanduser().absolute()
+    return directory.expanduser().absolute()
+
+
+@click.group(invoke_without_command=True)
+@backup_options
+@click.pass_context
+def backup(ctx: click.Context, directory: Path | None, insights: bool, attachments: bool) -> None:
+    """Save a portable account backup ZIP or manage its schedule."""
+    if ctx.invoked_subcommand is not None:
+        if directory is not None or insights or attachments:
+            raise click.UsageError("Put the backup options after 'schedule set'.")
+        return
+    directory = output_directory(directory, insights, attachments)
     partial = None
     try:
         client = APIClient(quiet=True)
@@ -74,3 +93,52 @@ def backup(directory: Path | None, insights: bool, attachments: bool) -> None:
     finally:
         if partial is not None:
             partial.unlink(missing_ok=True)
+
+
+@backup.group()
+def schedule() -> None:
+    """Manage this account's scheduled backups on this computer."""
+
+
+def _scheduled_account() -> str:
+    account = get_active_account_name()
+    if account is None:
+        raise click.ClickException("Save an Autumn account with 'autumn auth login' before scheduling backups.")
+    return account
+
+
+@schedule.command("set")
+@click.option("--at", type=click.DateTime(formats=["%H:%M"]), required=True, help="Local time in 24-hour HH:MM format.")
+@click.option("--on", "weekday", type=click.Choice(WEEKDAYS, case_sensitive=False), help="Back up weekly on this day. Defaults to daily.")
+@backup_options
+def set_backup_schedule(at: datetime, weekday: str | None, directory: Path | None, insights: bool, attachments: bool) -> None:
+    """Install or replace a daily or weekly schedule."""
+    account = _scheduled_account()
+    if not (get_active_account() or {}).get("api_key"):
+        raise click.ClickException("This saved account needs an API key. Sign in with 'autumn auth login'.")
+    target = output_directory(directory, insights, attachments)
+    try:
+        install_schedule(BackupSchedule(account, target, at.time(), weekday, insights, attachments))
+    except OSError as error:
+        raise click.ClickException(f"Could not save the backup schedule. {error}") from error
+    cadence = f"every {weekday.capitalize()}" if weekday else "daily"
+    click.echo(f"Scheduled {account} backups {cadence} at {at:%H:%M} local time.")
+    click.echo(f"Destination: {target}")
+    click.echo("Scheduled backups run while you're signed in to this computer.")
+
+
+@schedule.command("show")
+def show_backup_schedule() -> None:
+    """Show the schedule and its status from the operating system."""
+    click.echo(show_schedule(_scheduled_account()))
+
+
+@schedule.command("remove")
+def remove_backup_schedule() -> None:
+    """Remove the schedule and keep the ZIP files already saved."""
+    account = _scheduled_account()
+    try:
+        remove_schedule(account)
+    except OSError as error:
+        raise click.ClickException(f"Could not remove the backup schedule. {error}") from error
+    click.echo(f"Removed the backup schedule for {account}.")

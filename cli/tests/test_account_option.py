@@ -40,7 +40,7 @@ def test_scoped_backup_streams_zip_and_prints_only_file_path(accounts, monkeypat
     monkeypatch.setattr(APIClient, "_http", request)
     before = accounts.read_bytes()
     destination = accounts.parent / "out"
-    result = CliRunner().invoke(cli, ["--account", "bob", "backup", "--attachments", "--dir", str(destination)])
+    result = CliRunner().invoke(cli, ["--account", "bob", "backup", "--insights", "--attachments", "--dir", str(destination)])
 
     assert result.exit_code == 0, result.output
     path = Path(result.stdout.strip())
@@ -62,13 +62,15 @@ def test_interrupted_backup_leaves_no_zip(accounts, monkeypatch):
 
     response = Mock(status_code=200, headers={"Content-Type": "application/zip"})
     response.iter_content.side_effect = chunks
-    monkeypatch.setattr(APIClient, "_http", Mock(return_value=response))
+    request = Mock(return_value=response)
+    monkeypatch.setattr(APIClient, "_http", request)
     destination = accounts.parent / "out"
     result = CliRunner().invoke(cli, ["backup", "--dir", str(destination)])
 
     assert result.exit_code == 1
     assert not list(destination.iterdir())
     assert "Could not save an account backup" in result.output
+    assert request.call_args.kwargs["params"] == {"include_insights": "false", "include_attachments": "false"}
     response.close.assert_called_once_with()
 
 
